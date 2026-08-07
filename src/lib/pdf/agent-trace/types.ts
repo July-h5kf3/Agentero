@@ -98,10 +98,16 @@ export type PdfVisualSessionTrace = {
 	updatedAt: string;
 };
 
-/** Note-only marks have no agent; agent marks may omit comment. */
+/**
+ * Note-only marks have no agent; agent marks may omit comment.
+ * A crop image alone is enough to keep a visual pin (like a highlight without note).
+ */
 export function visualMarkHasContent(mark: {
 	comment: string;
 	agent?: PdfVisualAgent | null;
+	image?: PdfVisualTraceImage | null;
 }): boolean {
-	return Boolean(mark.comment.trim() || mark.agent);
+	return Boolean(
+		mark.comment.trim() || mark.agent || mark.image?.path || mark.image?.data,
+	);
 }

@@ -42,7 +42,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针；**hover / 打开卡片时高亮**锚定选区原文；打开时停在用户问题处，不自动滚到回复底部 |
 | 加入对话 | 发送该轮后写 `marks/<id>.json`（kind `ask`） | 选区固定为 Agent composer 文本 chip；**发送**后在选区旁插入**对话卡片**页边针（与「提问」同一 ask 卡 / 非视觉批注）；hover / 打开同样高亮原文，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | 浮层结果卡：贴合选区随滚轮重定位；未悬停卡片 / 原文高亮 / 页边针时自动收起（流式中除外）。见 [translate.md](translate.md) |
-| 视觉批注 | `marks/<id>.json`（kind `visual` v2）：区域 + 用户批注 + 可选嵌套 `agent`；裁剪图 `marks/assets/<id>.png`。纯批注可无 Agent；有会话时 `agent.messages` / `providerSessionId` 支持显示与跳转。旧版 `agent-trace` v1 仍可读，Doctor 可一键升 v2 | 框选后聚焦输入：**Enter** 保存批注（需非空 comment）；**⌘↵** 作为 Agent 提示提问。续聊走 ACP 同一 session，`beginTraceContinue` + complete 更新 mark |
+| 视觉批注 | `marks/<id>.json`（kind `visual` v2）：区域 + 用户批注 + 可选嵌套 `agent`；裁剪图 `marks/assets/<id>.png`。默认形态为纯批注（与文字「批注备注」同壳）；有 Agent 会话时可切到对话视图。旧版 `agent-trace` v1 仍可读，Doctor 可一键升 v2 | 框选后：**批注备注** 输入 + 取消/保存；右上角「加入侧边栏对话」。已落盘 pin：纯批注模式可改备注；有对话时右上角切换「编辑备注 / 查看对话」。续聊走 ACP 同一 session |
 
 - 不改 PDF 二进制；不自动写入 `NOTES.md`。
 - 提问 Agent 可与面板默认 Agent 分开配置。

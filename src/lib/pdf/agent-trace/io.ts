@@ -49,16 +49,13 @@ export type CreateNoteTraceInput = {
 };
 
 /**
- * Note-only visual mark (no Agent). comment must be non-empty after trim.
- * Used when the user saves a region annotation without asking Agent (#196).
+ * Note-only visual mark (no Agent). Comment may be empty when a crop image is
+ * provided (same as a plain highlight without a note).
  */
 export function createNoteTrace(
 	input: CreateNoteTraceInput,
 ): PdfVisualSessionTrace {
 	const comment = input.comment.trim();
-	if (!comment) {
-		throw new Error("createNoteTrace requires a non-empty comment");
-	}
 	const now = input.createdAt ?? new Date().toISOString();
 	const trace: PdfVisualSessionTrace = {
 		version: 2,
@@ -81,6 +78,9 @@ export function createNoteTrace(
 			path: input.image.path,
 			mimeType: input.image.mimeType || "image/png",
 		};
+	}
+	if (!comment && !trace.image) {
+		throw new Error("createNoteTrace requires a comment or crop image");
 	}
 	return trace;
 }

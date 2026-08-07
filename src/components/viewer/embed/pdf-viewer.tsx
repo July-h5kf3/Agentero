@@ -153,6 +153,7 @@ import {
 	pinActiveSelection,
 	publishSelection,
 } from "@/lib/agent/selection-store";
+import { addVisualDraft } from "@/lib/agent/visual-context-store";
 import {
 	BackgroundTaskCancelledError,
 	enqueueBackgroundTask,
@@ -171,11 +172,9 @@ import {
 } from "@/lib/paper/refs";
 import {
 	createNoteTrace,
-	createRunningTraces,
 	deletePdfVisualTrace,
 	isVisualMarkKind,
 	listPdfVisualTraces,
-	newTraceMessageId,
 	type PdfVisualSessionTrace,
 	traceMessages,
 	tracePreview,
@@ -2155,15 +2154,13 @@ function PdfViewerInner({
 	}, []);
 
 	/**
-	 * Enter from the region editor: persist a note-only visual mark (no Agent).
-	 * Requires a non-empty comment (#196).
+	 * Save from the region editor: note-only visual mark (no Agent thread).
+	 * Same UX as text 批注备注 — open the pin in note mode.
 	 */
 	const handleVisualDraftSave = useCallback(
 		(comment: string) => {
 			const draft = visualDraftEditor;
 			if (!draft) return;
-			const note = comment.trim();
-			if (!note) return;
 			const paperPath = paperRelPath || paperAbsPath || "paper";
 			let mark: PdfVisualSessionTrace;
 			try {
@@ -2171,7 +2168,7 @@ function PdfViewerInner({
 					paperPath,
 					page: draft.page,
 					rects: [draft.region],
-					comment: note,
+					comment,
 					image: {
 						data: draft.image.data,
 						mimeType: draft.image.mimeType || "image/png",
@@ -2182,14 +2179,13 @@ function PdfViewerInner({
 			}
 			closeVisualDraftEditor();
 			upsertVisualTrace(mark);
-			// Persist in background; keep pin visible even if write fails.
 			if (paperAbsPath) {
 				void writePdfVisualTrace(paperAbsPath, mark).catch((error) => {
 					console.warn("[visual-mark] save note failed", error);
 					notifyError(error instanceof Error ? error.message : String(error));
 				});
 			}
-			// Jump pin into view without opening Agent.
+			setVisualCardExpanded(false);
 			cardScreenRef.current = draft.screen;
 			setCardScreen(draft.screen);
 			openCard({ kind: "visual", id: mark.id });
@@ -2202,6 +2198,27 @@ function PdfViewerInner({
 			upsertVisualTrace,
 			openCard,
 		],
+	);
+
+	/**
+	 * Header「加入侧边栏对话」from the create editor: crop → Agent composer chip.
+	 */
+	const handleVisualAddToChat = useCallback(
+		(comment: string) => {
+			const draft = visualDraftEditor;
+			if (!draft) return;
+			closeVisualDraftEditor();
+			addVisualDraft({
+				paperPath: paperRelPath || paperAbsPath || "paper",
+				paperAbsPath: paperAbsPath ?? undefined,
+				page: draft.page,
+				rects: [draft.region],
+				comment,
+				image: draft.image,
+			});
+			openRightTab("agent");
+		},
+		[visualDraftEditor, paperRelPath, paperAbsPath, closeVisualDraftEditor],
 	);
 
 	/**
@@ -2233,113 +2250,74 @@ function PdfViewerInner({
 		[paperAbsPath, t],
 	);
 
-	/** ⌘/Ctrl+Enter from the region editor: pin + same Agent session as sidebar. */
-	const handleVisualSendNow = useCallback(
+	/** Persist comment edits from the pin note mode. */
+	const handleVisualSaveComment = useCallback(
 		(comment: string) => {
-			const draft = visualDraftEditor;
-			if (!draft) return;
-			const paperPath = paperRelPath || paperAbsPath || "paper";
-			// Agent path may use empty comment; fallback keeps visualMarkHasContent.
-			const content = comment.trim() || t("pdfExplain.visualAnnotation");
-			const now = new Date().toISOString();
-			const userMsg = {
-				id: newTraceMessageId(),
-				role: "user" as const,
-				content,
-				createdAt: now,
+			const card = activeCardRef.current;
+			const traceId = isVisualMarkKind(card?.kind) ? card.id : null;
+			if (!traceId) return;
+			const latest = visualTracesRef.current.find((tr) => tr.id === traceId);
+			if (!latest) return;
+			const next: PdfVisualSessionTrace = {
+				...latest,
+				comment: comment.trim(),
+				updatedAt: new Date().toISOString(),
 			};
-			// Provisional pin (geometry + crop). Transcript lives in agent session store.
-			const [provisional] = createRunningTraces({
-				paperPath,
-				agentId: "pending",
-				runtimeSessionId: "pending",
-				messageId: "pending",
-				items: [
-					{
-						page: draft.page,
-						rects: [draft.region],
-						comment: content,
-						image: {
-							data: draft.image.data,
-							mimeType: draft.image.mimeType || "image/png",
-						},
-						messages: [userMsg],
-					},
-				],
-				createdAt: now,
-			});
-			if (!provisional) return;
-			closeVisualDraftEditor();
-			upsertVisualTrace(provisional);
-			setVisualCardExpanded(true);
-			setVisualError(null);
-			cardScreenRef.current = draft.screen;
-			setCardScreen(draft.screen);
-			openCard({ kind: "visual", id: provisional.id });
-
-			void (async () => {
-				try {
-					const resolved = await resolvePdfAskAgent();
-					const agentId = resolved?.agentId;
-					if (!agentId) {
-						setVisualTraces((prev) =>
-							prev.filter((tr) => tr.id !== provisional.id),
-						);
-						hideActiveCard();
-						return;
-					}
-					// Same draft shape the sidebar composer uses — one send path.
-					const visualDraft: import("@/lib/agent/visual-context-store").PdfVisualDraft =
-						{
-							id: provisional.id,
-							paperPath,
-							paperAbsPath: paperAbsPath ?? undefined,
-							page: draft.page,
-							rects: [draft.region],
-							comment: content,
-							image: {
-								data: draft.image.data,
-								mimeType: draft.image.mimeType || "image/png",
-							},
-						};
-					requestVisualAgentTurn({
-						trace: {
-							...provisional,
-							agent: {
-								...(provisional.agent ?? {
-									runtimeSessionId: "pending",
-									messageId: "pending",
-									status: "running" as const,
-								}),
-								agentId,
-							},
-						},
-						text: content,
-						visualDrafts: [visualDraft],
-						agentId,
-						modelId: resolved.modelId,
-					});
-				} catch (e) {
-					const message =
-						e instanceof Error ? e.message : t("pdfAsk.agentFailed");
-					notifyError(message);
-					setVisualError(message);
-				}
-			})();
+			// Keep content invariant: need comment, agent, or crop image.
+			if (
+				!next.comment &&
+				!next.agent &&
+				!next.image?.path &&
+				!next.image?.data
+			) {
+				return;
+			}
+			upsertVisualTrace(next);
+			if (paperAbsPath) {
+				void writePdfVisualTrace(paperAbsPath, next).catch((error) => {
+					console.warn("[visual-mark] update comment failed", error);
+					notifyError(error instanceof Error ? error.message : String(error));
+				});
+			}
 		},
-		[
-			visualDraftEditor,
-			paperRelPath,
-			paperAbsPath,
-			t,
-			closeVisualDraftEditor,
-			upsertVisualTrace,
-			openCard,
-			resolvePdfAskAgent,
-			requestVisualAgentTurn,
-			hideActiveCard,
-		],
+		[paperAbsPath, upsertVisualTrace],
 	);
+
+	/** Header「加入侧边栏对话」from an existing visual mark pin. */
+	const handleVisualAddToChatFromMark = useCallback(() => {
+		const card = activeCardRef.current;
+		const traceId = isVisualMarkKind(card?.kind) ? card.id : null;
+		if (!traceId) return;
+		const latest = visualTracesRef.current.find((tr) => tr.id === traceId);
+		if (!latest) return;
+		void (async () => {
+			const image =
+				(await loadPdfVisualTraceImage(paperAbsPath ?? "", latest.image)) ??
+				(latest.image?.data
+					? {
+							data: latest.image.data,
+							mimeType: latest.image.mimeType || "image/png",
+						}
+					: null);
+			if (!image?.data) {
+				notifyError(t("pdfExplain.cropFailed"));
+				return;
+			}
+			addVisualDraft({
+				id: latest.id,
+				paperPath: latest.paperPath || paperRelPath || paperAbsPath || "paper",
+				paperAbsPath: paperAbsPath ?? undefined,
+				page: latest.page,
+				rects: latest.rects,
+				comment: latest.comment,
+				image: {
+					data: image.data,
+					mimeType: image.mimeType || "image/png",
+				},
+			});
+			openRightTab("agent");
+		})();
+	}, [paperAbsPath, paperRelPath, t]);
 
 	const handleVisualContinue = useCallback(
 		(question: string) => {
@@ -3153,6 +3131,15 @@ function PdfViewerInner({
 		},
 		[editor, annotationCap, docId],
 	);
+
+	/** Header delete on the text annotation editor — remove highlight and close. */
+	const deleteEditorAnnotation = useCallback(() => {
+		if (!editor) return;
+		annotationCap
+			?.forDocument(docId)
+			.deleteAnnotation(editor.pageIndex, editor.id);
+		setEditor(null);
+	}, [editor, annotationCap, docId]);
 
 	/**
 	 * Run layout analysis for this document.
@@ -4471,7 +4458,8 @@ function PdfViewerInner({
 								<VisualAnnotationEditor
 									screen={visualDraftEditor.screen}
 									onSave={handleVisualDraftSave}
-									onSendNow={handleVisualSendNow}
+									onAddToChat={handleVisualAddToChat}
+									onDelete={closeVisualDraftEditor}
 									onClose={closeVisualDraftEditor}
 									onPointerEnter={
 										visualDraftEditor.ephemeral
@@ -4532,6 +4520,8 @@ function PdfViewerInner({
 									error={visualError}
 									initialExpanded={visualCardExpanded}
 									onOpenSession={handleOpenActiveVisualSession}
+									onAddToChat={handleVisualAddToChatFromMark}
+									onSaveComment={handleVisualSaveComment}
 									onSend={handleVisualContinue}
 									onDelete={handleDeleteVisualTrace}
 									onHide={hideActiveCard}
@@ -4562,6 +4552,7 @@ function PdfViewerInner({
 									initialComment={editor.comment}
 									onSave={saveEditor}
 									onClose={() => setEditor(null)}
+									onDelete={deleteEditorAnnotation}
 									onPointerEnter={markCardHoverEnter}
 									onPointerLeave={scheduleHoverHide}
 								/>

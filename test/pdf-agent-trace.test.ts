@@ -222,6 +222,16 @@ describe("agent-trace schema and lifecycle", () => {
 		const again = parsePdfVisualSessionTrace(disk);
 		expect(again?.comment).toBe("值得注意");
 		expect(again?.agent).toBeUndefined();
+		// Empty comment is OK when a crop image is present.
+		const bare = createNoteTrace({
+			paperPath: "p",
+			page: 1,
+			rects: [rect],
+			comment: "  ",
+			image,
+		});
+		expect(bare.comment).toBe("");
+		expect(bare.image?.data).toBe("aaa");
 		expect(() =>
 			createNoteTrace({
 				paperPath: "p",
@@ -229,7 +239,7 @@ describe("agent-trace schema and lifecycle", () => {
 				rects: [rect],
 				comment: "  ",
 			}),
-		).toThrow(/comment/i);
+		).toThrow(/comment or crop/i);
 	});
 
 	it("rejects empty comment without agent", () => {

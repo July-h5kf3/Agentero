@@ -1,5 +1,5 @@
-import { NotebookPen } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { NotebookPen, Trash2Icon, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,8 @@ type AnnotationEditorProps = {
 	onSave: (text: string) => void;
 	/** Cancel edit: close without saving and without deleting the highlight */
 	onClose: () => void;
+	/** Delete the underlying highlight and close. */
+	onDelete: () => void;
 	/** Same hover-hide contract as ask / translate cards */
 	onPointerEnter?: () => void;
 	onPointerLeave?: () => void;
@@ -22,13 +24,14 @@ type AnnotationEditorProps = {
 
 /**
  * Floating note editor — quote (context) + note field + cancel/save.
- * Cancel discards draft text only; it does not remove the highlight.
+ * Header: delete (hover red) + close, aligned with visual annotation cards.
  */
 export function AnnotationEditor({
 	screen,
 	initialComment,
 	onSave,
 	onClose,
+	onDelete,
 	onPointerEnter,
 	onPointerLeave,
 }: AnnotationEditorProps) {
@@ -46,6 +49,23 @@ export function AnnotationEditor({
 		setText(initialComment ?? "");
 	}, [initialComment]);
 
+	const actions = useMemo(
+		() => [
+			{
+				label: t("annotations.delete"),
+				onClick: onDelete,
+				icon: <Trash2Icon className="size-3.5" />,
+				destructive: true,
+			},
+			{
+				label: t("annotations.close"),
+				onClick: onClose,
+				icon: <X className="size-3.5" />,
+			},
+		],
+		[t, onDelete, onClose],
+	);
+
 	return (
 		<SelectionCard
 			screen={screen}
@@ -58,6 +78,7 @@ export function AnnotationEditor({
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
 			bodyClassName="gap-2 px-3 py-2.5"
+			actions={actions}
 			footer={
 				<div className="flex items-center justify-end gap-1">
 					<Button type="button" variant="ghost" size="sm" onClick={onClose}>
