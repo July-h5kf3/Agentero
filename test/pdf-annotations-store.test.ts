@@ -38,18 +38,20 @@ function ask(id: string): PdfAskThread {
 
 function visual(id: string): PdfVisualSessionTrace {
 	return {
-		version: 1,
-		kind: "agent-trace",
+		version: 2,
+		kind: "visual",
 		id,
 		paperPath: "papers/a",
-		index: 1,
 		page: 1,
 		rects: [{ x: 0.1, y: 0.2, w: 0.3, h: 0.1 }],
 		comment: "c",
-		agentId: "a",
-		runtimeSessionId: "r",
-		messageId: "m",
-		status: "completed",
+		agent: {
+			agentId: "a",
+			runtimeSessionId: "r",
+			messageId: "m",
+			status: "completed",
+			index: 1,
+		},
 		createdAt: "t",
 		updatedAt: "t",
 	};

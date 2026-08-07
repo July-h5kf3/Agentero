@@ -8,11 +8,13 @@ import {
 import { isVisualTraceSessionPending } from "@/lib/pdf/agent-trace/pending";
 import { parsePdfVisualSessionTrace } from "@/lib/pdf/agent-trace/schema";
 import type {
+	PdfVisualAgent,
 	PdfVisualNormalizedRect,
 	PdfVisualSessionTrace,
 	PdfVisualTraceImage,
 	PdfVisualTraceMessage,
 } from "@/lib/pdf/agent-trace/types";
+import { VISUAL_MARK_KIND } from "@/lib/pdf/agent-trace/types";
 import { createMarkStore } from "@/lib/pdf/marks/io";
 import { removeVaultPath, writeVaultBytes } from "@/lib/vault";
 
@@ -21,7 +23,8 @@ const store = createMarkStore<PdfVisualSessionTrace>({
 	sort: (a, b) => b.updatedAt.localeCompare(a.updatedAt),
 	prepareWrite: (trace) => ({
 		...trace,
-		kind: "agent-trace",
+		version: 2,
+		kind: VISUAL_MARK_KIND,
 		updatedAt: new Date().toISOString(),
 	}),
 });
@@ -32,6 +35,54 @@ export function newTraceId(): string {
 
 export function newTraceMessageId(): string {
 	return nanoid(10);
+}
+
+export type CreateNoteTraceInput = {
+	id?: string;
+	paperPath: string;
+	page: number;
+	rects: PdfVisualNormalizedRect[];
+	/** Required non-empty user note for note-only marks. */
+	comment: string;
+	image?: PdfVisualTraceImage;
+	createdAt?: string;
+};
+
+/**
+ * Note-only visual mark (no Agent). comment must be non-empty after trim.
+ * Used when the user saves a region annotation without asking Agent (#196).
+ */
+export function createNoteTrace(
+	input: CreateNoteTraceInput,
+): PdfVisualSessionTrace {
+	const comment = input.comment.trim();
+	if (!comment) {
+		throw new Error("createNoteTrace requires a non-empty comment");
+	}
+	const now = input.createdAt ?? new Date().toISOString();
+	const trace: PdfVisualSessionTrace = {
+		version: 2,
+		kind: VISUAL_MARK_KIND,
+		id: input.id ?? newTraceId(),
+		paperPath: input.paperPath,
+		page: Math.max(1, Math.floor(input.page)),
+		rects: input.rects,
+		comment,
+		createdAt: now,
+		updatedAt: now,
+	};
+	if (input.image?.data) {
+		trace.image = {
+			data: input.image.data,
+			mimeType: input.image.mimeType || "image/png",
+		};
+	} else if (input.image?.path) {
+		trace.image = {
+			path: input.image.path,
+			mimeType: input.image.mimeType || "image/png",
+		};
+	}
+	return trace;
 }
 
 export type CreateRunningTraceItemInput = {
@@ -63,33 +114,18 @@ export function createRunningTraces(
 	}
 	return input.items.map((item, offset) => {
 		const comment = item.comment.trim();
-		const trace: PdfVisualSessionTrace = {
-			version: 1,
-			kind: "agent-trace",
-			id: item.id ?? newTraceId(),
-			paperPath: input.paperPath,
-			index: offset + 1,
-			page: Math.max(1, Math.floor(item.page)),
-			rects: item.rects,
-			comment,
+		const agent: PdfVisualAgent = {
 			agentId: input.agentId,
 			runtimeSessionId: input.runtimeSessionId,
 			messageId: input.messageId,
 			status: "running",
-			createdAt: now,
-			updatedAt: now,
+			index: offset + 1,
 		};
-		if (item.image?.data) {
-			trace.image = {
-				data: item.image.data,
-				mimeType: item.image.mimeType || "image/png",
-			};
-		}
 		if (item.messages?.length) {
-			trace.messages = item.messages.map((m) => ({ ...m }));
+			agent.messages = item.messages.map((m) => ({ ...m }));
 		} else if (comment) {
 			// Composer-path marks get a seed user turn so pin hover shows a list.
-			trace.messages = [
+			agent.messages = [
 				{
 					id: newTraceMessageId(),
 					role: "user",
@@ -98,8 +134,87 @@ export function createRunningTraces(
 				},
 			];
 		}
+		const trace: PdfVisualSessionTrace = {
+			version: 2,
+			kind: VISUAL_MARK_KIND,
+			id: item.id ?? newTraceId(),
+			paperPath: input.paperPath,
+			page: Math.max(1, Math.floor(item.page)),
+			rects: item.rects,
+			comment,
+			agent,
+			createdAt: now,
+			updatedAt: now,
+		};
+		if (item.image?.data) {
+			trace.image = {
+				data: item.image.data,
+				mimeType: item.image.mimeType || "image/png",
+			};
+		} else if (item.image?.path) {
+			trace.image = {
+				path: item.image.path,
+				mimeType: item.image.mimeType || "image/png",
+			};
+		}
 		return trace;
 	});
+}
+
+/**
+ * Attach or rebind an Agent thread on an existing note-only (or prior) mark
+ * for a first turn or continue.
+ */
+export function attachAgentToTrace(
+	trace: PdfVisualSessionTrace,
+	input: {
+		agentId: string;
+		runtimeSessionId: string;
+		messageId: string;
+		userContent?: string;
+		userMessageId?: string;
+		/** Preserve batch index when re-attaching. */
+		index?: number;
+		updatedAt?: string;
+	},
+): PdfVisualSessionTrace {
+	const now = input.updatedAt ?? new Date().toISOString();
+	const prior = trace.agent;
+	const messages = [...(prior?.messages ?? [])];
+	const content = input.userContent?.trim() ?? "";
+	if (content) {
+		const last = messages[messages.length - 1];
+		if (!(last?.role === "user" && last.content === content)) {
+			messages.push({
+				id: input.userMessageId ?? newTraceMessageId(),
+				role: "user",
+				content,
+				createdAt: now,
+			});
+		}
+	}
+	const agent: PdfVisualAgent = {
+		agentId: input.agentId,
+		runtimeSessionId: input.runtimeSessionId,
+		messageId: input.messageId,
+		status: "running",
+		messages: messages.length ? messages : undefined,
+		index: input.index ?? prior?.index,
+	};
+	if (prior?.providerSessionId) {
+		agent.providerSessionId = prior.providerSessionId;
+	}
+	if (typeof prior?.answerSnapshot === "string") {
+		agent.answerSnapshot = prior.answerSnapshot;
+	}
+	if (prior?.sources?.length) {
+		agent.sources = [...prior.sources];
+	}
+	return {
+		...trace,
+		agent,
+		updatedAt: now,
+	};
 }
 
 /**
@@ -114,36 +229,28 @@ export function beginTraceContinue(
 		messageId?: string;
 		userContent: string;
 		userMessageId?: string;
+		/** When continuing a note-only mark, agentId is required. */
+		agentId?: string;
 		updatedAt?: string;
 	},
 ): PdfVisualSessionTrace {
 	const now = input.updatedAt ?? new Date().toISOString();
-	const messages = [...(trace.messages ?? [])];
-	const content = input.userContent.trim();
-	if (content) {
-		const last = messages[messages.length - 1];
-		// Idempotent retry: do not double-append the same trailing user turn.
-		if (!(last?.role === "user" && last.content === content)) {
-			messages.push({
-				id: input.userMessageId ?? newTraceMessageId(),
-				role: "user",
-				content,
-				createdAt: now,
-			});
-		}
+	const prior = trace.agent;
+	const agentId = input.agentId?.trim() || prior?.agentId;
+	if (!agentId) {
+		throw new Error(
+			"beginTraceContinue requires an agentId on note-only marks",
+		);
 	}
-	const next: PdfVisualSessionTrace = {
-		...trace,
-		status: "running",
+	return attachAgentToTrace(trace, {
+		agentId,
 		runtimeSessionId: input.runtimeSessionId,
+		messageId: input.messageId?.trim() || prior?.messageId || "pending",
+		userContent: input.userContent,
+		userMessageId: input.userMessageId,
+		index: prior?.index,
 		updatedAt: now,
-		messages,
-	};
-	if (input.messageId?.trim()) {
-		next.messageId = input.messageId.trim();
-	}
-	delete next.error;
-	return next;
+	});
 }
 
 export type CompleteTraceInput = {
@@ -160,23 +267,28 @@ export function completeTrace(
 	input: CompleteTraceInput = {},
 ): PdfVisualSessionTrace {
 	const now = input.updatedAt ?? new Date().toISOString();
-	const next: PdfVisualSessionTrace = {
-		...trace,
+	const prior = trace.agent;
+	if (!prior) {
+		// Completing a note-only mark is a no-op on agent fields.
+		return { ...trace, updatedAt: now };
+	}
+	const runtimeSessionId = prior.runtimeSessionId;
+	const agent: PdfVisualAgent = {
+		...prior,
 		status: "completed",
-		updatedAt: now,
 	};
 	if (input.providerSessionId?.trim()) {
-		next.providerSessionId = input.providerSessionId.trim();
+		agent.providerSessionId = input.providerSessionId.trim();
 	}
 	if (typeof input.answerSnapshot === "string") {
-		next.answerSnapshot = input.answerSnapshot;
+		agent.answerSnapshot = input.answerSnapshot;
 	}
 	if (input.sources) {
-		next.sources = [...input.sources];
+		agent.sources = [...input.sources];
 	}
 	if (typeof input.answerSnapshot === "string") {
 		const content = input.answerSnapshot;
-		const messages = [...(trace.messages ?? [])];
+		const messages = [...(prior.messages ?? [])];
 		const assistantId = input.assistantMessageId;
 		const last = messages[messages.length - 1];
 		if (assistantId && last?.id === assistantId && last.role === "assistant") {
@@ -184,30 +296,34 @@ export function completeTrace(
 				...last,
 				content,
 				createdAt: now,
-				agentSessionId: last.agentSessionId ?? trace.runtimeSessionId,
+				agentSessionId: last.agentSessionId ?? runtimeSessionId,
 			};
-			next.messages = messages;
+			agent.messages = messages;
 		} else if (last?.role === "assistant" && !last.content.trim()) {
 			messages[messages.length - 1] = {
 				...last,
 				content,
 				createdAt: now,
-				agentSessionId: last.agentSessionId ?? trace.runtimeSessionId,
+				agentSessionId: last.agentSessionId ?? runtimeSessionId,
 			};
-			next.messages = messages;
+			agent.messages = messages;
 		} else if (content.trim()) {
 			messages.push({
 				id: assistantId ?? newTraceMessageId(),
 				role: "assistant",
 				content,
 				createdAt: now,
-				agentSessionId: trace.runtimeSessionId,
+				agentSessionId: runtimeSessionId,
 			});
-			next.messages = messages;
+			agent.messages = messages;
 		}
 	}
-	delete next.error;
-	return next;
+	delete agent.error;
+	return {
+		...trace,
+		agent,
+		updatedAt: now,
+	};
 }
 
 export type FailTraceInput = {
@@ -224,22 +340,25 @@ export function failTrace(
 	input: FailTraceInput,
 ): PdfVisualSessionTrace {
 	const now = input.updatedAt ?? new Date().toISOString();
-	const next: PdfVisualSessionTrace = {
-		...trace,
+	const prior = trace.agent;
+	if (!prior) {
+		return { ...trace, updatedAt: now };
+	}
+	const agent: PdfVisualAgent = {
+		...prior,
 		status: "failed",
 		error: input.error.trim() || "Agent failed",
-		updatedAt: now,
 	};
 	if (input.providerSessionId?.trim()) {
-		next.providerSessionId = input.providerSessionId.trim();
+		agent.providerSessionId = input.providerSessionId.trim();
 	}
 	if (typeof input.answerSnapshot === "string") {
-		next.answerSnapshot = input.answerSnapshot;
+		agent.answerSnapshot = input.answerSnapshot;
 	}
 	// Drop only an empty (or still-streaming) assistant bubble on failure.
 	// Never drop user turns — multi-turn history must survive a failed continue.
-	if (trace.messages?.length) {
-		const messages = [...trace.messages];
+	if (prior.messages?.length) {
+		const messages = [...prior.messages];
 		const last = messages[messages.length - 1];
 		const dropId = input.assistantMessageId;
 		const isTargetAssistant =
@@ -248,13 +367,16 @@ export function failTrace(
 			!last.content.trim();
 		if (isTargetAssistant) {
 			messages.pop();
-			next.messages = messages;
+			agent.messages = messages;
 		} else {
-			// Explicitly keep the full transcript (incl. the latest user turn).
-			next.messages = messages;
+			agent.messages = messages;
 		}
 	}
-	return next;
+	return {
+		...trace,
+		agent,
+		updatedAt: now,
+	};
 }
 
 /**
@@ -271,11 +393,11 @@ export async function reconcileOrphanRunningVisualTraces(
 	if (!paperAbsPath || !traces.length) return traces;
 	const out: PdfVisualSessionTrace[] = [];
 	for (const trace of traces) {
-		if (trace.status !== "running") {
+		if (trace.agent?.status !== "running") {
 			out.push(trace);
 			continue;
 		}
-		if (isVisualTraceSessionPending(trace.runtimeSessionId)) {
+		if (isVisualTraceSessionPending(trace.agent.runtimeSessionId)) {
 			out.push(trace);
 			continue;
 		}
@@ -307,7 +429,12 @@ export async function writePdfVisualTrace(
 	trace: PdfVisualSessionTrace,
 ): Promise<void> {
 	if (!isTauri()) {
-		await store.write(paperAbsPath, trace);
+		// Memory path keeps runtime object (may include image.data for previews).
+		await store.write(paperAbsPath, {
+			...trace,
+			version: 2,
+			kind: VISUAL_MARK_KIND,
+		});
 		return;
 	}
 	const prepared = preparePdfVisualTraceImageWrite(trace);
@@ -319,7 +446,11 @@ export async function writePdfVisualTrace(
 		if (!assetPath) throw new Error("invalid visual trace asset path");
 		await writeVaultBytes(assetPath, prepared.asset.bytes);
 	}
-	await store.write(paperAbsPath, prepared.trace);
+	await store.write(paperAbsPath, {
+		...prepared.trace,
+		version: 2,
+		kind: VISUAL_MARK_KIND,
+	});
 }
 
 export async function deletePdfVisualTrace(

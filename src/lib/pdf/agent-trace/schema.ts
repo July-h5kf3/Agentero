@@ -1,10 +1,17 @@
 import { normalizeVisualTraceImagePath } from "@/lib/pdf/agent-trace/image";
 import type {
+	PdfVisualAgent,
 	PdfVisualNormalizedRect,
 	PdfVisualSessionTrace,
 	PdfVisualTraceImage,
 	PdfVisualTraceMessage,
 	PdfVisualTraceStatus,
+} from "@/lib/pdf/agent-trace/types";
+import {
+	isVisualMarkKind,
+	LEGACY_VISUAL_MARK_KIND,
+	VISUAL_MARK_KIND,
+	visualMarkHasContent,
 } from "@/lib/pdf/agent-trace/types";
 import { isRecord, isRect } from "@/lib/pdf/marks/schema";
 import { pinFromRects } from "@/lib/pdf/selection/pin";
@@ -47,21 +54,54 @@ function parseMessages(v: unknown): PdfVisualTraceMessage[] | undefined {
 	return out.length ? out : undefined;
 }
 
-/** Validate and normalize a visual mark JSON payload. */
-export function parsePdfVisualSessionTrace(
-	raw: unknown,
-): PdfVisualSessionTrace | null {
-	if (!isRecord(raw)) return null;
-	if (raw.version !== 1) return null;
-	if (raw.kind !== "agent-trace") return null;
-	if (typeof raw.id !== "string" || !raw.id) return null;
-	if (typeof raw.paperPath !== "string") return null;
+function parseAgentBlock(raw: Record<string, unknown>): PdfVisualAgent | null {
 	if (typeof raw.agentId !== "string" || !raw.agentId) return null;
 	if (typeof raw.runtimeSessionId !== "string" || !raw.runtimeSessionId) {
 		return null;
 	}
 	if (typeof raw.messageId !== "string" || !raw.messageId) return null;
 	if (!isStatus(raw.status)) return null;
+
+	const agent: PdfVisualAgent = {
+		agentId: raw.agentId,
+		runtimeSessionId: raw.runtimeSessionId,
+		messageId: raw.messageId,
+		status: raw.status,
+	};
+	if (typeof raw.providerSessionId === "string" && raw.providerSessionId) {
+		agent.providerSessionId = raw.providerSessionId;
+	}
+	if (typeof raw.answerSnapshot === "string") {
+		agent.answerSnapshot = raw.answerSnapshot;
+	}
+	const messages = parseMessages(raw.messages);
+	if (messages) agent.messages = messages;
+	if (Array.isArray(raw.sources)) {
+		agent.sources = raw.sources.filter(
+			(s): s is string => typeof s === "string",
+		);
+	}
+	if (typeof raw.error === "string") {
+		agent.error = raw.error;
+	}
+	if (typeof raw.index === "number" && Number.isFinite(raw.index)) {
+		agent.index = Math.max(1, Math.floor(raw.index));
+	}
+	return agent;
+}
+
+/**
+ * Validate and normalize a visual mark JSON payload.
+ * Accepts v2 (`kind: "visual"`, nested `agent`) and legacy v1
+ * (`kind: "agent-trace"`, flat agent fields). Always returns in-memory v2.
+ */
+export function parsePdfVisualSessionTrace(
+	raw: unknown,
+): PdfVisualSessionTrace | null {
+	if (!isRecord(raw)) return null;
+	if (typeof raw.kind !== "string" || !isVisualMarkKind(raw.kind)) return null;
+	if (typeof raw.id !== "string" || !raw.id) return null;
+	if (typeof raw.paperPath !== "string") return null;
 	if (typeof raw.createdAt !== "string" || typeof raw.updatedAt !== "string") {
 		return null;
 	}
@@ -74,46 +114,113 @@ export function parsePdfVisualSessionTrace(
 		return null;
 	}
 	if (typeof raw.comment !== "string") return null;
-	const index =
-		typeof raw.index === "number" && Number.isFinite(raw.index)
-			? Math.max(1, Math.floor(raw.index))
-			: 1;
 
-	const trace: PdfVisualSessionTrace = {
-		version: 1,
-		kind: "agent-trace",
+	// Agent: nested v2 first, then flat v1 top-level fields.
+	let agent: PdfVisualAgent | undefined;
+	if (isRecord(raw.agent)) {
+		const nested = parseAgentBlock(raw.agent);
+		if (!nested) return null;
+		agent = nested;
+	} else if (
+		raw.kind === LEGACY_VISUAL_MARK_KIND ||
+		typeof raw.agentId === "string"
+	) {
+		// v1 required agent fields; incomplete → reject (same as before).
+		const flat = parseAgentBlock(raw);
+		if (!flat) {
+			// Note-only v1 never existed; if kind is agent-trace without agent → fail.
+			if (raw.kind === LEGACY_VISUAL_MARK_KIND) return null;
+		} else {
+			// Promote top-level index into agent for v1.
+			if (
+				flat.index === undefined &&
+				typeof raw.index === "number" &&
+				Number.isFinite(raw.index)
+			) {
+				flat.index = Math.max(1, Math.floor(raw.index));
+			}
+			agent = flat;
+		}
+	}
+
+	const mark: PdfVisualSessionTrace = {
+		version: 2,
+		kind: VISUAL_MARK_KIND,
 		id: raw.id,
 		paperPath: raw.paperPath,
-		index,
 		page: Math.max(1, Math.floor(raw.page)),
 		rects: raw.rects as PdfVisualNormalizedRect[],
 		comment: raw.comment,
-		agentId: raw.agentId,
-		runtimeSessionId: raw.runtimeSessionId,
-		messageId: raw.messageId,
-		status: raw.status,
 		createdAt: raw.createdAt,
 		updatedAt: raw.updatedAt,
 	};
 	const image = parseImage(raw.image);
-	if (image) trace.image = image;
-	if (typeof raw.providerSessionId === "string" && raw.providerSessionId) {
-		trace.providerSessionId = raw.providerSessionId;
+	if (image) mark.image = image;
+	if (agent) mark.agent = agent;
+
+	// At least comment or agent must be present.
+	if (!visualMarkHasContent(mark)) return null;
+
+	return mark;
+}
+
+/**
+ * Disk-safe payload: always version 2 / kind visual, nested agent, no inline image data.
+ */
+export function serializePdfVisualSessionTrace(
+	trace: PdfVisualSessionTrace,
+): Record<string, unknown> {
+	const out: Record<string, unknown> = {
+		version: 2,
+		kind: VISUAL_MARK_KIND,
+		id: trace.id,
+		paperPath: trace.paperPath,
+		page: trace.page,
+		rects: trace.rects,
+		comment: trace.comment,
+		createdAt: trace.createdAt,
+		updatedAt: trace.updatedAt,
+	};
+	if (trace.image?.path) {
+		out.image = {
+			path: trace.image.path,
+			mimeType: trace.image.mimeType || "image/png",
+		};
 	}
-	if (typeof raw.answerSnapshot === "string") {
-		trace.answerSnapshot = raw.answerSnapshot;
+	if (trace.agent) {
+		const a = trace.agent;
+		const agent: Record<string, unknown> = {
+			agentId: a.agentId,
+			runtimeSessionId: a.runtimeSessionId,
+			messageId: a.messageId,
+			status: a.status,
+		};
+		if (a.providerSessionId) agent.providerSessionId = a.providerSessionId;
+		if (typeof a.answerSnapshot === "string") {
+			agent.answerSnapshot = a.answerSnapshot;
+		}
+		if (a.messages?.length) agent.messages = a.messages;
+		if (a.sources?.length) agent.sources = a.sources;
+		if (a.error) agent.error = a.error;
+		if (typeof a.index === "number") agent.index = a.index;
+		out.agent = agent;
 	}
-	const messages = parseMessages(raw.messages);
-	if (messages) trace.messages = messages;
-	if (Array.isArray(raw.sources)) {
-		trace.sources = raw.sources.filter(
-			(s): s is string => typeof s === "string",
-		);
-	}
-	if (typeof raw.error === "string") {
-		trace.error = raw.error;
-	}
-	return trace;
+	return out;
+}
+
+/**
+ * True when on-disk JSON is legacy v1 agent-trace (or flat agent fields)
+ * and should be rewritten to nested visual v2 by Doctor / migrate.
+ */
+export function isLegacyVisualMarkRaw(raw: unknown): boolean {
+	if (!isRecord(raw)) return false;
+	if (raw.kind === LEGACY_VISUAL_MARK_KIND) return true;
+	if (raw.kind !== VISUAL_MARK_KIND) return false;
+	// kind visual but flat agent fields / wrong version without nested agent
+	if (raw.version === 2 && isRecord(raw.agent)) return false;
+	if (typeof raw.agentId === "string" && raw.agentId) return true;
+	if (raw.version === 1) return true;
+	return false;
 }
 
 /**
@@ -123,7 +230,8 @@ export function parsePdfVisualSessionTrace(
 export function traceMessages(
 	trace: PdfVisualSessionTrace,
 ): PdfVisualTraceMessage[] {
-	if (trace.messages?.length) return trace.messages;
+	const agent = trace.agent;
+	if (agent?.messages?.length) return agent.messages;
 	const synthesized: PdfVisualTraceMessage[] = [];
 	const comment = trace.comment.trim();
 	if (comment) {
@@ -134,20 +242,20 @@ export function traceMessages(
 			createdAt: trace.createdAt,
 		});
 	}
-	const answer = trace.answerSnapshot?.trim();
+	const answer = agent?.answerSnapshot?.trim();
 	if (answer) {
 		synthesized.push({
 			id: `${trace.id}-assistant`,
 			role: "assistant",
 			content: answer,
 			createdAt: trace.updatedAt,
-			agentSessionId: trace.runtimeSessionId,
+			agentSessionId: agent?.runtimeSessionId,
 		});
-	} else if (trace.status === "failed" && trace.error?.trim()) {
+	} else if (agent?.status === "failed" && agent.error?.trim()) {
 		synthesized.push({
 			id: `${trace.id}-error`,
 			role: "assistant",
-			content: trace.error.trim(),
+			content: agent.error.trim(),
 			createdAt: trace.updatedAt,
 		});
 	}
@@ -168,7 +276,12 @@ export function tracePreview(
 ): string {
 	const comment = trace.comment.trim();
 	if (comment) return shorten(comment, max) || fallback;
-	return `${fallback} ${trace.index}`;
+	const firstUser = trace.agent?.messages?.find((m) => m.role === "user");
+	if (firstUser?.content.trim()) {
+		return shorten(firstUser.content, max) || fallback;
+	}
+	const index = trace.agent?.index;
+	return index ? `${fallback} ${index}` : fallback;
 }
 
 /** Pin geometry for a mark (prefer right side of the crop). */

@@ -78,25 +78,21 @@ export function buildChatLinesFromVisualTrace(
 				{
 					type: "text",
 					id: nextPartId("text"),
-					text: m.content,
+					text,
 				},
 			],
 			streaming: false,
 		});
 	}
 
-	if (lines.length === 0) {
-		const text =
-			payload.comment.trim() || opts?.emptyFallback || "Visual annotation";
-		const line: ChatLine = {
+	if (!lines.length && opts?.emptyFallback) {
+		lines.push({
 			id: nextLineId("user"),
 			kind: "user",
-			text,
-		};
-		if (chip) line.visualAnnotations = [chip];
-		lines.push(line);
+			text: opts.emptyFallback,
+			...(chip ? { visualAnnotations: [chip] } : {}),
+		});
 	}
-
 	return lines;
 }
 
@@ -104,17 +100,7 @@ export function buildChatLinesFromVisualTrace(
 export function buildVisualTraceHistoryItem(input: {
 	trace: Pick<
 		PdfVisualSessionTrace,
-		| "id"
-		| "page"
-		| "comment"
-		| "paperPath"
-		| "image"
-		| "agentId"
-		| "runtimeSessionId"
-		| "providerSessionId"
-		| "status"
-		| "messages"
-		| "answerSnapshot"
+		"id" | "page" | "comment" | "paperPath" | "image" | "agent"
 	>;
 	messages: PdfVisualTraceMessage[];
 	title: string;
@@ -128,6 +114,7 @@ export function buildVisualTraceHistoryItem(input: {
 	paperAbsPath?: string;
 } {
 	const { trace } = input;
+	const agent = trace.agent;
 	const lines = buildChatLinesFromVisualTrace(
 		{
 			traceId: trace.id,
@@ -141,7 +128,7 @@ export function buildVisualTraceHistoryItem(input: {
 	);
 	// If transcript has no assistant yet but answerSnapshot exists, append it.
 	const hasAssistant = lines.some((l) => l.kind === "agent");
-	const snapshot = trace.answerSnapshot?.trim();
+	const snapshot = agent?.answerSnapshot?.trim();
 	if (!hasAssistant && snapshot) {
 		lines.push({
 			id: nextLineId("agent"),
@@ -151,14 +138,14 @@ export function buildVisualTraceHistoryItem(input: {
 		});
 	}
 	const status: ChatSessionHistoryItem["status"] =
-		trace.status === "running"
+		agent?.status === "running"
 			? "running"
-			: trace.status === "failed"
+			: agent?.status === "failed"
 				? "failed"
 				: "completed";
 	return {
 		id: visualTraceHistoryId(trace.id),
-		agentId: trace.agentId,
+		agentId: agent?.agentId ?? "",
 		source: "local",
 		title: input.title,
 		agentName: input.agentName,
@@ -166,8 +153,8 @@ export function buildVisualTraceHistoryItem(input: {
 		lines,
 		status,
 		// Source ACP session — Host continues via resume or load (Grok: load).
-		providerSessionId: trace.providerSessionId ?? null,
-		resumeable: true,
+		providerSessionId: agent?.providerSessionId ?? null,
+		resumeable: Boolean(agent?.providerSessionId),
 		// Keep pin ↔ panel continue bound to the same mark file.
 		visualTraceId: trace.id,
 		...(input.paperAbsPath?.trim()

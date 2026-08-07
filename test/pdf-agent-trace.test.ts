@@ -18,9 +18,11 @@ import {
 	buildVisualTraceHistoryItem,
 	bytesToBase64,
 	completeTrace,
+	createNoteTrace,
 	createRunningTraces,
 	deletePdfVisualTrace,
 	failTrace,
+	isLegacyVisualMarkRaw,
 	isVisualTraceSessionPending,
 	loadPdfVisualTraceImage,
 	normalizeVisualTraceImagePath,
@@ -30,6 +32,7 @@ import {
 	reconcileOrphanRunningVisualTraces,
 	rememberPendingVisualTraces,
 	resetPendingVisualTracesForTests,
+	serializePdfVisualSessionTrace,
 	takePendingVisualTraces,
 	traceMessages,
 	tracePin,
@@ -166,7 +169,7 @@ describe("visual annotations prompt", () => {
 });
 
 describe("agent-trace schema and lifecycle", () => {
-	it("parses a valid mark", () => {
+	it("parses a valid legacy v1 mark into visual v2", () => {
 		const raw = {
 			version: 1,
 			kind: "agent-trace",
@@ -184,16 +187,65 @@ describe("agent-trace schema and lifecycle", () => {
 			createdAt: "2026-01-01T00:00:00.000Z",
 			updatedAt: "2026-01-01T00:00:00.000Z",
 		};
+		expect(isLegacyVisualMarkRaw(raw)).toBe(true);
 		const t = parsePdfVisualSessionTrace(raw);
 		expect(t).not.toBeNull();
 		if (!t) return;
-		expect(t.kind).toBe("agent-trace");
+		expect(t.kind).toBe("visual");
+		expect(t.version).toBe(2);
+		expect(t.agent?.agentId).toBe("agent-1");
+		expect(t.agent?.index).toBe(1);
 		expect(t.comment).toBe("λ 是什么");
 		expect(t.image?.path).toBe("assets/tr1.png");
 		expect(tracePreview(t)).toContain("λ");
 		const pin = tracePin(t);
 		expect(pin.x).toBeGreaterThan(0.3);
 		expect(pin.y).toBeCloseTo(0.275, 2);
+		const disk = serializePdfVisualSessionTrace(t);
+		expect(disk.kind).toBe("visual");
+		expect(disk.agent).toMatchObject({ agentId: "agent-1", status: "running" });
+		expect(disk).not.toHaveProperty("agentId");
+	});
+
+	it("parses note-only visual v2 marks without agent", () => {
+		const note = createNoteTrace({
+			paperPath: "papers/a",
+			page: 2,
+			rects: [rect],
+			comment: "  值得注意  ",
+			image,
+		});
+		expect(note.kind).toBe("visual");
+		expect(note.agent).toBeUndefined();
+		expect(note.comment).toBe("值得注意");
+		const disk = serializePdfVisualSessionTrace(note);
+		const again = parsePdfVisualSessionTrace(disk);
+		expect(again?.comment).toBe("值得注意");
+		expect(again?.agent).toBeUndefined();
+		expect(() =>
+			createNoteTrace({
+				paperPath: "p",
+				page: 1,
+				rects: [rect],
+				comment: "  ",
+			}),
+		).toThrow(/comment/i);
+	});
+
+	it("rejects empty comment without agent", () => {
+		expect(
+			parsePdfVisualSessionTrace({
+				version: 2,
+				kind: "visual",
+				id: "empty",
+				paperPath: "p",
+				page: 1,
+				rects: [rect],
+				comment: "",
+				createdAt: "t",
+				updatedAt: "t",
+			}),
+		).toBeNull();
 	});
 
 	it("rejects inline image data in persisted marks", () => {
@@ -299,14 +351,16 @@ describe("agent-trace schema and lifecycle", () => {
 			],
 		});
 		expect(marks).toHaveLength(2);
-		expect(marks[0]?.index).toBe(1);
-		expect(marks[1]?.index).toBe(2);
+		expect(marks[0]?.agent?.index).toBe(1);
+		expect(marks[1]?.agent?.index).toBe(2);
 		expect(marks[0]?.id).not.toBe(marks[1]?.id);
-		expect(marks[0]?.runtimeSessionId).toBe(marks[1]?.runtimeSessionId);
+		expect(marks[0]?.agent?.runtimeSessionId).toBe(
+			marks[1]?.agent?.runtimeSessionId,
+		);
 		expect(marks[0]?.image?.data).toBe("aaa");
 		// Seeded user turn for pin hover message list.
-		expect(marks[0]?.messages?.[0]?.role).toBe("user");
-		expect(marks[0]?.messages?.[0]?.content).toBe("first");
+		expect(marks[0]?.agent?.messages?.[0]?.role).toBe("user");
+		expect(marks[0]?.agent?.messages?.[0]?.content).toBe("first");
 
 		const first = marks[0];
 		const second = marks[1];
@@ -317,15 +371,17 @@ describe("agent-trace schema and lifecycle", () => {
 			answerSnapshot: "## Annotation 1\nok",
 			sources: ["uri:1"],
 		});
-		expect(completed.status).toBe("completed");
-		expect(completed.providerSessionId).toBe("prov-1");
-		expect(completed.messages?.some((m) => m.role === "assistant")).toBe(true);
+		expect(completed.agent?.status).toBe("completed");
+		expect(completed.agent?.providerSessionId).toBe("prov-1");
+		expect(completed.agent?.messages?.some((m) => m.role === "assistant")).toBe(
+			true,
+		);
 
 		const failed = failTrace(second, { error: "timeout" });
-		expect(failed.status).toBe("failed");
-		expect(failed.error).toBe("timeout");
+		expect(failed.agent?.status).toBe("failed");
+		expect(failed.agent?.error).toBe("timeout");
 		// First user seed must survive failure (multi-turn continue).
-		expect(failed.messages?.map((m) => m.content)).toEqual(["second"]);
+		expect(failed.agent?.messages?.map((m) => m.content)).toEqual(["second"]);
 	});
 
 	it("failTrace keeps prior turns and only drops empty assistant bubble", () => {
@@ -345,35 +401,38 @@ describe("agent-trace schema and lifecycle", () => {
 		// Simulate continue: user2 + empty streaming assistant.
 		const mid = {
 			...withReply,
-			status: "running" as const,
-			messages: [
-				...(withReply.messages ?? []),
-				{
-					id: "user-2",
-					role: "user" as const,
-					content: "follow up",
-					createdAt: "2026-01-01T00:02:00.000Z",
-				},
-				{
-					id: "asst-2",
-					role: "assistant" as const,
-					content: "",
-					createdAt: "2026-01-01T00:02:01.000Z",
-				},
-			],
+			agent: {
+				...withReply.agent!,
+				status: "running" as const,
+				messages: [
+					...(withReply.agent?.messages ?? []),
+					{
+						id: "user-2",
+						role: "user" as const,
+						content: "follow up",
+						createdAt: "2026-01-01T00:02:00.000Z",
+					},
+					{
+						id: "asst-2",
+						role: "assistant" as const,
+						content: "",
+						createdAt: "2026-01-01T00:02:01.000Z",
+					},
+				],
+			},
 		};
 		const failed = failTrace(mid, {
 			error: "resume_session: Method not found",
 			providerSessionId: "prov-cancelled",
 			assistantMessageId: "asst-2",
 		});
-		expect(failed.messages?.map((m) => m.content)).toEqual([
+		expect(failed.agent?.messages?.map((m) => m.content)).toEqual([
 			"first",
 			"answer one",
 			"follow up",
 		]);
-		expect(failed.error).toContain("resume_session");
-		expect(failed.providerSessionId).toBe("prov-cancelled");
+		expect(failed.agent?.error).toContain("resume_session");
+		expect(failed.agent?.providerSessionId).toBe("prov-cancelled");
 	});
 
 	it("beginTraceContinue rebinds runtime id and appends user turn", () => {
@@ -396,11 +455,11 @@ describe("agent-trace schema and lifecycle", () => {
 			userContent: "follow up",
 			userMessageId: "user-2",
 		});
-		expect(cont.status).toBe("running");
-		expect(cont.runtimeSessionId).toBe("rt-2");
-		expect(cont.messageId).toBe("msg-2");
-		expect(cont.error).toBeUndefined();
-		expect(cont.messages?.map((m) => m.content)).toEqual([
+		expect(cont.agent?.status).toBe("running");
+		expect(cont.agent?.runtimeSessionId).toBe("rt-2");
+		expect(cont.agent?.messageId).toBe("msg-2");
+		expect(cont.agent?.error).toBeUndefined();
+		expect(cont.agent?.messages?.map((m) => m.content)).toEqual([
 			"first",
 			"answer one",
 			"follow up",
@@ -410,9 +469,9 @@ describe("agent-trace schema and lifecycle", () => {
 			providerSessionId: "prov-1",
 			answerSnapshot: "answer two",
 		});
-		expect(done.status).toBe("completed");
-		expect(done.answerSnapshot).toBe("answer two");
-		expect(done.messages?.map((m) => m.content)).toEqual([
+		expect(done.agent?.status).toBe("completed");
+		expect(done.agent?.answerSnapshot).toBe("answer two");
+		expect(done.agent?.messages?.map((m) => m.content)).toEqual([
 			"first",
 			"answer one",
 			"follow up",
@@ -424,7 +483,7 @@ describe("agent-trace schema and lifecycle", () => {
 			userContent: "follow up",
 		});
 		expect(
-			again.messages?.filter((m) => m.content === "follow up"),
+			again.agent?.messages?.filter((m) => m.content === "follow up"),
 		).toHaveLength(1);
 	});
 
@@ -524,7 +583,7 @@ describe("agent-trace schema and lifecycle", () => {
 		const t = parsePdfVisualSessionTrace(raw);
 		expect(t).not.toBeNull();
 		if (!t) return;
-		expect(t.messages).toBeUndefined();
+		expect(t.agent?.messages).toBeUndefined();
 		const msgs = traceMessages(t);
 		expect(msgs).toHaveLength(2);
 		expect(msgs[0]?.role).toBe("user");
@@ -621,11 +680,14 @@ describe("agent-trace schema and lifecycle", () => {
 				comment: "这里最值得读的是什么?",
 				paperPath: "papers/a",
 				image,
-				agentId: "agent-1",
-				runtimeSessionId: "rt-last",
-				providerSessionId: "prov",
-				status: "completed",
-				messages,
+				agent: {
+					agentId: "agent-1",
+					runtimeSessionId: "rt-last",
+					messageId: "m1",
+					providerSessionId: "prov",
+					status: "completed",
+					messages,
+				},
 			},
 			messages,
 			title: "这里最值得读的是什么?",
@@ -682,7 +744,10 @@ describe("pending visual traces lifecycle", () => {
 		const activeRunning = {
 			...active,
 			id: "active-id",
-			runtimeSessionId: "rt-active",
+			agent: {
+				...active.agent!,
+				runtimeSessionId: "rt-active",
+			},
 		};
 		rememberPendingVisualTraces("rt-active", [
 			{ paperAbsPath: "/vault/papers/a", traceId: activeRunning.id },
@@ -693,11 +758,11 @@ describe("pending visual traces lifecycle", () => {
 			[orphan, activeRunning],
 		);
 		expect(reconciled).toHaveLength(2);
-		expect(reconciled[0]?.status).toBe("failed");
-		expect(reconciled[0]?.error).toMatch(/interrupted/i);
+		expect(reconciled[0]?.agent?.status).toBe("failed");
+		expect(reconciled[0]?.agent?.error).toMatch(/interrupted/i);
 		// User seed survives fail.
-		expect(reconciled[0]?.messages?.[0]?.content).toBe("orphan");
-		expect(reconciled[1]?.status).toBe("running");
+		expect(reconciled[0]?.agent?.messages?.[0]?.content).toBe("orphan");
+		expect(reconciled[1]?.agent?.status).toBe("running");
 		expect(reconciled[1]?.id).toBe("active-id");
 	});
 
@@ -718,6 +783,6 @@ describe("pending visual traces lifecycle", () => {
 		const reconciled = await reconcileOrphanRunningVisualTraces("/p", [
 			running,
 		]);
-		expect(reconciled[0]?.status).toBe("running");
+		expect(reconciled[0]?.agent?.status).toBe("running");
 	});
 });
