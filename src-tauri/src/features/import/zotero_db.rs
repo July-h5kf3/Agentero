@@ -46,6 +46,8 @@ pub struct ZoteroItemInfo {
     /// Zotero itemID (stable within a library); used by `include_items`.
     pub id: i64,
     pub title: String,
+    /// Zotero item type (journalArticle, webpage, …) for the picker badge.
+    pub item_type: String,
     pub year: Option<i64>,
     pub has_pdf: bool,
     pub notes: usize,
@@ -159,6 +161,7 @@ fn item_info(it: &ReadItem) -> ZoteroItemInfo {
     ZoteroItemInfo {
         id: it.item_id,
         title: it.json["title"].as_str().unwrap_or_default().to_string(),
+        item_type: it.json["itemType"].as_str().unwrap_or_default().to_string(),
         year: parse_year(it.json.get("date").and_then(|v| v.as_str())),
         has_pdf: !it.pdfs.is_empty(),
         notes: it.note_html.len(),
@@ -198,7 +201,7 @@ pub async fn migrate_zotero(
     }
     let parent_rel = normalize_parent_dir(args.parent_dir.as_deref().unwrap_or("papers"))?;
 
-    let (items, _collections) = read_all_items(&zotero_dir)?;
+    let (items, collections) = read_all_items(&zotero_dir)?;
 
     // Deleting paper folders outside the app leaves orphan catalog rows; drop them
     // first so dedup does not block re-import and the Library shows no ghosts.
@@ -232,6 +235,20 @@ pub async fn migrate_zotero(
         migrate_notes: args.migrate_notes,
         migrate_annotations: args.migrate_annotations,
     };
+
+    // Materialize the whole Zotero collection tree up front — including empty
+    // collections and ones whose items were deduped against the catalog — so
+    // the vault structure matches the library even when no paper lands in some
+    // folders (previously folders only existed as a side effect of placement,
+    // which made sub-collections "disappear").
+    if flags.preserve_collections {
+        for c in &collections {
+            if c.path.is_empty() {
+                continue; // pseudo "unfiled" bucket
+            }
+            let _ = fs::create_dir_all(vault.join(&parent_rel).join(&c.path));
+        }
+    }
 
     // Apply per-paper / collection selection up front so the progress total
     // reflects only the items that will actually be processed (previously the
@@ -566,7 +583,7 @@ fn read_items_conn(
         "SELECT i.itemID, it.typeName
          FROM items i
          JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
-         WHERE it.typeName NOT IN ('attachment', 'note', 'annotation')
+         WHERE it.typeName NOT IN ('attachment', 'note', 'annotation', 'computerProgram')
            AND i.itemID NOT IN (SELECT itemID FROM deletedItems)",
     )?;
     let rows = stmt.query_map(params![], |r| {
@@ -797,12 +814,19 @@ fn collection_full_path(collections: &HashMap<i64, Collection>, id: i64) -> Vec<
     chain
 }
 
-/// Deterministic single collection folder for an item (smallest full path).
+/// Deterministic single collection folder for an item: the deepest (most
+/// specific) full path wins, so an item that also belongs to a parent
+/// collection keeps its child folder instead of being absorbed by the parent;
+/// equal depths break ties lexicographically for stability.
 fn chosen_collection_path(collections: &HashMap<i64, Collection>, ids: &[i64]) -> Vec<String> {
     ids.iter()
         .map(|id| collection_full_path(collections, *id))
         .filter(|p| !p.is_empty())
-        .min_by(|a, b| a.join("/").cmp(&b.join("/")))
+        .max_by(|a, b| {
+            a.len()
+                .cmp(&b.len())
+                .then_with(|| b.join("/").cmp(&a.join("/")))
+        })
         .unwrap_or_default()
 }
 
@@ -1054,6 +1078,7 @@ mod tests {
         assert_eq!(it.note_html.len(), 1, "child note attached to the paper");
         assert_eq!(it.json["title"], "Attention Is All You Need");
         assert_eq!(it.json["itemType"], "journalArticle");
+        assert_eq!(item_info(it).item_type, "journalArticle");
         assert_eq!(it.json["DOI"], "10.5555/abc");
         assert_eq!(it.json["creators"][0]["lastName"], "Vaswani");
         assert_eq!(it.json["tags"][0]["tag"], "nlp");
@@ -1090,6 +1115,89 @@ mod tests {
         assert!(tags.iter().any(|t| t["tag"] == "nlp"));
         // Automatic Zotero tags (type != 0) are retained with the hidden prefix.
         assert!(tags.iter().any(|t| t["tag"] == "@zotero:_to_read"));
+    }
+
+    #[test]
+    fn deepest_collection_wins_for_multi_membership() {
+        let conn = seed_db();
+        // Item 50 belongs to both the parent (NLP) and the child (Transformers):
+        // the child folder must keep the item instead of the parent absorbing it.
+        conn.execute_batch(
+            "INSERT INTO items VALUES (50,1,'EEEE5555');
+             INSERT INTO itemDataValues VALUES (500,'Multi Collection Paper');
+             INSERT INTO itemData VALUES (50,1,500);
+             INSERT INTO collectionItems VALUES (1,50,0),(2,50,1);",
+        )
+        .unwrap();
+        let (items, _c) = read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
+        let it = items.iter().find(|i| i.item_id == 50).unwrap();
+        assert_eq!(it.collection_path, vec!["NLP", "Transformers"]);
+        // Every membership still surfaces as a tag.
+        let tags = it.json["tags"].as_array().unwrap();
+        assert!(tags.iter().any(|t| t["tag"] == "NLP"));
+        assert!(tags.iter().any(|t| t["tag"] == "Transformers"));
+    }
+
+    #[test]
+    fn excludes_addon_computer_program_items() {
+        let conn = seed_db();
+        // Zotero add-ons may create `computerProgram` items (e.g. literally
+        // titled "Addon Item") — junk that must never become a paper.
+        conn.execute_batch(
+            "INSERT INTO itemTypes VALUES (9,'computerProgram');
+             INSERT INTO items VALUES (40,9,'FFFF6666');
+             INSERT INTO itemDataValues VALUES (400,'Addon Item');
+             INSERT INTO itemData VALUES (40,1,400);",
+        )
+        .unwrap();
+        let (items, _c) = read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
+        assert_eq!(
+            items.len(),
+            1,
+            "computerProgram addon item must be excluded"
+        );
+        assert_eq!(items[0].item_id, 10);
+    }
+
+    #[tokio::test]
+    async fn migrate_materializes_full_collection_tree() {
+        let base = std::env::temp_dir().join(format!("motif-zmig-{}", now_nanos()));
+        let vault = base.join("vault");
+        let zdir = base.join("zotero");
+        fs::create_dir_all(&vault).unwrap();
+        fs::create_dir_all(&zdir).unwrap();
+        {
+            let conn = Connection::open(zdir.join("zotero.sqlite")).unwrap();
+            conn.execute_batch(SEED_SQL).unwrap();
+            // Empty sibling collection (no items) — must still appear as a folder.
+            conn.execute_batch("INSERT INTO collections VALUES (3,'Empty Sibling',NULL);")
+                .unwrap();
+        }
+
+        let out = migrate_zotero(
+            ZoteroMigrateArgs {
+                vault_path: vault.to_string_lossy().to_string(),
+                zotero_dir: zdir.to_string_lossy().to_string(),
+                parent_dir: Some("papers".into()),
+                copy_pdfs: false,
+                preserve_collections: true,
+                include_collections: None,
+                include_items: None,
+                migrate_notes: false,
+                migrate_annotations: false,
+            },
+            |_c, _t, _p| {},
+        )
+        .await
+        .unwrap();
+        assert_eq!(out.imported, 1);
+        // Paper lands in the full collection path (deepest folder).
+        assert!(vault.join("papers/NLP/Transformers").is_dir());
+        assert_eq!(out.paths[0], "papers/NLP/Transformers/10_5555_abc");
+        // Empty collection still materializes so the tree matches Zotero.
+        assert!(vault.join("papers/Empty Sibling").is_dir());
+
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
