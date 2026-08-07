@@ -786,16 +786,16 @@ arXiv URL 推导：
   2. **论文库工具栏**（已打开 Vault 时）：图标按钮。
   共用 `ZoteroMigrateDialog`。打开时自动探测默认 `~/Zotero` 目录（否则手动选含 `zotero.sqlite` + `storage/` 的目录）；扫描预览以 chips 显示文献 / PDF / 笔记数，迁移后展示结果小结（导入 / 补笔记 / 拷 PDF / 清理）。
 - Host：`zotero_scan`（只读预览：文献数 / 有本地 PDF 数）、`zotero_migrate`（执行）；实现在 `services/lookup/zotero_db.rs`。
-- 读库：把 `zotero.sqlite`（含 `-wal`/`-shm`）**拷到临时目录**再只读打开（容忍 Zotero 正在运行）；查 `items`/`itemData`/`creators`/`itemTags`/`itemAttachments`，跳过 `deletedItems` 与 attachment/note/annotation 类型。
+- 读库：把 `zotero.sqlite`（含 `-wal`/`-shm`）**拷到临时目录**再只读打开（容忍 Zotero 正在运行）；查 `items`/`itemData`/`creators`/`itemTags`/`itemAttachments`，跳过 `deletedItems` 与 attachment/note/annotation 类型，并排除插件产生的 `computerProgram` 垃圾条目（如标题为 "Addon Item" 的项）。
 - 映射：每条**拼装成 Zotero-API-JSON item** → 复用 `map_zotero_item` + `enrich_remote_urls` + `write_paper_shell` + `paper_record_from_meta` + catalog upsert，落到 `{parent_dir}/{id}/`（id/citekey 与魔棒 / 文件导入一致）。
 - 附件 PDF URL：`map_zotero_item` 未给出 `pdf_url` 时，采用 Connector `attachments[]` 里的 PDF 链接（浏览器侧捕获，ACM/IEEE 等常仅经此暴露）。
 - 中文摘要：为不超 Connector 15s 超时，壳先以原文写入；**后台**三引擎并行竞速翻译摘要，成功则安全替换 `NOTES.md` 的 `>` 摘要块（mtime 守卫，用户已编辑或 MT 全失败则跳过）。
 - 标签：用户标签原样保留；Zotero 自动标签（网络翻译器加的来源/状态标签，`itemTags.type ≠ 0`）保留并加 `@zotero:` 前缀，因此在 Agentero 的标签界面中隐藏。旧库无 `type` 列时回退为将全部标签视为用户标签。collection 名仍作为组织标签补充。
 - PDF：对话框 **“把 PDF 复制进知识库”** 勾选项（默认开）。勾选时从 `storage/<attachmentKey>/` 拷到 `{paper}/{id}.pdf` 并 liteparse `PAPER.md`；不勾则只留书目，`pdf_url` 供按需下载。
-- 去重：按 arXiv id / DOI / 归一化标题跳过重复（re-run 与既有）；不同文献 citekey 相撞时目录追加后缀。**不覆盖** `NOTES.md`。
+- 去重：按 arXiv id / DOI / 归一化标题跳过重复（re-run 与既有）；不同文献 citekey 相撞时目录追加后缀。**不覆盖** `NOTES.md`。开启分类建文件夹时，去重命中的旧论文若不在其分类文件夹内（如早期平铺导入），会**自动移入**并改写 catalog 路径（目标已占用则保留原位，失败自动回滚；结果含 `relocated` 计数），重迁移即收敛到 Zotero 树。
 - 自愈：迁移前 `prune_missing` 清掉「文件夹已被手动删除」的 catalog 孤儿行，防止幽灵条目占位、去重误跳过导致无法重导（结果含 `pruned` 计数）。
-- 分类：对话框 **“按 Zotero 分类建子文件夹”** 勾选项（**默认开**，可手动关闭）→ 默认在目标目录下还原 collection 层级（`{parent}/<collection 路径>/<id>/`），collection 名同时写入 tags（多归属不丢失）；关闭则平铺。条目在多个 collection 时取确定性的单一路径（全路径字典序最小）。
-- 选择性导入：`zotero_scan` 预览返回各 collection（含「未分类」= id 0）及条目数，并返回逐条 `items`（id/title/year/hasPdf/notes/collections）；对话框提供**搜索 + 文件夹筛选 + 逐条勾选**（`include_items` 优先于 `include_collections`，缺省 = 全部）；迁移经 Tauri Channel 回传 `{current,total}` 进度，选项记于 localStorage。
+- 分类：对话框 **“按 Zotero 分类建子文件夹”** 勾选项（**默认开**，可手动关闭）→ 迁移开始时**物化完整 collection 树**（含空分类与条目被去重的分类，目录结构与 Zotero 完全对应），条目落在 `{parent}/<collection 路径>/<id>/`，collection 名同时写入 tags（多归属不丢失）；关闭则平铺。条目在多个 collection 时取确定性的单一路径（**最深路径优先**，同深按字典序，避免父级分类吸走子级条目）。
+- 选择性导入：`zotero_scan` 预览返回各 collection（含「未分类」= id 0）及条目数，并返回逐条 `items`（id/title/itemType/year/hasPdf/notes/collections）；对话框提供**搜索 + 文件夹筛选 + 逐条勾选**（`include_items` 优先于 `include_collections`，缺省 = 全部），非常规类型（webpage 等）在列表中以类型徽标标出；迁移经 Tauri Channel 回传 `{current,total}` 进度，选项记于 localStorage。
 - 笔记：对话框「迁移 Zotero 笔记」勾选项（默认开）→ 每篇挂载的子笔记（`itemNotes`）HTML 经 `htmd` 转 Markdown，追加进该篇 `NOTES.md`（以 `---` 分隔）；`zotero_scan` 预览显示笔记总数。仅处理有父条目的子笔记。
 - 批注：对话框「迁移 PDF 高亮批注」勾选项（默认开）→ 读 `itemAnnotations`（高亮 text + comment + 页码）转 Markdown 引用块追加进 `NOTES.md`（与笔记共用幂等追加）。**注**：阅读器运行时批注为 `marks/*.json`；Zotero 导入侧暂只把文本迁入 `NOTES.md`，不做原位 PDF 高亮还原。
 - 非目标（v1）：Zotero 批注的**原位高亮渲染**（现仅迁移文本入 NOTES.md）、独立笔记（无父条目）、群组库。
