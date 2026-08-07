@@ -728,13 +728,17 @@ fn read_items_conn(
         });
     }
 
-    let mut infos: Vec<ZoteroCollectionInfo> = coll_counts
-        .into_iter()
-        .map(|(id, item_count)| ZoteroCollectionInfo {
+    // Every Zotero collection, including empty ones: folder materialization and
+    // the scan picker both need the full tree, not only collections that have
+    // at least one item in this pass.
+    let mut infos: Vec<ZoteroCollectionInfo> = collections
+        .keys()
+        .map(|&id| ZoteroCollectionInfo {
             id,
             path: collection_full_path(&collections, id).join("/"),
-            item_count,
+            item_count: coll_counts.get(&id).copied().unwrap_or(0),
         })
+        .filter(|c| !c.path.is_empty())
         .collect();
     infos.sort_by(|a, b| a.path.cmp(&b.path));
     if unfiled > 0 {
