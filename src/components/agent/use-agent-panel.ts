@@ -150,6 +150,7 @@ import {
 	completeTrace,
 	createRunningTraces,
 	failTrace,
+	newTraceMessageId,
 	readPdfVisualTrace,
 	rememberPendingVisualTraces,
 	takePendingVisualTraces,
@@ -2030,6 +2031,11 @@ export function useAgentPanel({
 				for (const [paperAbsPath, drafts] of byPaper) {
 					try {
 						// One mark file per crop so pins hover/delete independently.
+						// Prefer the turn text as the first user message (Cmd+Enter /
+						// composer). draft.comment is the annotation note only — leave
+						// it out of messages so wiki embeds do not show the same text twice.
+						const userText = text.trim();
+						const now = new Date().toISOString();
 						const traces = createRunningTraces({
 							paperPath: drafts[0]?.paperPath || paperAbsPath,
 							agentId,
@@ -2044,7 +2050,18 @@ export function useAgentPanel({
 									data: draft.image.data,
 									mimeType: draft.image.mimeType || "image/png",
 								},
+								messages: userText
+									? [
+											{
+												id: newTraceMessageId(),
+												role: "user" as const,
+												content: userText,
+												createdAt: now,
+											},
+										]
+									: undefined,
 							})),
+							createdAt: now,
 						});
 						for (const trace of traces) {
 							await writePdfVisualTrace(paperAbsPath, trace);

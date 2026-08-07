@@ -2589,19 +2589,22 @@ function PdfViewerInner({
 
 	/**
 	 * ⌘/Ctrl+Enter from the region editor: open pin chat and start Agent turn.
+	 * Leave mark.comment empty — the editor text is conversation, not a note;
+	 * putting it in both comment and messages duplicates in wiki embeds.
 	 */
 	const handleVisualSendNow = useCallback(
 		(comment: string) => {
 			const draft = visualDraftEditor;
 			if (!draft) return;
 			const paperPath = paperRelPath || paperAbsPath || "paper";
-			// Agent path may use empty comment; fallback keeps visualMarkHasContent.
-			const content = comment.trim() || t("pdfExplain.visualAnnotation");
+			// Conversation body (never the annotation note). Empty input still
+			// needs a user turn so the agent path has something to send.
+			const promptText = comment.trim() || t("pdfExplain.visualAnnotation");
 			const now = new Date().toISOString();
 			const userMsg = {
 				id: newTraceMessageId(),
 				role: "user" as const,
-				content,
+				content: promptText,
 				createdAt: now,
 			};
 			const [provisional] = createRunningTraces({
@@ -2613,7 +2616,8 @@ function PdfViewerInner({
 					{
 						page: draft.page,
 						rects: [draft.region],
-						comment: content,
+						// Note field stays empty; content lives in messages only.
+						comment: "",
 						image: {
 							data: draft.image.data,
 							mimeType: draft.image.mimeType || "image/png",
@@ -2650,7 +2654,8 @@ function PdfViewerInner({
 							paperAbsPath: paperAbsPath ?? undefined,
 							page: draft.page,
 							rects: [draft.region],
-							comment: content,
+							// Same rule as mark.comment: chip/note empty on direct chat.
+							comment: "",
 							image: {
 								data: draft.image.data,
 								mimeType: draft.image.mimeType || "image/png",
@@ -2668,7 +2673,7 @@ function PdfViewerInner({
 								agentId,
 							},
 						},
-						text: content,
+						text: promptText,
 						visualDrafts: [visualDraft],
 						agentId,
 						modelId: resolved.modelId,
