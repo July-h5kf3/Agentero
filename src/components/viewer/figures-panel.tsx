@@ -28,7 +28,9 @@ import {
 import type { PromptImage } from "@/lib/agent";
 import { cn } from "@/lib/core/utils";
 import {
+	compareLayoutReadingOrder,
 	dedupeLayoutRegions,
+	formulaSortAnchor,
 	isAlgorithmLayoutKind,
 	isFigureLayoutKind,
 	isFormulaLayoutKind,
@@ -97,6 +99,9 @@ function FigureCard({
 	const caption = region.title?.trim() || "";
 	const title = caption || fallbackTitle;
 
+	// Formulas are wide one-line crops — 4:3 wastes vertical space.
+	const isFormula = kind === "formula";
+
 	return (
 		<button
 			type="button"
@@ -108,25 +113,42 @@ function FigureCard({
 			)}
 			onClick={() => onJump(region)}
 		>
-			<div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-muted/20">
-				<span className="absolute top-1.5 right-1.5 z-10 rounded bg-background/80 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground backdrop-blur-sm">
+			<div
+				className={cn(
+					"relative flex w-full items-center justify-center overflow-hidden bg-muted/20",
+					// Formulas: short strip (~3:1), not figure-style 4:3.
+					isFormula ? "aspect-[3/1] max-h-20" : "aspect-[4/3]",
+				)}
+			>
+				<span
+					className={cn(
+						"absolute z-10 rounded bg-background/80 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground backdrop-blur-sm",
+						isFormula ? "top-1 right-1" : "top-1.5 right-1.5",
+					)}
+				>
 					{t("figures.page", { page })}
 				</span>
 				{thumb ? (
 					<img
 						src={`data:${thumb.mimeType};base64,${thumb.data}`}
 						alt=""
-						className="max-h-full max-w-full object-contain"
+						className={cn(
+							"max-h-full max-w-full object-contain",
+							isFormula && "w-full object-left",
+						)}
 						draggable={false}
 					/>
 				) : (
 					<div className="flex flex-col items-center gap-1 text-muted-foreground">
-						<ImageIcon className="size-6 opacity-60" aria-hidden />
+						<ImageIcon
+							className={cn("opacity-60", isFormula ? "size-4" : "size-6")}
+							aria-hidden
+						/>
 						<span className="text-[10px]">{t("figures.thumbPending")}</span>
 					</div>
 				)}
 			</div>
-			<div className="px-2 py-1.5">
+			<div className={cn("px-2", isFormula ? "py-1" : "py-1.5")}>
 				<p
 					className={cn(
 						"font-medium text-xs",
@@ -237,10 +259,13 @@ export function FiguresPanel({
 		() => gallery.filter((r) => isAlgorithmLayoutKind(r.kind)),
 		[gallery],
 	);
-	const formulas = useMemo(
-		() => gallery.filter((r) => isFormulaLayoutKind(r.kind)),
-		[gallery],
-	);
+	const formulas = useMemo(() => {
+		// Page → left column → right column → top→bottom (eq number order).
+		const list = gallery.filter((r) => isFormulaLayoutKind(r.kind));
+		return [...list].sort((a, b) =>
+			compareLayoutReadingOrder(a, b, formulaSortAnchor),
+		);
+	}, [gallery]);
 
 	const rawSidebarCount = useMemo(
 		() =>
