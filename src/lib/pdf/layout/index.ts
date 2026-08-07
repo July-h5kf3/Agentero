@@ -42,6 +42,9 @@ export {
 	isFigureLayoutKind,
 	isFormulaLayoutKind,
 	isFormulaNumberLayoutKind,
+	isLayoutBodyTextKind,
+	isLayoutTranslatableKind,
+	isLayoutTranslateHeadingKind,
 	isSidebarLayoutKind,
 	isTableLayoutKind,
 	isTargetLayoutLabel,
@@ -50,6 +53,18 @@ export {
 	layoutKindI18nKey,
 	layoutLabelToKind,
 } from "@/lib/pdf/layout/labels";
+export {
+	LAYOUT_TRANSLATE_CONCURRENCY,
+	LAYOUT_TRANSLATE_MAX_CHARS,
+	type LayoutTranslateItem,
+	type LayoutTranslateItemStatus,
+	type LayoutTranslateJobStatus,
+	type LayoutTranslateRegion,
+	layoutRegionSourceText,
+	listTranslatableLayoutRegions,
+	runLayoutRegionTranslate,
+	toLayoutTranslateItems,
+} from "@/lib/pdf/layout/layout-translate";
 export {
 	areFigureNeighbors,
 	bboxCoveredBy,

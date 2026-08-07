@@ -48,6 +48,14 @@
 			"toggleOverlay": "Toggle layout boxes",
 			"showOverlay": "Show layout boxes",
 			"hideOverlay": "Hide layout boxes"
+		},
+		"layoutTranslate": {
+			"start": "Translate layout text regions",
+			"stop": "Stop layout translation",
+			"clear": "Clear layout translations",
+			"needLayout": "Run layout analysis first (Figures panel).",
+			"noText": "No extractable text regions to translate.",
+			"failed": "Layout translation failed"
 		}
 	},
 	"pdfAsk": {

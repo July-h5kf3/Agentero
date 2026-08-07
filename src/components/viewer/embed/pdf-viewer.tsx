@@ -78,7 +78,9 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	ChevronUp,
+	Languages,
 	List,
+	Loader2,
 	Maximize2,
 	MessageSquareText,
 	Minimize2,
@@ -125,6 +127,7 @@ import {
 	rectRightScreen,
 	rectTopCenterScreen,
 } from "@/components/viewer/embed/geometry";
+import { LayoutTranslateOverlay } from "@/components/viewer/embed/layout-translate-overlay";
 import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
 import { PdfRegionSelectLayer } from "@/components/viewer/embed/pdf-region-select-layer";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
@@ -217,16 +220,21 @@ import {
 	hoverableLayoutRegionsOnPage,
 	LAYOUT_HOVER_DWELL_MS,
 	LAYOUT_HOVER_HIDE_MS,
+	type LayoutTranslateItem,
+	type LayoutTranslateJobStatus,
 	layoutAnalysisStore,
 	layoutKindBorder,
 	layoutKindFill,
 	layoutKindHex,
 	layoutKindI18nKey,
+	listTranslatableLayoutRegions,
 	type PdfLayoutRegion,
 	rawLayoutRegionsOnPage,
 	runDocumentLayoutAnalysis,
+	runLayoutRegionTranslate,
 	setFocusedLayoutRegion,
 	setLayoutOverlayVisible,
+	toLayoutTranslateItems,
 } from "@/lib/pdf/layout";
 import { setPaperOutline } from "@/lib/pdf/outline-location";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
@@ -989,6 +997,12 @@ function PdfViewerInner({
 		(s) =>
 			s.byDocument[docId]?.rawRegions ?? s.byDocument[docId]?.regions ?? null,
 	);
+	/** Progressive layout bulk-translate overlays (body text / abstract / header). */
+	const [layoutTranslateJob, setLayoutTranslateJob] = useState<{
+		status: LayoutTranslateJobStatus;
+		items: LayoutTranslateItem[];
+	}>({ status: "idle", items: [] });
+	const layoutTranslateAbortRef = useRef<AbortController | null>(null);
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
 	const [translates, setTranslates] = useState<PdfTranslateRecord[]>([]);
@@ -2024,6 +2038,104 @@ function PdfViewerInner({
 			cancelLayoutDraftHide();
 		};
 	}, [docId, invalidateLayoutHover, cancelLayoutDraftHide]);
+
+	const stopLayoutTranslate = useCallback(() => {
+		layoutTranslateAbortRef.current?.abort();
+		layoutTranslateAbortRef.current = null;
+		setLayoutTranslateJob((prev) =>
+			prev.status === "running" ? { ...prev, status: "cancelled" } : prev,
+		);
+	}, []);
+
+	const clearLayoutTranslate = useCallback(() => {
+		layoutTranslateAbortRef.current?.abort();
+		layoutTranslateAbortRef.current = null;
+		setLayoutTranslateJob({ status: "idle", items: [] });
+	}, []);
+
+	const startLayoutTranslate = useCallback(() => {
+		const raw = layoutRawRegions;
+		if (!raw?.length) {
+			notifyError(t("pdf.layoutTranslate.needLayout"));
+			return;
+		}
+		const regions = listTranslatableLayoutRegions(raw);
+		if (regions.length === 0) {
+			notifyError(t("pdf.layoutTranslate.noText"));
+			return;
+		}
+		layoutTranslateAbortRef.current?.abort();
+		const ac = new AbortController();
+		layoutTranslateAbortRef.current = ac;
+		const items = toLayoutTranslateItems(regions);
+		setLayoutTranslateJob({ status: "running", items });
+		void runLayoutRegionTranslate({
+			items,
+			signal: ac.signal,
+			onUpdate: (next) => {
+				if (ac.signal.aborted) return;
+				setLayoutTranslateJob((prev) => ({
+					status: prev.status === "cancelled" ? "cancelled" : "running",
+					items: next,
+				}));
+			},
+		})
+			.then((finalItems) => {
+				if (ac.signal.aborted) {
+					setLayoutTranslateJob({ status: "cancelled", items: finalItems });
+					return;
+				}
+				setLayoutTranslateJob({ status: "done", items: finalItems });
+			})
+			.catch((e) => {
+				if (ac.signal.aborted) return;
+				const message = e instanceof Error ? e.message : String(e);
+				notifyError(t("pdf.layoutTranslate.failed"), { description: message });
+				setLayoutTranslateJob((prev) => ({
+					status: "done",
+					items: prev.items,
+				}));
+			})
+			.finally(() => {
+				if (layoutTranslateAbortRef.current === ac) {
+					layoutTranslateAbortRef.current = null;
+				}
+			});
+	}, [layoutRawRegions, t]);
+
+	const toggleLayoutTranslate = useCallback(() => {
+		if (layoutTranslateJob.status === "running") {
+			stopLayoutTranslate();
+			return;
+		}
+		if (
+			layoutTranslateJob.status === "done" ||
+			layoutTranslateJob.status === "cancelled"
+		) {
+			// Second click clears overlays; third starts again from the button.
+			if (layoutTranslateJob.items.some((it) => it.translated)) {
+				clearLayoutTranslate();
+				return;
+			}
+		}
+		startLayoutTranslate();
+	}, [
+		layoutTranslateJob,
+		startLayoutTranslate,
+		stopLayoutTranslate,
+		clearLayoutTranslate,
+	]);
+
+	// Abort bulk translate when switching documents.
+	useEffect(() => {
+		if (!docId) return;
+		layoutTranslateAbortRef.current?.abort();
+		layoutTranslateAbortRef.current = null;
+		setLayoutTranslateJob({ status: "idle", items: [] });
+		return () => {
+			layoutTranslateAbortRef.current?.abort();
+		};
+	}, [docId]);
 
 	const handleVisualDraftSave = useCallback(
 		(comment: string) => {
@@ -3498,6 +3610,16 @@ function PdfViewerInner({
 									},
 								)
 							: null}
+						{/* Bulk layout translate: progressive text overlays over body blocks. */}
+						{layoutTranslateJob.items.length > 0 ? (
+							<LayoutTranslateOverlay
+								items={layoutTranslateJob.items}
+								pageIndex={pageIndex}
+								pageWidthPx={width}
+								pageHeightPx={height}
+								pdfDark={pdfDark}
+							/>
+						) : null}
 						{/*
 						 * Hover hit targets for post-merge figure/table/algorithm/formula.
 						 * Largest first so smaller boxes stack on top and win pointer hits.
@@ -3661,6 +3783,7 @@ function PdfViewerInner({
 			layoutDocRegions,
 			layoutRawRegions,
 			layoutOverlayVisible,
+			layoutTranslateJob.items,
 			handleVisualRegionSelect,
 			scheduleLayoutHoverOpen,
 			handleLayoutHoverLeave,
@@ -3930,6 +4053,47 @@ function PdfViewerInner({
 								<span className="ml-2 text-background/70">
 									{formatShortcutById("visualAnnotation")}
 								</span>
+							</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant={
+										layoutTranslateJob.status === "running" ||
+										layoutTranslateJob.items.some((it) => it.translated)
+											? "secondary"
+											: "ghost"
+									}
+									className="shrink-0 self-center"
+									aria-label={
+										layoutTranslateJob.status === "running"
+											? t("pdf.layoutTranslate.stop")
+											: layoutTranslateJob.items.some((it) => it.translated)
+												? t("pdf.layoutTranslate.clear")
+												: t("pdf.layoutTranslate.start")
+									}
+									aria-pressed={
+										layoutTranslateJob.status === "running" ||
+										layoutTranslateJob.items.some((it) => it.translated)
+									}
+									disabled={!engine}
+									onClick={toggleLayoutTranslate}
+								>
+									{layoutTranslateJob.status === "running" ? (
+										<Loader2 className="size-3.5 animate-spin" aria-hidden />
+									) : (
+										<Languages className="size-3.5" aria-hidden />
+									)}
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{layoutTranslateJob.status === "running"
+									? t("pdf.layoutTranslate.stop")
+									: layoutTranslateJob.items.some((it) => it.translated)
+										? t("pdf.layoutTranslate.clear")
+										: t("pdf.layoutTranslate.start")}
 							</TooltipContent>
 						</Tooltip>
 						{onOpenAnnotations ? (

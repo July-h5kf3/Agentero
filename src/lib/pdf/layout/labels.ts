@@ -72,6 +72,27 @@ export function isTextLayoutKind(kind: PdfLayoutKind): boolean {
 	return kind === "text";
 }
 
+/**
+ * Regions whose PDF text layer we extract for body / abstract / headers.
+ * Algorithms are never bulk-translated (see listTranslatableLayoutRegions).
+ */
+export function isLayoutBodyTextKind(kind: PdfLayoutKind): boolean {
+	return kind === "text" || kind === "abstract" || kind === "header";
+}
+
+/**
+ * Kinds eligible for bulk layout translation:
+ * body text, abstract, section headers, figure/table captions.
+ */
+export function isLayoutTranslatableKind(kind: PdfLayoutKind): boolean {
+	return isLayoutBodyTextKind(kind) || kind === "figure_title";
+}
+
+/** Section / paper titles shown bold in the layout-translate overlay. */
+export function isLayoutTranslateHeadingKind(kind: PdfLayoutKind): boolean {
+	return kind === "header";
+}
+
 /** Caption candidates merged into nearby figures/tables, not listed alone. */
 export function isCaptionLayoutKind(kind: PdfLayoutKind): boolean {
 	return kind === "figure_title" || kind === "header";
