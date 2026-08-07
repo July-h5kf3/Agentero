@@ -243,6 +243,7 @@ import {
 	toLayoutTranslateItems,
 } from "@/lib/pdf/layout";
 import { setPaperOutline } from "@/lib/pdf/outline-location";
+import { PDF_PAGE_RASTER_DARK_CLASS } from "@/lib/pdf/page-theme";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
@@ -280,19 +281,6 @@ import {
 	runTranslate,
 } from "@/lib/translate";
 import { isDockviewSashTarget } from "@/lib/workspace/dockview-sash";
-
-/**
- * Dark-mode page raster styling.
- *
- * EmbedPDF 2.x only themes viewer chrome (and we build chrome ourselves). Page
- * content has no color-scheme API yet — see embedpdf/embed-pdf-viewer#679.
- * Soft partial invert (not 100%) + slight brightness/contrast so pure white
- * paper does not become pure black and text is not pure white. Hue-rotate
- * keeps figure colors roughly correct. Applied only to raster layers so
- * selection / search / annotation overlays stay uninverted.
- */
-const PDF_PAGE_RASTER_DARK_CLASS =
-	"[filter:invert(0.88)_hue-rotate(180deg)_brightness(1.06)_contrast(0.92)]";
 
 type PdfColorScheme = "light" | "dark";
 
