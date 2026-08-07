@@ -139,6 +139,7 @@ import { TranslateCard } from "@/components/viewer/pdf-ask/translate-card";
 import { VisualAnnotationEditor } from "@/components/viewer/pdf-ask/visual-annotation-editor";
 import { VisualTraceCard } from "@/components/viewer/pdf-ask/visual-trace-card";
 import { PdfCitationPreview } from "@/components/viewer/pdf-citation-preview";
+import i18n from "@/i18n";
 import {
 	cancelAgentRun,
 	listAgents,
@@ -155,6 +156,12 @@ import {
 	publishSelection,
 } from "@/lib/agent/selection-store";
 import { addVisualDraft } from "@/lib/agent/visual-context-store";
+import {
+	BackgroundTaskCancelledError,
+	enqueueBackgroundTask,
+	isBackgroundTaskCancelledError,
+	setBackgroundTasksExpanded,
+} from "@/lib/core/background-tasks";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
@@ -216,6 +223,7 @@ import {
 } from "@/lib/pdf/highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import {
+	getLayoutDocumentResult,
 	getPdfAiRuntime,
 	hoverableLayoutRegionsOnPage,
 	LAYOUT_HOVER_DWELL_MS,
@@ -230,6 +238,7 @@ import {
 	listTranslatableLayoutRegions,
 	type PdfLayoutRegion,
 	rawLayoutRegionsOnPage,
+	readLayoutSidecar,
 	runDocumentLayoutAnalysis,
 	runLayoutRegionTranslate,
 	setFocusedLayoutRegion,
@@ -3054,11 +3063,247 @@ function PdfViewerInner({
 		[editor, annotationCap, docId],
 	);
 
+	/**
+	 * Run layout analysis for this document.
+	 * - force: re-run model even when sidecar / store already has results
+	 * - openFigures / showOverlay: UI side-effects for the manual Figures button
+	 * - asBackgroundTask: surface progress in the IDE background-tasks panel
+	 */
+	const startLayoutAnalysis = useCallback(
+		(opts?: {
+			force?: boolean;
+			openFigures?: boolean;
+			showOverlay?: boolean;
+			asBackgroundTask?: boolean;
+			/** When false, skip notifyError (auto-run uses the tasks panel). */
+			notifyOnError?: boolean;
+		}) => {
+			const la = layoutCapRef.current?.forDocument(docId);
+			if (!la) {
+				if (opts?.notifyOnError !== false) {
+					notifyError(t("pdf.layout.unavailable"));
+				}
+				return;
+			}
+			layoutTaskRef.current?.abort({
+				type: "no-document",
+				message: "superseded",
+			});
+			const pages = totalPagesRef.current;
+			const paperLabel =
+				paperRelPath || paperAbsPath?.split(/[/\\]/).pop() || docId;
+
+			const runCore = (hooks?: { signal?: AbortSignal }) =>
+				new Promise<void>((resolve, reject) => {
+					let settled = false;
+					const finish = (fn: () => void) => {
+						if (settled) return;
+						settled = true;
+						hooks?.signal?.removeEventListener("abort", onAbort);
+						fn();
+					};
+					const onAbort = () => {
+						layoutTaskRef.current?.abort({
+							type: "no-document",
+							message: "cancelled",
+						});
+						layoutTaskRef.current = null;
+						finish(() => reject(new BackgroundTaskCancelledError()));
+					};
+					if (hooks?.signal?.aborted) {
+						onAbort();
+						return;
+					}
+					hooks?.signal?.addEventListener("abort", onAbort);
+
+					void runDocumentLayoutAnalysis(la, docId, {
+						paperAbsPath,
+						totalPages: pages > 0 ? pages : null,
+						force: opts?.force === true,
+						onDone: () => {
+							layoutTaskRef.current = null;
+							if (opts?.showOverlay) {
+								setLayoutOverlayVisible(docId, true);
+							}
+							if (opts?.openFigures) {
+								void import("@/lib/shell/ui-store").then(({ openRightTab }) =>
+									openRightTab("figures"),
+								);
+							}
+							finish(() => resolve());
+						},
+						onError: (message, aborted) => {
+							layoutTaskRef.current = null;
+							finish(() => {
+								if (aborted) {
+									reject(new BackgroundTaskCancelledError());
+									return;
+								}
+								reject(new Error(message));
+							});
+						},
+					})
+						.then((task) => {
+							layoutTaskRef.current = task;
+							// Cache hit resolves via onDone before returning null.
+							if (task == null && !settled) {
+								// onDone should have run; if not, resolve to avoid hang.
+								finish(() => resolve());
+							}
+						})
+						.catch((e) => {
+							layoutTaskRef.current = null;
+							finish(() =>
+								reject(e instanceof Error ? e : new Error(String(e))),
+							);
+						});
+				});
+
+			if (opts?.asBackgroundTask) {
+				// Show the floater so progress is visible without hunting for it.
+				setBackgroundTasksExpanded(true);
+				void enqueueBackgroundTask(
+					{
+						kind: "parse",
+						title: i18n.t("app:tasks.layoutAnalysis"),
+						detail: paperLabel,
+					},
+					async ({ setProgress, setDetail, signal }) => {
+						/**
+						 * Mirror layoutAnalysisStore.ui — same overall % and copy as the
+						 * Figures sidebar (message + page/total or pct), not per-page stages.
+						 */
+						const syncFromLayoutUi = () => {
+							const { ui, activeDocumentId } = layoutAnalysisStore.getState();
+							if (activeDocumentId != null && activeDocumentId !== docId) {
+								return;
+							}
+							if (ui.stage !== "running") return;
+
+							if (typeof ui.progress === "number") {
+								setProgress(ui.progress);
+							}
+
+							const page =
+								typeof ui.page === "number" && ui.page > 0
+									? ui.page
+									: typeof ui.completed === "number"
+										? ui.completed
+										: null;
+							const total =
+								typeof ui.total === "number" && ui.total > 0 ? ui.total : null;
+							const message = ui.message?.trim() || t("figures.analyzing");
+							const pageLine =
+								total != null && page != null
+									? t("figures.progressPages", { page, total })
+									: typeof ui.progress === "number"
+										? t("figures.progressPct", {
+												pct: Math.round(ui.progress),
+											})
+										: null;
+							setDetail(pageLine ? `${message} · ${pageLine}` : message);
+						};
+
+						setProgress(0);
+						setDetail(t("pdf.layout.preparingModel"));
+						const unsub = layoutAnalysisStore.subscribe(syncFromLayoutUi);
+						syncFromLayoutUi();
+						try {
+							await runCore({ signal });
+						} finally {
+							unsub();
+						}
+					},
+				).catch((e) => {
+					if (isBackgroundTaskCancelledError(e)) return;
+					if (opts?.notifyOnError !== false) {
+						const message = e instanceof Error ? e.message : String(e);
+						notifyError(t("pdf.layout.failed"), { description: message });
+					}
+				});
+				return;
+			}
+
+			void runCore().catch((e) => {
+				if (isBackgroundTaskCancelledError(e)) return;
+				if (opts?.notifyOnError === false) return;
+				const message = e instanceof Error ? e.message : String(e);
+				notifyError(t("pdf.layout.failed"), { description: message });
+			});
+		},
+		[docId, paperAbsPath, paperRelPath, t],
+	);
+
+	// Open paper → auto layout analysis: cache hit is silent; otherwise background task.
+	const layoutAutoStartedForDocRef = useRef<string | null>(null);
+	useEffect(() => {
+		if (!isActive) return;
+		if (!layoutCap || totalPages <= 0) return;
+		if (getLayoutDocumentResult(docId)) return;
+		if (layoutAutoStartedForDocRef.current === docId) return;
+		if (!layoutCap.forDocument(docId)) return;
+
+		layoutAutoStartedForDocRef.current = docId;
+		let cancelled = false;
+
+		void (async () => {
+			try {
+				const hasSidecar = paperAbsPath
+					? Boolean(await readLayoutSidecar(paperAbsPath))
+					: false;
+				if (cancelled) return;
+				if (getLayoutDocumentResult(docId)) return;
+
+				if (hasSidecar) {
+					// Quiet cache load — no tasks panel, no Figures tab.
+					startLayoutAnalysis({
+						force: false,
+						openFigures: false,
+						showOverlay: false,
+						asBackgroundTask: false,
+						notifyOnError: false,
+					});
+					return;
+				}
+
+				startLayoutAnalysis({
+					force: false,
+					openFigures: false,
+					showOverlay: false,
+					asBackgroundTask: true,
+					notifyOnError: false,
+				});
+			} catch {
+				// Allow a later mount/open to retry if probe failed before start.
+				if (layoutAutoStartedForDocRef.current === docId) {
+					layoutAutoStartedForDocRef.current = null;
+				}
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+			// Strict-mode remount / tab switch before result: allow retry.
+			if (!getLayoutDocumentResult(docId)) {
+				layoutAutoStartedForDocRef.current = null;
+			}
+		};
+	}, [
+		isActive,
+		layoutCap,
+		docId,
+		totalPages,
+		paperAbsPath,
+		startLayoutAnalysis,
+	]);
+
 	// Register the imperative handle for the annotations panel.
 	// Parent often passes an inline onHandle; keep it in a ref. Read scroll via
 	// scrollRef so EmbedPDF's fresh scope object does not re-register every paint.
 	const onHandleRef = useRef(onHandle);
 	onHandleRef.current = onHandle;
+	const startLayoutAnalysisRef = useRef(startLayoutAnalysis);
+	startLayoutAnalysisRef.current = startLayoutAnalysis;
 	useEffect(() => {
 		const register = onHandleRef.current;
 		if (!register) return;
@@ -3118,45 +3363,15 @@ function PdfViewerInner({
 				setRegionSelecting((active) => !active);
 			},
 			analyzeLayout: () => {
-				const la = layoutCapRef.current?.forDocument(docId);
-				if (!la) {
-					notifyError(t("pdf.layout.unavailable"));
-					return;
-				}
-				layoutTaskRef.current?.abort({
-					type: "no-document",
-					message: "superseded",
+				// Manual re-run always forces a fresh model pass when results exist.
+				const force = Boolean(getLayoutDocumentResult(docId));
+				startLayoutAnalysisRef.current({
+					force,
+					openFigures: true,
+					showOverlay: true,
+					asBackgroundTask: true,
+					notifyOnError: true,
 				});
-				const pages = totalPagesRef.current;
-				void runDocumentLayoutAnalysis(la, docId, {
-					paperAbsPath,
-					totalPages: pages > 0 ? pages : null,
-					onDone: () => {
-						layoutTaskRef.current = null;
-						// Show bbox overlay after a successful run (sidebar can hide it).
-						setLayoutOverlayVisible(docId, true);
-						void import("@/lib/shell/ui-store").then(({ openRightTab }) =>
-							openRightTab("figures"),
-						);
-					},
-					onError: (message, aborted) => {
-						layoutTaskRef.current = null;
-						if (aborted) return;
-						notifyError(t("pdf.layout.failed"), {
-							description: message,
-						});
-					},
-				})
-					.then((task) => {
-						layoutTaskRef.current = task;
-					})
-					.catch((e) => {
-						layoutTaskRef.current = null;
-						const message = e instanceof Error ? e.message : String(e);
-						notifyError(t("pdf.layout.failed"), {
-							description: message,
-						});
-					});
 			},
 			scrollToLayoutRegion: (region) => {
 				scrollRef.current?.scrollToPage({
@@ -3204,7 +3419,6 @@ function PdfViewerInner({
 		selectionCap,
 		visualCropPending,
 		closeVisualDraftEditor,
-		t,
 	]);
 
 	// Keep the page-number input in sync with the observed current page.

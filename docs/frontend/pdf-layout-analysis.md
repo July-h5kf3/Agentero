@@ -13,8 +13,10 @@
 ## 流水线（一图）
 
 ```text
-右栏 Figures header：分析 (Boxes) / 叠加层 (Eye)
-        │  handle.analyzeLayout() · store.overlayVisible 同步插件
+打开论文 PDF（页数就绪）→ 自动版面分析
+        │  有 `{paper}/source/layout.json` → 静默命中缓存（无后台任务条）
+        │  无缓存 → 左下角后台任务（kind parse）显示进度；可取消
+        │  手动：Figures header「分析」→ force 重跑 + 打开 Figures / 可选 Eye
         ▼
 PP-DocLayoutV3  每页: render → detect → map to PDF points
         │  LayoutBlock[]（插件全量标签；页上 LayoutAnalysisLayer 仍画原始框）

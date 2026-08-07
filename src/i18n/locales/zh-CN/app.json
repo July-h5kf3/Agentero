@@ -217,6 +217,8 @@
 		"downloadPhaseLayoutModel": "版面模型",
 		"layoutModelDownload": "下载版面模型",
 		"layoutModelDetail": "魔搭 → HuggingFace · PP-DocLayoutV3",
+		"layoutAnalysis": "解析插图、表格、文字",
+		"layoutAnalysisDetail": "正在检测插图、表格与文字…",
 		"downloadBytes": "{{phase}} · {{downloaded}} / {{total}}",
 		"downloadBytesUnknown": "{{phase}} · {{downloaded}}",
 		"batchProgress": "{{phase}} · {{current}} / {{total}}",

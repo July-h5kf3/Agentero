@@ -288,20 +288,30 @@ export async function runDocumentLayoutAnalysis(
 
 	task.onProgress((p) => {
 		options.onProgress?.(p);
+		// Overall document progress for Figures rail + background-tasks panel:
+		// model prep 0–5%, pages 5–98%, merge 99% (set below), done 100%.
 		const message = "Analyzing layout…";
 		let progress: number | null = knownTotal && knownTotal > 0 ? 0 : null;
 		let page: number | undefined;
 
+		const pageProgress = (pageIndex: number, phase: number) => {
+			if (knownTotal && knownTotal > 0) {
+				return clampProgress(5 + ((pageIndex + phase) / knownTotal) * 93);
+			}
+			return clampProgress(Math.min(95, 5 + (pageIndex + 0.5) * 4));
+		};
+
 		switch (p.stage) {
 			case "downloading-model": {
 				// Host may still be writing the file; plugin loads via agentero-model://.
-				// Keep stable message; only surface numeric progress when known.
+				// Map model download into the first 5% so the bar never jumps to 100%
+				// before page analysis starts.
 				const pct = p.total > 0 ? (p.loaded / p.total) * 100 : 0;
-				progress = clampProgress(pct);
+				progress = clampProgress((pct / 100) * 5);
 				break;
 			}
 			case "creating-session":
-				progress = knownTotal && knownTotal > 0 ? 0 : null;
+				progress = 5;
 				break;
 			case "rendering":
 			case "layout-detection":
@@ -310,13 +320,7 @@ export async function runDocumentLayoutAnalysis(
 				// Keep a stable "Analyzing layout…" message; page progress is
 				// shown via progress bar + page counters in the figures panel.
 				page = p.pageIndex + 1;
-				if (knownTotal && knownTotal > 0) {
-					const phase = pagePhaseWeight(p.stage);
-					progress = clampProgress(((p.pageIndex + phase) / knownTotal) * 100);
-				} else {
-					// No page count yet: soft advance by page index alone.
-					progress = clampProgress(Math.min(95, (p.pageIndex + 0.5) * 4));
-				}
+				progress = pageProgress(p.pageIndex, pagePhaseWeight(p.stage));
 				break;
 			}
 			case "page-complete":
@@ -324,7 +328,7 @@ export async function runDocumentLayoutAnalysis(
 				completedPages = p.completed;
 				page = p.pageIndex + 1;
 				progress =
-					p.total > 0 ? clampProgress((p.completed / p.total) * 100) : null;
+					p.total > 0 ? clampProgress(5 + (p.completed / p.total) * 93) : null;
 				break;
 			default:
 				break;

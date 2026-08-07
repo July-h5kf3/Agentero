@@ -226,20 +226,28 @@ export function updateBackgroundTask(
 	patch: Partial<
 		Pick<BackgroundTask, "title" | "detail" | "status" | "progress" | "error">
 	>,
+	opts?: {
+		/**
+		 * When true, apply `progress` as-is (layout analysis overall %).
+		 * Default clamps with Math.max so out-of-order download events cannot
+		 * move the bar backwards.
+		 */
+		absoluteProgress?: boolean;
+	},
 ): void {
 	const tasks = store().tasks.map((t) =>
 		t.id === id && (t.status !== "cancelled" || patch.status === "cancelled")
 			? {
 					...t,
 					...patch,
-					// Progress events can arrive from different phases. Never let
-					// a late event make the task appear to move backwards.
 					progress:
 						patch.progress === undefined
 							? t.progress
-							: typeof patch.progress === "number" && t.progress != null
-								? Math.max(t.progress, patch.progress)
-								: patch.progress,
+							: opts?.absoluteProgress ||
+									typeof patch.progress !== "number" ||
+									t.progress == null
+								? patch.progress
+								: Math.max(t.progress, patch.progress),
 					updatedAt: Date.now(),
 				}
 			: t,
@@ -456,7 +464,9 @@ export async function enqueueBackgroundTask<T>(
 		const result = await fn({
 			id,
 			signal: controller.signal,
-			setProgress: (n) => updateBackgroundTask(id, { progress: n }),
+			// Absolute: callers (e.g. layout analysis) publish overall document %.
+			setProgress: (n) =>
+				updateBackgroundTask(id, { progress: n }, { absoluteProgress: true }),
 			setDetail: (d) => updateBackgroundTask(id, { detail: d }),
 		});
 		throwIfTaskCancelled(id, controller.signal);
