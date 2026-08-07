@@ -79,6 +79,7 @@ function buildResultFromRawRegions(
 	return buildLayoutDocumentResult(
 		documentId,
 		mergeCaptionsIntoHosts(rawRegions),
+		rawRegions,
 	);
 }
 
@@ -132,7 +133,7 @@ async function buildTextAwareResult(
 				textRuns.runs ?? [],
 				pageSize,
 			);
-			result = buildLayoutDocumentResult(documentId, regions);
+			result = buildLayoutDocumentResult(documentId, regions, raw);
 		} catch {
 			// ignore
 		}

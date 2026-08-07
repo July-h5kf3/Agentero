@@ -1,8 +1,10 @@
 import type { PdfLayoutKind } from "@/lib/pdf/layout/types";
 
 /**
- * PP-DocLayoutV3 labels we map into our kinds.
- * Full map is in `@embedpdf/ai` LAYOUT_LABELS (abstract, text, header, …).
+ * PP-DocLayoutV3 labels → our kinds.
+ * Source: `@embedpdf/ai` LAYOUT_LABELS (class ids 0–24).
+ * Unmapped labels are dropped in `blockToRegion` — keep this complete for
+ * the debug Eye overlay (e.g. abstract was previously discarded).
  */
 const LABEL_TO_KIND: Record<string, PdfLayoutKind> = {
 	image: "image",
@@ -13,9 +15,22 @@ const LABEL_TO_KIND: Record<string, PdfLayoutKind> = {
 	formula_number: "formula_number",
 	figure_title: "figure_title",
 	header: "header",
-	// Body text — kept only as a formula-merge blocker (not listed in Figures).
+	/** Class 0 — paper abstract; debug overlay only. */
+	abstract: "abstract",
+	// Body / secondary text — formula-merge blockers or debug-only.
 	text: "text",
 	aside_text: "text",
+	content: "text",
+	footer: "text",
+	footnote: "text",
+	number: "text",
+	reference: "text",
+	reference_content: "text",
+	seal: "text",
+	vision_footnote: "text",
+	// Titles that are not figure captions.
+	doc_title: "header",
+	paragraph_title: "header",
 };
 
 export function layoutLabelToKind(label: string): PdfLayoutKind | null {
@@ -76,6 +91,44 @@ export function isSidebarLayoutKind(
 		isAlgorithmLayoutKind(kind) ||
 		isFormulaLayoutKind(kind)
 	);
+}
+
+/** i18n key under `viewer` namespace for overlay / UI kind labels. */
+export type LayoutKindI18nKey =
+	| "figures.kindImage"
+	| "figures.kindChart"
+	| "figures.kindTable"
+	| "figures.kindAlgorithm"
+	| "figures.kindFormula"
+	| "figures.kindFormulaNumber"
+	| "figures.kindFigureTitle"
+	| "figures.kindHeader"
+	| "figures.kindAbstract"
+	| "figures.kindText";
+
+export function layoutKindI18nKey(kind: PdfLayoutKind): LayoutKindI18nKey {
+	switch (kind) {
+		case "image":
+			return "figures.kindImage";
+		case "chart":
+			return "figures.kindChart";
+		case "table":
+			return "figures.kindTable";
+		case "algorithm":
+			return "figures.kindAlgorithm";
+		case "formula":
+			return "figures.kindFormula";
+		case "formula_number":
+			return "figures.kindFormulaNumber";
+		case "figure_title":
+			return "figures.kindFigureTitle";
+		case "header":
+			return "figures.kindHeader";
+		case "abstract":
+			return "figures.kindAbstract";
+		case "text":
+			return "figures.kindText";
+	}
 }
 
 /**

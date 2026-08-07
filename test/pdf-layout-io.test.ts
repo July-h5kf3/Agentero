@@ -14,7 +14,7 @@ describe("layout sidecar", () => {
 
 	it("parses raw text-enriched layout regions", () => {
 		const sidecar = parseLayoutSidecar({
-			schemaVersion: 1,
+			schemaVersion: 2,
 			source: {
 				mode: "embedpdf-layout",
 				generatedAt: "2026-08-07T00:00:00Z",
@@ -50,9 +50,17 @@ describe("layout sidecar", () => {
 		).toBeNull();
 		expect(
 			parseLayoutSidecar({
-				schemaVersion: 1,
+				schemaVersion: 2,
 				source: { mode: "embedpdf-layout", generatedAt: "now" },
 				regions: [{ id: "x", kind: "unknown" }],
+			}),
+		).toBeNull();
+		// v1 caches predate abstract + full label map — force re-analysis.
+		expect(
+			parseLayoutSidecar({
+				schemaVersion: 1,
+				source: { mode: "embedpdf-layout", generatedAt: "now" },
+				regions: [],
 			}),
 		).toBeNull();
 	});

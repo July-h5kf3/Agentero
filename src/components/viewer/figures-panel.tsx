@@ -247,6 +247,13 @@ export function FiguresPanel({
 			(result?.regions ?? []).filter((r) => isSidebarLayoutKind(r.kind)).length,
 		[result],
 	);
+	/** Eye toggle needs any stored detections (prefer pre-merge raw). */
+	const hasOverlaySource = useMemo(
+		() =>
+			(result?.rawRegions?.length ?? 0) > 0 ||
+			(result?.regions?.length ?? 0) > 0,
+		[result],
+	);
 
 	// Lazy thumbnails — sequential-ish batches to avoid PDFium thrash.
 	useEffect(() => {
@@ -372,7 +379,7 @@ export function FiguresPanel({
 					documentId && viewerReady ? (
 						<TooltipProvider delayDuration={200}>
 							<div className="flex items-center gap-0.5">
-								{hasRaw ? (
+								{hasOverlaySource ? (
 									<Tooltip>
 										<TooltipTrigger asChild>
 											<Button

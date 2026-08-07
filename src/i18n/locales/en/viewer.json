@@ -166,13 +166,19 @@
 		"kindTable": "Table",
 		"kindAlgorithm": "Algorithm",
 		"kindFormula": "Formula",
+		"kindFormulaNumber": "Eq. number",
+		"kindFigureTitle": "Caption",
+		"kindHeader": "Header",
+		"kindAbstract": "Abstract",
+		"kindText": "Text",
+		"overlayLabel": "{{kind}} {{pct}}%",
 		"page": "p.{{page}}",
 		"thumbPending": "Loading…",
 		"confidence": "{{pct}}%",
 		"confidenceHint": "Model confidence (0–100%). Higher means the detector is more sure this region is a figure, table, algorithm, or formula. Overlapping duplicates are removed automatically.",
-		"toggleOverlay": "Toggle layout boxes on PDF",
-		"showOverlay": "Show layout boxes on PDF",
-		"hideOverlay": "Hide layout boxes on PDF"
+		"toggleOverlay": "Toggle raw layout detections ≥30% on PDF (debug)",
+		"showOverlay": "Show raw layout detections ≥30% on PDF (debug)",
+		"hideOverlay": "Hide raw layout detections on PDF"
 	},
 	"selection": {
 		"menuLabel": "Selection actions",

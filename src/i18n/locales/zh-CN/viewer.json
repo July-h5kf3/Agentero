@@ -166,13 +166,19 @@
 		"kindTable": "表格",
 		"kindAlgorithm": "算法",
 		"kindFormula": "公式",
+		"kindFormulaNumber": "公式编号",
+		"kindFigureTitle": "图题/表题",
+		"kindHeader": "页眉/标题",
+		"kindAbstract": "摘要",
+		"kindText": "正文",
+		"overlayLabel": "{{kind}} {{pct}}%",
 		"page": "第 {{page}} 页",
 		"thumbPending": "加载中…",
 		"confidence": "{{pct}}%",
 		"confidenceHint": "模型置信度（0–100%）。越高表示检测器越确定这是插图、表格、算法或公式。重叠重复框会自动去重。",
-		"toggleOverlay": "切换 PDF 上的版面框",
-		"showOverlay": "在 PDF 上显示版面框",
-		"hideOverlay": "隐藏 PDF 上的版面框"
+		"toggleOverlay": "切换 PDF 上置信度≥30% 的原始检测框（调试）",
+		"showOverlay": "在 PDF 上显示置信度≥30% 的原始检测框（调试）",
+		"hideOverlay": "隐藏 PDF 上的原始检测框"
 	},
 	"selection": {
 		"menuLabel": "选区操作",

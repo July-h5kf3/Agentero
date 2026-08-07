@@ -33,7 +33,12 @@ PP-DocLayoutV3  每页: render → detect → map to PDF points
 ③ 侧栏展示: isSidebarLayoutKind + dedupeLayoutRegions(minScore 默认 0.3)
         │  分区顺序：插图 → 表 → 算法 → **公式（最底）**
         ▼
-右栏 Figures + 聚焦高亮（store.focused）+ 可选 PDF bbox 叠加层
+右栏 Figures + 聚焦高亮（store.focused）+ 可选 PDF bbox 叠加层（Eye，调试）
+        │  叠加层画 **rawRegions**（合并前、全 kind、无 NMS；score ≥ 0.3）
+        │  每框标注分类 + 置信度（如「图片 87%」「摘要 91%」）
+        │  标签映射须覆盖 PP-DocLayoutV3 全量（含 abstract）；未映射 label 会在 normalize 被丢弃
+        │  侧栏 / hover 仍用 **regions**（post-merge；不含 abstract）
+        │  不用 EmbedPDF LayoutAnalysisLayer 画框：sidecar 缓存命中时插件无 page layout
         │
 ④ PDF 页 hover dwell（默认 600ms）→ 视觉批注卡
         │  hit 层用 **post-merge** 区域（与侧栏同源，非插件 raw 框）

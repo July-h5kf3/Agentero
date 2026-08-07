@@ -1,7 +1,8 @@
 import type { PdfLayoutKind, PdfLayoutRegion } from "@/lib/pdf/layout/types";
 import { joinVaultPath, readVaultFile, writeVaultFile } from "@/lib/vault";
 
-export const LAYOUT_SIDECAR_SCHEMA_VERSION = 1;
+/** Bump when label mapping / stored region semantics change (invalidates cache). */
+export const LAYOUT_SIDECAR_SCHEMA_VERSION = 2;
 export const LAYOUT_SIDECAR_FILE = "layout.json";
 
 export type PdfLayoutSidecar = {
@@ -23,6 +24,7 @@ const LAYOUT_KINDS = new Set<PdfLayoutKind>([
 	"chart",
 	"figure_title",
 	"header",
+	"abstract",
 	"text",
 ]);
 

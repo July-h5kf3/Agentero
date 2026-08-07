@@ -221,7 +221,9 @@ import {
 	layoutKindBorder,
 	layoutKindFill,
 	layoutKindHex,
+	layoutKindI18nKey,
 	type PdfLayoutRegion,
+	rawLayoutRegionsOnPage,
 	runDocumentLayoutAnalysis,
 	setFocusedLayoutRegion,
 	setLayoutOverlayVisible,
@@ -931,9 +933,12 @@ function PdfViewerInner({
 	const layoutCapRef = useRef(layoutCap);
 	layoutCapRef.current = layoutCap;
 
+	// Keep EmbedPDF's raw LayoutAnalysisLayer off. Sidecar cache hits never
+	// repopulate plugin page layouts, so that layer would stay empty; we paint
+	// post-merge store regions instead (same set as Figures / hover targets).
 	useEffect(() => {
-		layoutAnalysisProvides?.setLayoutOverlayVisible(layoutOverlayVisible);
-	}, [layoutAnalysisProvides, layoutOverlayVisible]);
+		layoutAnalysisProvides?.setLayoutOverlayVisible(false);
+	}, [layoutAnalysisProvides]);
 	const engineRef = useRef(engine);
 	engineRef.current = engine;
 	const docCapRef = useRef(docCap);
@@ -977,6 +982,12 @@ function PdfViewerInner({
 	const layoutDocRegions = useStore(
 		layoutAnalysisStore,
 		(s) => s.byDocument[docId]?.regions ?? null,
+	);
+	/** Pre-merge detections for the debug Eye overlay (all model boxes). */
+	const layoutRawRegions = useStore(
+		layoutAnalysisStore,
+		(s) =>
+			s.byDocument[docId]?.rawRegions ?? s.byDocument[docId]?.regions ?? null,
 	);
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
@@ -3411,7 +3422,10 @@ function PdfViewerInner({
 						pageIndex={pageIndex}
 						style={{ position: "absolute", inset: 0 }}
 					/>
-					{/* Layout bbox overlay (image / table / formula). Toggled from toolbar. */}
+					{/*
+					 * EmbedPDF raw bbox layer — kept mounted for plugin state, but
+					 * visibility is forced off (see effect). Store-backed boxes below.
+					 */}
 					<LayoutAnalysisLayer
 						documentId={docId}
 						pageIndex={pageIndex}
@@ -3444,6 +3458,46 @@ function PdfViewerInner({
 								handleVisualRegionSelect(pageNumber, region)
 							}
 						/>
+						{/*
+						 * Debug Eye overlay: pre-merge detections (all kinds, no NMS),
+						 * score ≥ LAYOUT_SIDEBAR_MIN_SCORE (30%). Label = kind + conf.
+						 */}
+						{layoutOverlayVisible && layoutRawRegions
+							? rawLayoutRegionsOnPage(layoutRawRegions, pageIndex).map(
+									(region) => {
+										const pct = Math.round(region.score * 100);
+										const kindLabel = t(layoutKindI18nKey(region.kind));
+										const label = t("figures.overlayLabel", {
+											kind: kindLabel,
+											pct,
+										});
+										return (
+											<div
+												key={`layout-box-${region.id}`}
+												className="pointer-events-none absolute z-[1] rounded-sm border-[1.5px]"
+												style={{
+													left: `${region.bbox.x * 100}%`,
+													top: `${region.bbox.y * 100}%`,
+													width: `${region.bbox.w * 100}%`,
+													height: `${region.bbox.h * 100}%`,
+													borderColor: layoutKindBorder(region.kind),
+													backgroundColor: layoutKindFill(region.kind),
+												}}
+												aria-hidden="true"
+											>
+												<span
+													className="absolute top-0 left-0 max-w-full truncate rounded-br-sm px-1 py-px font-medium text-[10px] text-white leading-4"
+													style={{
+														backgroundColor: layoutKindHex(region.kind),
+													}}
+												>
+													{label}
+												</span>
+											</div>
+										);
+									},
+								)
+							: null}
 						{/*
 						 * Hover hit targets for post-merge figure/table/algorithm/formula.
 						 * Largest first so smaller boxes stack on top and win pointer hits.
@@ -3605,6 +3659,8 @@ function PdfViewerInner({
 			visualCropPending,
 			visualDraftEditor,
 			layoutDocRegions,
+			layoutRawRegions,
+			layoutOverlayVisible,
 			handleVisualRegionSelect,
 			scheduleLayoutHoverOpen,
 			handleLayoutHoverLeave,

@@ -3,7 +3,8 @@ import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
 /**
  * Layout kinds we may store from PP-DocLayoutV3.
  * Sidebar surfaces image/chart/table/algorithm/formula (numbered only);
- * figure_title/header/formula_number are intermediate and merged away.
+ * figure_title/header/formula_number/abstract/text are intermediate or
+ * debug-only and never (or not primarily) listed as figure cards.
  */
 export type PdfLayoutKind =
 	| "image"
@@ -14,6 +15,8 @@ export type PdfLayoutKind =
 	| "chart"
 	| "figure_title"
 	| "header"
+	/** Paper abstract block — debug / full overlay only, never sidebar. */
+	| "abstract"
 	/** Paragraph / body text — blocker for formula merge, never sidebar. */
 	| "text";
 
@@ -65,7 +68,16 @@ export type PdfLayoutDocumentResult = {
 	documentId: string;
 	/** Wall time of last successful analysis. */
 	updatedAt: number;
+	/**
+	 * Post-merge regions for the figures rail, hover targets, and product UX
+	 * (caption/formula hosts after mergeCaptionsIntoHosts).
+	 */
 	regions: PdfLayoutRegion[];
+	/**
+	 * Pre-merge model detections (text-enriched when available). Used by the
+	 * Figures Eye overlay for debug — every raw bbox, no sidebar filter / NMS.
+	 */
+	rawRegions: PdfLayoutRegion[];
 	/** Per-kind counts for quick UI summary (post caption-merge). */
 	counts: Record<PdfLayoutKind, number>;
 };

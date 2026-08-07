@@ -29,6 +29,26 @@ export function hoverableLayoutRegionsOnPage(
 		.sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox));
 }
 
+/**
+ * Debug overlay: pre-merge detections on a page (all kinds, no NMS).
+ * Drops boxes below minScore (default 0.3). Largest first so smaller paint on top.
+ */
+export function rawLayoutRegionsOnPage(
+	regions: readonly PdfLayoutRegion[],
+	pageIndex: number,
+	minScore: number = LAYOUT_SIDEBAR_MIN_SCORE,
+): PdfLayoutRegion[] {
+	return regions
+		.filter(
+			(r) =>
+				r.pageIndex === pageIndex &&
+				r.bbox.w > 0 &&
+				r.bbox.h > 0 &&
+				r.score >= minScore,
+		)
+		.sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox));
+}
+
 export function pointInBbox(
 	x: number,
 	y: number,

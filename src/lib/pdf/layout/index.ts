@@ -25,6 +25,7 @@ export {
 	hoverableLayoutRegionsOnPage,
 	pickLayoutRegionAtPoint,
 	pointInBbox,
+	rawLayoutRegionsOnPage,
 } from "@/lib/pdf/layout/hit-test";
 export {
 	LAYOUT_SIDECAR_FILE,
@@ -46,6 +47,7 @@ export {
 	isTargetLayoutLabel,
 	isTextLayoutKind,
 	layoutDedupeGroup,
+	layoutKindI18nKey,
 	layoutLabelToKind,
 } from "@/lib/pdf/layout/labels";
 export {
