@@ -275,13 +275,21 @@
 			"vault": "Vault 结构",
 			"catalog": "Catalog 结构",
 			"wikilinks": "双链语义",
-			"aliases": "论文别名"
+			"aliases": "论文别名",
+			"visualMarks": "视觉批注"
 		},
 		"sectionHints": {
 			"vault": "检查顶层 papers/、notes/、plans/、.agentero/ 目录是否齐全。",
 			"catalog": "检查 .agentero/catalog.sqlite 是否存在，以及 schema 是否与当前应用一致。",
 			"wikilinks": "检查笔记中的本地双链是否可解析（缺失、歧义、无效标题锚点）。",
-			"aliases": "检查论文 NOTES.md 是否具备至少两个可区分的 frontmatter aliases。"
+			"aliases": "检查论文 NOTES.md 是否具备至少两个可区分的 frontmatter aliases。",
+			"visualMarks": "将旧版 agent-trace 批注升级为嵌套 visual v2（纯批注也可单独保存）。"
+		},
+		"visualMarks": {
+			"select": "选择 {{path}}",
+			"apply": "升级 {{count}} 项",
+			"applying": "升级中…",
+			"success": "已升级 {{count}} 个视觉批注文件。"
 		},
 		"issueCount": "{{count}} 个问题",
 		"repair": {

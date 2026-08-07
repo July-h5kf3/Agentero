@@ -1,8 +1,13 @@
 //! Read-only Vault diagnostics and conservative paper-alias / wikilink repair.
 
 pub mod commands;
+pub mod visual_marks_repair;
 pub mod wikilink_repair;
 
+pub use visual_marks_repair::{
+    apply_visual_mark_repairs, scan_visual_marks, VisualMarkCandidate, VisualMarkRepairChange,
+    VisualMarkRepairResult, VisualMarksDoctorSection,
+};
 pub use wikilink_repair::{
     apply_wikilink_repairs, plan_wikilink_repairs, WikilinkRepairChange, WikilinkRepairPlan,
     WikilinkRepairResidual, WikilinkRepairResult, WikilinkRepairSuggestion,
@@ -178,6 +183,8 @@ pub struct DoctorReport {
     pub catalog: CatalogDoctorSection,
     pub wikilinks: WikiCheckResult,
     pub aliases: AliasDoctorSection,
+    #[serde(default)]
+    pub visual_marks: VisualMarksDoctorSection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -589,6 +596,7 @@ pub fn diagnose(vault: &Path) -> Result<DoctorReport, AppError> {
             },
             wikilinks: empty_wikilinks(),
             aliases: AliasDoctorSection::default(),
+            visual_marks: VisualMarksDoctorSection::default(),
         });
     }
 
@@ -601,7 +609,8 @@ pub fn diagnose(vault: &Path) -> Result<DoctorReport, AppError> {
     report.ok = report.vault.ok
         && report.catalog.ok
         && report.wikilinks.issues.is_empty()
-        && report.aliases.ok;
+        && report.aliases.ok
+        && report.visual_marks.ok;
     Ok(report)
 }
 
@@ -670,13 +679,19 @@ pub fn diagnose_with_index(vault: &Path, index: &WikiIndex) -> Result<DoctorRepo
             ..AliasDoctorSection::default()
         }
     };
-    let ok = vault_report.ok && catalog_report.ok && wikilinks.issues.is_empty() && aliases.ok;
+    let visual_marks = scan_visual_marks(vault);
+    let ok = vault_report.ok
+        && catalog_report.ok
+        && wikilinks.issues.is_empty()
+        && aliases.ok
+        && visual_marks.ok;
     Ok(DoctorReport {
         ok,
         vault: vault_report,
         catalog: catalog_report,
         wikilinks,
         aliases,
+        visual_marks,
     })
 }
 

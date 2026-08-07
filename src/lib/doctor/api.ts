@@ -36,6 +36,14 @@ export type WikiCheckIssue = {
 	context?: string;
 };
 
+export type VisualMarkCandidate = {
+	path: string;
+	markId: string;
+	reason: string;
+	fixable: boolean;
+	selectedByDefault: boolean;
+};
+
 export type DoctorReport = {
 	ok: boolean;
 	vault: DoctorSection;
@@ -60,6 +68,12 @@ export type DoctorReport = {
 		candidates: AliasRepairCandidate[];
 		/** Incomplete NOTES paths the user chose to ignore (persisted in vault). */
 		ignoredPaths: string[];
+		issues: DoctorIssue[];
+	};
+	visualMarks?: {
+		ok: boolean;
+		checkedFiles: number;
+		candidates: VisualMarkCandidate[];
 		issues: DoctorIssue[];
 	};
 };
@@ -190,4 +204,17 @@ export function doctorSetDirtyPaths(
 		{ args: { vaultPath, dirtyPaths } },
 		{ allowVoid: true },
 	);
+}
+
+export type VisualMarkRepairChange = {
+	path: string;
+};
+
+export function doctorApplyVisualMarks(
+	vaultPath: string,
+	changes: VisualMarkRepairChange[],
+): Promise<{ updatedPaths: string[] }> {
+	return invokeApi<{ updatedPaths: string[] }>("doctor_apply_visual_marks", {
+		args: { vaultPath, changes },
+	});
 }

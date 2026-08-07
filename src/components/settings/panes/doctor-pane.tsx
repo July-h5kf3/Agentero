@@ -44,10 +44,12 @@ import {
 	type DoctorIssue,
 	type DoctorReport,
 	doctorApplyAliases,
+	doctorApplyVisualMarks,
 	doctorApplyWikilinks,
 	doctorCheck,
 	doctorIgnoreAliases,
 	doctorPlanWikilinks,
+	type VisualMarkCandidate,
 	type WikiCheckIssue,
 	type WikilinkRepairResidual,
 	type WikilinkRepairSuggestion,
@@ -57,6 +59,7 @@ import { closeSettingsWindow } from "@/lib/shell/settings-window";
 
 type CandidateDraft = AliasRepairCandidate & { selected: boolean };
 type WikilinkDraft = WikilinkRepairSuggestion & { selected: boolean };
+type VisualMarkDraft = VisualMarkCandidate & { selected: boolean };
 
 /** Section title with status on the right; issue list below when present. */
 function DoctorSection({
@@ -428,6 +431,8 @@ export function DoctorPane({
 		detail: string;
 	} | null>(null);
 	const [wikiReviewMode, setWikiReviewMode] = useState(false);
+	const [visualDrafts, setVisualDrafts] = useState<VisualMarkDraft[]>([]);
+	const [visualApplying, setVisualApplying] = useState(false);
 
 	const refresh = useCallback(async () => {
 		if (!vaultPath || hostContext.kind === "remote") return;
@@ -437,6 +442,12 @@ export function DoctorPane({
 			setReport(next);
 			setDrafts(
 				next.aliases.candidates.map((candidate) => ({
+					...candidate,
+					selected: candidate.selectedByDefault,
+				})),
+			);
+			setVisualDrafts(
+				(next.visualMarks?.candidates ?? []).map((candidate) => ({
 					...candidate,
 					selected: candidate.selectedByDefault,
 				})),
@@ -463,6 +474,10 @@ export function DoctorPane({
 	const selectedWiki = useMemo(
 		() => wikiDrafts.filter((draft) => draft.selected),
 		[wikiDrafts],
+	);
+	const selectedVisual = useMemo(
+		() => visualDrafts.filter((draft) => draft.fixable && draft.selected),
+		[visualDrafts],
 	);
 
 	const patchDraft = (
@@ -526,6 +541,27 @@ export function DoctorPane({
 			await refresh();
 		} catch (error) {
 			notifyError(error instanceof Error ? error.message : String(error));
+		}
+	};
+
+	const applyVisualMarks = async () => {
+		if (!vaultPath || selectedVisual.length === 0) return;
+		setVisualApplying(true);
+		try {
+			const result = await doctorApplyVisualMarks(
+				vaultPath,
+				selectedVisual.map((draft) => ({ path: draft.path })),
+			);
+			notifySuccess(
+				t("doctor.visualMarks.success", {
+					count: result.updatedPaths.length,
+				}),
+			);
+			await refresh();
+		} catch (error) {
+			notifyError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setVisualApplying(false);
 		}
 	};
 
@@ -1075,6 +1111,69 @@ export function DoctorPane({
 						) : null}
 					</>
 				) : null}
+			</DoctorSection>
+
+			<DoctorSection
+				title={t("doctor.sections.visualMarks")}
+				description={t("doctor.sectionHints.visualMarks")}
+				ok={report?.visualMarks?.ok ?? true}
+				issueCount={report?.visualMarks?.issues.length ?? 0}
+				scrollable
+				showDivider={false}
+				action={
+					selectedVisual.length > 0 ? (
+						<Button
+							type="button"
+							size="sm"
+							className="h-7 px-2 text-xs"
+							disabled={visualApplying}
+							onClick={() => void applyVisualMarks()}
+						>
+							{visualApplying
+								? t("doctor.visualMarks.applying")
+								: t("doctor.visualMarks.apply", {
+										count: selectedVisual.length,
+									})}
+						</Button>
+					) : undefined
+				}
+			>
+				{visualDrafts.length > 0
+					? visualDrafts.map((draft) => (
+							<div
+								key={draft.path}
+								className="flex items-start gap-2 border-b px-3.5 py-2.5 last:border-b-0"
+							>
+								<Checkbox
+									checked={draft.selected}
+									disabled={!draft.fixable}
+									aria-label={t("doctor.visualMarks.select", {
+										path: draft.path,
+									})}
+									onCheckedChange={(checked) =>
+										setVisualDrafts((current) =>
+											current.map((item) =>
+												item.path === draft.path
+													? { ...item, selected: checked === true }
+													: item,
+											),
+										)
+									}
+								/>
+								<div className="min-w-0 flex-1">
+									<p className="truncate text-[13px]">
+										{draft.markId || draft.path}
+									</p>
+									<p className="truncate text-muted-foreground text-xs">
+										{draft.path}
+									</p>
+									<p className="mt-0.5 text-muted-foreground text-xs">
+										{draft.reason}
+									</p>
+								</div>
+							</div>
+						))
+					: null}
 			</DoctorSection>
 
 			<Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>

@@ -5,7 +5,8 @@ use crate::output::{to_value, OutputFormat};
 use crate::prompt;
 use crate::resolve::{resolve_vault, GlobalOpts};
 use agentero_lib::features::doctor::{
-    apply_alias_repairs, diagnose, AliasRepairCandidate, AliasRepairChange, DoctorReport,
+    apply_alias_repairs, apply_visual_mark_repairs, diagnose, AliasRepairCandidate,
+    AliasRepairChange, DoctorReport, VisualMarkRepairChange,
 };
 use clap::Subcommand;
 use serde_json::{json, Value};
@@ -23,6 +24,9 @@ pub enum DoctorCmd {
 pub enum DoctorFixCmd {
     /// Add missing paper-note aliases while preserving existing aliases and YAML.
     Aliases,
+    /// Rewrite legacy visual marks (`agent-trace` v1) to nested `visual` v2.
+    #[command(name = "visual-marks")]
+    VisualMarks,
 }
 
 pub fn run(cmd: Option<DoctorCmd>, globals: &GlobalOpts) -> Result<Value, CliError> {
@@ -31,6 +35,9 @@ pub fn run(cmd: Option<DoctorCmd>, globals: &GlobalOpts) -> Result<Value, CliErr
         Some(DoctorCmd::Fix {
             cmd: DoctorFixCmd::Aliases,
         }) => fix_aliases(globals),
+        Some(DoctorCmd::Fix {
+            cmd: DoctorFixCmd::VisualMarks,
+        }) => fix_visual_marks(globals),
     }
 }
 
@@ -145,6 +152,69 @@ fn edit_changes(
     Ok(changes)
 }
 
+fn fix_visual_marks(globals: &GlobalOpts) -> Result<Value, CliError> {
+    let vault = resolve_vault(globals)?;
+    let report = diagnose(&vault).map_err(CliError::from)?;
+    let fixable = report
+        .visual_marks
+        .candidates
+        .iter()
+        .filter(|candidate| candidate.fixable)
+        .collect::<Vec<_>>();
+    if fixable.is_empty() {
+        let mut value = report_value(&report)?;
+        if let Some(object) = value.as_object_mut() {
+            object.insert("updatedPaths".into(), json!([]));
+            object.insert(
+                "lines".into(),
+                json!(["no legacy visual marks to migrate"]),
+            );
+        }
+        return Ok(value);
+    }
+
+    if matches!(globals.format, OutputFormat::Json) && !globals.yes {
+        return Err(CliError::with_details(
+            "needs_confirmation",
+            "visual mark migration requires confirmation (pass --yes / -y)",
+            json!({ "candidates": fixable }),
+            ExitCode::NeedsConfirmation,
+        ));
+    }
+
+    if !prompt::confirm(
+        globals,
+        &format!(
+            "Migrate {} legacy visual mark file(s) to kind visual v2?",
+            fixable.len()
+        ),
+        false,
+    )? {
+        return Err(CliError::needs_confirmation(
+            "visual mark migration cancelled",
+        ));
+    }
+
+    let changes = fixable
+        .into_iter()
+        .map(|c| VisualMarkRepairChange {
+            path: c.path.clone(),
+        })
+        .collect::<Vec<_>>();
+    let result = apply_visual_mark_repairs(&vault, &changes, &[]).map_err(CliError::from)?;
+    let mut value = to_value(&result)?;
+    if let Some(object) = value.as_object_mut() {
+        object.insert(
+            "lines".into(),
+            json!([format!(
+                "migrated {} visual mark file(s)",
+                result.updated_paths.len()
+            )]),
+        );
+    }
+    Ok(value)
+}
+
 fn report_value(report: &DoctorReport) -> Result<Value, CliError> {
     let mut value = to_value(report)?;
     if let Some(object) = value.as_object_mut() {
@@ -163,6 +233,11 @@ fn report_value(report: &DoctorReport) -> Result<Value, CliError> {
                     report.aliases.complete_papers,
                     report.aliases.checked_papers,
                     report.aliases.candidates.len()
+                ),
+                format!(
+                    "visual marks: {} file(s) checked, {} legacy candidate(s)",
+                    report.visual_marks.checked_files,
+                    report.visual_marks.candidates.len()
                 ),
             ]),
         );
