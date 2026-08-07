@@ -1,4 +1,5 @@
 import {
+	ArrowUpCircle,
 	Check,
 	Loader2,
 	Plus,
@@ -22,6 +23,7 @@ import {
 	StatusBadge,
 	showInstallAcp,
 	showInstallAgent,
+	showUpdateAgent,
 } from "@/components/settings/panes/agent-catalog";
 import {
 	PageTitle,
@@ -47,6 +49,7 @@ import {
 	removeAgent,
 	runToolLifecycle,
 	scanCatalog,
+	type ToolLifecycleAction,
 	upsertAgent,
 } from "@/lib/agent";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
@@ -257,13 +260,21 @@ export function AgentPane({
 		}
 	};
 
-	/** Silent install: Host scopes Agent vs ACP from PATH (no free-form shell). */
-	const onInstall = async (entry: CatalogEntry) => {
+	/** Silent install/update: Host scopes Agent vs ACP from PATH (no free-form shell). */
+	const onToolLifecycle = async (
+		entry: CatalogEntry,
+		action: ToolLifecycleAction,
+	) => {
 		if (!isTauri()) return;
 		setInstallingId(entry.templateId);
 		try {
-			await runToolLifecycle(entry.templateId, "install");
-			notifySuccess(t("agent.installSuccess", { name: entry.name }));
+			await runToolLifecycle(entry.templateId, action);
+			notifySuccess(
+				t(
+					action === "update" ? "agent.updateSuccess" : "agent.installSuccess",
+					{ name: entry.name },
+				),
+			);
 			const scan = await scanOnce();
 			if (scan) await probeInstalled(scan, true);
 		} catch (e) {
@@ -418,7 +429,10 @@ export function AgentPane({
 						entry.acpCommandAvailable || entry.acpStatus === "ready";
 					const installAgent = showInstallAgent(entry);
 					const installAcp = showInstallAcp(entry);
-					const hasInstallAction = installAgent || installAcp;
+					const updateAgent = showUpdateAgent(entry);
+					// Install/ACP-only gaps gate “Use default”; Update can sit beside it.
+					const needsInstall = installAgent || installAcp;
+					const hasLifecycleAction = needsInstall || updateAgent;
 					const notInstalled = !entry.binaryAvailable;
 					const rowInstalling = installingId === entry.templateId;
 					// Mid-probe or host-cleared not-probed while a batch is running.
@@ -438,9 +452,11 @@ export function AgentPane({
 										"w-24 shrink-0 truncate font-medium text-[13px]",
 										// Dim label only — never the Install button (looks disabled).
 										notInstalled &&
-											!hasInstallAction &&
+											!hasLifecycleAction &&
 											"text-muted-foreground opacity-50",
-										notInstalled && hasInstallAction && "text-muted-foreground",
+										notInstalled &&
+											hasLifecycleAction &&
+											"text-muted-foreground",
 									)}
 								>
 									{entry.name}
@@ -490,7 +506,7 @@ export function AgentPane({
 							<div
 								className={cn(
 									"flex h-7 shrink-0 items-center justify-center gap-1",
-									hasInstallAction ? "min-w-0" : "w-20",
+									hasLifecycleAction ? "min-w-0" : "w-20",
 								)}
 							>
 								{installAgent ? (
@@ -506,7 +522,7 @@ export function AgentPane({
 										// Do not gate on global `busy` (catalog scan/ACP probe of
 										// other agents) — that left Install looking dead for minutes.
 										disabled={rowInstalling || !isTauri()}
-										onClick={() => void onInstall(entry)}
+										onClick={() => void onToolLifecycle(entry, "install")}
 									>
 										{rowInstalling ? (
 											<Loader2 className="size-3 animate-spin" />
@@ -527,7 +543,7 @@ export function AgentPane({
 										})}
 										title={t("agent.installAdapterTitle")}
 										disabled={rowInstalling || !isTauri()}
-										onClick={() => void onInstall(entry)}
+										onClick={() => void onToolLifecycle(entry, "install")}
 									>
 										{rowInstalling ? (
 											<Loader2 className="size-3 animate-spin" />
@@ -535,6 +551,27 @@ export function AgentPane({
 											<Terminal className="size-3" />
 										)}
 										{t("agent.installAdapter")}
+									</Button>
+								) : null}
+								{updateAgent ? (
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-7 gap-1 px-2 text-xs"
+										aria-label={t("agent.updateAgentAria", {
+											name: entry.name,
+										})}
+										title={t("agent.updateAgentTitle")}
+										disabled={rowInstalling || !isTauri()}
+										onClick={() => void onToolLifecycle(entry, "update")}
+									>
+										{rowInstalling ? (
+											<Loader2 className="size-3 animate-spin" />
+										) : (
+											<ArrowUpCircle className="size-3" />
+										)}
+										{t("agent.updateAgent")}
 									</Button>
 								) : null}
 								{entry.isDefault ? (
@@ -546,7 +583,7 @@ export function AgentPane({
 									>
 										<Check className="size-4" aria-hidden />
 									</span>
-								) : canUse && !hasInstallAction ? (
+								) : canUse && !needsInstall ? (
 									<Button
 										type="button"
 										variant="ghost"

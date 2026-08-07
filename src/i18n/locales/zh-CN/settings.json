@@ -147,6 +147,10 @@
 		"installAdapterAria": "安装 {{name}} 的 ACP 适配器",
 		"installAdapterTitle": "后台安装 ACP 适配器",
 		"installSuccess": "已安装 {{name}}",
+		"updateAgent": "升级",
+		"updateAgentAria": "升级 {{name}} Agent CLI",
+		"updateAgentTitle": "后台升级 Agent CLI",
+		"updateSuccess": "已升级 {{name}}",
 		"badges": {
 			"default": "默认",
 			"installed": "已安装",

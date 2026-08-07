@@ -81,6 +81,11 @@ export function showInstallAcp(entry: CatalogEntry): boolean {
 	return Boolean(entry.offerInstall || entry.canInstall);
 }
 
+/** Host CLI already on PATH — silent upgrade via `runToolLifecycle(..., "update")`. */
+export function showUpdateAgent(entry: CatalogEntry): boolean {
+	return Boolean(entry.canInstall) && entry.binaryAvailable;
+}
+
 export function patchCatalogProbe(
 	scan: CatalogScanResponse,
 	templateId: string,
