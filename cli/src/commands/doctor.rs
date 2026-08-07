@@ -165,10 +165,7 @@ fn fix_visual_marks(globals: &GlobalOpts) -> Result<Value, CliError> {
         let mut value = report_value(&report)?;
         if let Some(object) = value.as_object_mut() {
             object.insert("updatedPaths".into(), json!([]));
-            object.insert(
-                "lines".into(),
-                json!(["no legacy visual marks to migrate"]),
-            );
+            object.insert("lines".into(), json!(["no legacy visual marks to migrate"]));
         }
         return Ok(value);
     }
