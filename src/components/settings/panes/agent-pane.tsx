@@ -28,6 +28,7 @@ import {
 import {
 	PageTitle,
 	SettingsGroup,
+	SettingsRow,
 } from "@/components/settings/settings-layout";
 import type { SettingsHostContext } from "@/components/settings/types";
 import { useProbingKeys } from "@/components/settings/use-probing-keys";
@@ -49,6 +50,7 @@ import {
 	removeAgent,
 	runToolLifecycle,
 	scanCatalog,
+	setAgentUserAgent,
 	type ToolLifecycleAction,
 	upsertAgent,
 } from "@/lib/agent";
@@ -78,6 +80,9 @@ export function AgentPane({
 	const [formName, setFormName] = useState(() => t("agent.form.defaultName"));
 	const [formCommand, setFormCommand] = useState("");
 	const [formArgs, setFormArgs] = useState("");
+	/** Draft for optional ACP User-Agent (Codex / mid-station affinity). */
+	const [userAgentDraft, setUserAgentDraft] = useState("");
+	const [userAgentProviderDraft, setUserAgentProviderDraft] = useState("");
 	const { probingKeys, setProbingKeys, clearProbingKey, clearAllProbingKeys } =
 		useProbingKeys();
 	const autoProbedRef = useRef(false);
@@ -108,12 +113,37 @@ export function AgentPane({
 			try {
 				const scan = await scanCatalog();
 				setCatalog(scan);
+				setUserAgentDraft(scan.userAgent ?? "");
+				setUserAgentProviderDraft(scan.userAgentProviderIds ?? "");
 				return scan;
 			} catch (e) {
 				notifyError(e instanceof Error ? e.message : String(e));
 				return null;
 			}
 		}, [t]);
+
+	const commitUserAgent = useCallback(async () => {
+		if (!isTauri()) return;
+		try {
+			const next = await setAgentUserAgent(
+				userAgentDraft.trim(),
+				userAgentProviderDraft.trim(),
+			);
+			setUserAgentDraft(next.userAgent);
+			setUserAgentProviderDraft(next.userAgentProviderIds);
+			setCatalog((prev) =>
+				prev
+					? {
+							...prev,
+							userAgent: next.userAgent,
+							userAgentProviderIds: next.userAgentProviderIds,
+						}
+					: prev,
+			);
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : String(e));
+		}
+	}, [userAgentDraft, userAgentProviderDraft]);
 
 	/**
 	 * Parallel ACP probe. Soft open skips already-ready rows; force re-probes all
@@ -334,6 +364,51 @@ export function AgentPane({
 			<PageTitle title={t("agent.title")} />
 			<SettingsGroup>
 				<AgentCommonRows settings={settings} patch={patch} />
+				{/* User-Agent for Codex / mid-stations that require a Codex-like client (#207). */}
+				<SettingsRow
+					label={t("agent.userAgent.label")}
+					description={t("agent.userAgent.description")}
+					htmlFor="agent-user-agent"
+				>
+					<Input
+						id="agent-user-agent"
+						value={userAgentDraft}
+						onChange={(e) => setUserAgentDraft(e.target.value)}
+						onBlur={() => void commitUserAgent()}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.currentTarget.blur();
+							}
+						}}
+						placeholder={t("agent.userAgent.placeholder")}
+						spellCheck={false}
+						autoComplete="off"
+						disabled={!isTauri()}
+						className="h-8 w-56 text-xs"
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("agent.userAgent.providerIdsLabel")}
+					description={t("agent.userAgent.providerIdsDescription")}
+					htmlFor="agent-user-agent-providers"
+				>
+					<Input
+						id="agent-user-agent-providers"
+						value={userAgentProviderDraft}
+						onChange={(e) => setUserAgentProviderDraft(e.target.value)}
+						onBlur={() => void commitUserAgent()}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.currentTarget.blur();
+							}
+						}}
+						placeholder={t("agent.userAgent.providerIdsPlaceholder")}
+						spellCheck={false}
+						autoComplete="off"
+						disabled={!isTauri() || !userAgentDraft.trim()}
+						className="h-8 w-56 text-xs"
+					/>
+				</SettingsRow>
 			</SettingsGroup>
 
 			{!isTauri() ? (

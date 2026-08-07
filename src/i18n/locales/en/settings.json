@@ -137,6 +137,14 @@
 		"proxy": {
 			"label": "Agent proxy"
 		},
+		"userAgent": {
+			"label": "User-Agent",
+			"description": "Optional. Injected into Codex ACP as model_providers http_headers (for mid-stations that only allow Codex-like clients). Example matches new-api: codex-cli/<version>.",
+			"placeholder": "codex-cli/0.50.0",
+			"providerIdsLabel": "Provider ids",
+			"providerIdsDescription": "Optional. Comma-separated Codex model_providers keys to tag. Empty = auto (CODEX_CONFIG providers, MODEL_PROVIDER, or openai).",
+			"providerIdsPlaceholder": "my_proxy, openai"
+		},
 		"desktopOnly": "Agent registry requires the desktop app.",
 		"desktopHint": "Run `pnpm tauri dev` to scan agents on this machine.",
 		"commonAgents": "Common agents",
