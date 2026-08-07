@@ -4,7 +4,7 @@
  */
 
 import { PluginRegistry } from "@embedpdf/core";
-import type { PdfEngine } from "@embedpdf/models";
+import type { DocumentManagerCapability } from "@embedpdf/plugin-document-manager";
 import { DocumentManagerPluginPackage } from "@embedpdf/plugin-document-manager";
 import { RenderPluginPackage } from "@embedpdf/plugin-render";
 
@@ -46,20 +46,7 @@ export async function getPdfPageCount(
 		if (!docPlugin) return null;
 
 		const docCap = (
-			docPlugin as unknown as {
-				provides: () => {
-					openDocumentBuffer: (opts: {
-						buffer: ArrayBuffer;
-						documentId: string;
-						name: string;
-						autoActivate: boolean;
-					}) => {
-						task: {
-							wait: (ok: (v: any) => void, err: (e: unknown) => void) => void;
-						};
-					};
-				};
-			}
+			docPlugin as unknown as { provides: () => DocumentManagerCapability }
 		).provides();
 
 		const openRes = await taskToPromise(

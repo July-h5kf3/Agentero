@@ -945,10 +945,13 @@ mod tests {
     }
 
     #[test]
-    fn rebuild_from_disk_reimports_metadata() {
+    fn rebuild_from_disk_reimports_from_notes() {
         let dir = env::temp_dir().join(format!("agentero-rescan-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("papers").join("x")).unwrap();
+        let paper_dir = dir.join("papers").join("x");
+        fs::create_dir_all(&paper_dir).unwrap();
+        // Catalog is authoritative; disk recovery keys off NOTES.md only.
+        fs::write(paper_dir.join("NOTES.md"), "# notes\n").unwrap();
         let record = PaperRecord {
             path: "papers/x".into(),
             id: "x".into(),
@@ -989,17 +992,18 @@ mod tests {
             added_at: "t".into(),
             updated_at: "t".into(),
         };
-        // upsert writes both the catalog row and metadata.json.
         upsert_paper(&dir, &record).unwrap();
-        // Simulate a lost catalog row (folder + metadata.json stay on disk).
+        // Simulate a lost catalog row (folder + NOTES.md stay on disk).
         delete_under_path(&dir, "papers/x").unwrap();
         assert!(get_by_path(&dir, "papers/x").unwrap().is_none());
 
-        // Rescan re-imports it from metadata.json.
+        // Rescan re-adds a minimal row from the folder (title = folder name).
         assert_eq!(rebuild_from_disk(&dir).unwrap(), 1);
         let row = get_by_path(&dir, "papers/x").unwrap().unwrap();
-        assert_eq!(row.title, "Attention");
-        assert_eq!(row.year, Some(2017));
+        assert_eq!(row.path, "papers/x");
+        assert_eq!(row.id, "x");
+        assert_eq!(row.title, "x");
+        assert_eq!(row.year, None);
 
         let _ = fs::remove_dir_all(&dir);
     }

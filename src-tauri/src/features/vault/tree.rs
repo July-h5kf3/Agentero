@@ -277,7 +277,6 @@ mod tests {
     #[test]
     fn eager_roots_recurse_and_paper_source_stays_pending() {
         let root = &temp_root("build");
-        write(&root.join("papers/p1/metadata.json"), "{}");
         write(&root.join("papers/p1/NOTES.md"), "# n");
         write(&root.join("papers/p1/source/main.tex"), "x");
         write(&root.join("papers/p1/source/figs/a.png"), "x");
@@ -308,7 +307,7 @@ mod tests {
     #[test]
     fn list_children_modes() {
         let root = &temp_root("children");
-        write(&root.join("papers/p1/metadata.json"), "{}");
+        write(&root.join("papers/p1/NOTES.md"), "# n");
         write(&root.join("papers/p1/source/sub/deep.tex"), "x");
         write(&root.join("papers/p1/source/main.tex"), "x");
 
@@ -333,7 +332,7 @@ mod tests {
     #[test]
     fn source_shell_without_tex_reports_has_tex_false() {
         let root = &temp_root("notex");
-        write(&root.join("papers/p1/metadata.json"), "{}");
+        write(&root.join("papers/p1/NOTES.md"), "# n");
         write(&root.join("papers/p1/source/figs/a.png"), "x");
 
         let tree = build_tree(root);

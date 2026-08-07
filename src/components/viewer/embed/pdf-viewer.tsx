@@ -75,7 +75,6 @@ import {
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import {
 	ChevronDown,
-	ChevronLeft,
 	ChevronUp,
 	Languages,
 	List,
