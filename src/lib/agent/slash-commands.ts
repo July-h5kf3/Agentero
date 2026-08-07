@@ -6,6 +6,15 @@ export type AcpCommand = {
 	inputHint?: string;
 };
 
+/**
+ * Normalize an ACP available-command name for slash insertion.
+ * Agents may advertise names with leading `/` and/or `$` (e.g. skills as `$name`);
+ * Composer always prefixes `/`, so strip those markers to avoid `/$foo`.
+ */
+export function normalizeAcpCommandName(raw: string): string {
+	return raw.trim().replace(/^[/$]+/, "");
+}
+
 export function mapAcpCommands(
 	commands: Array<{
 		name: string;
@@ -15,7 +24,7 @@ export function mapAcpCommands(
 ): AcpCommand[] {
 	return commands
 		.map((command) => {
-			const name = command.name.trim().replace(/^\/+/, "");
+			const name = normalizeAcpCommandName(command.name);
 			return {
 				id: `acp:${name}`,
 				name,
