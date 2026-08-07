@@ -142,13 +142,12 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.
         │
         ▼
   catalog.papers UPSERT（sqlite，权威）
-  + 同步投影 metadata.json 到 paper 文件夹
   + papers/.../NOTES.md
         │
         ▼
   下载（见 §1.3）：始终 PDF → 论文根目录；arXiv 另 e-print 解压 LaTeX 到 source/
 
-读路径：UI 用 paper_get 读 catalog；不把 metadata.json 当主源。
+读路径：UI 用 paper_get 读 catalog；catalog 为唯一权威。
 ```
 
 | 来源 | 在统一流中的位置 |
@@ -667,7 +666,7 @@ papers/
 2. 写 `NOTES.md` 壳（摘要 blockquote 经 Host 免费 MT **并行竞速** bing / 火山 / 腾讯，取最先成功；单引擎超时 5s；**全失败则不写摘要块**；catalog `abstract` 仍为原文）。
 3. **catalog 事务**：有则写入 `pdf_url` / `html_url`。
 4. 下载按 §1.3：**始终 PDF**（候选：`pdf_url` → arXiv → Crossref 直链 → **Unpaywall OA**）；**arXiv 另解压 LaTeX**。
-5. **不**写默认 `PAPERS.md` / `library.bib`；`metadata.json` 仅在 catalog upsert 后作为投影同步。
+5. **不**写默认 `PAPERS.md` / `library.bib`；元数据仅存于 catalog。
 6. 重复：`on_duplicate: skip | open_existing`，**不**覆盖用户 `NOTES.md`。
 
 arXiv URL 推导：
@@ -771,7 +770,7 @@ arXiv URL 推导：
 | 2026-07-15 | 交互收敛：链接/编号 → Translator → 加入 papers/ 或当前子文件夹；远程 URL 只写 catalog、不下载 |
 | 2026-07-15 | 数据流合并：arXiv/DOI 等统一 Translator → 直接 map 进 PaperMetadata；catalog schema v2 补字段 |
 | 2026-07-15 | 下载策略：无预览 URL 始终尝试下载；有 URL 时仅 `downloadFulltextToLocal` 开才额外本地下载 |
-| 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI；metadata.json 仅为投影 |
+| 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI |
 | 2026-07-15 | 默认下载 PDF；arXiv 解压 LaTeX；移除 `downloadFulltextToLocal`；`paper_download_assets` + 树行 Download |
 | 2026-07-15 | 无 TeX 时 liteparse → `PAPER.md`（下载后自动） |
 | 2026-07-16 | 从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`；`zotero_scan` / `zotero_migrate`；可选拷 PDF） |

@@ -35,8 +35,7 @@ papers/<id>/
 │   ├── agentero-cite.json  # 参考文献 sidecar（可重建，见 api.md paper_refs_parse）
 │   └── layout.json         # PDF 版面 raw sidecar（可重建；merge/filter 可重复）
 ├── PAPER.md          # 无 TeX 时 liteparse 正文
-├── assets/           # NOTES 内嵌图等
-└── metadata.json     # 可选投影（catalog 为权威）
+└── assets/           # NOTES 内嵌图等
 ```
 
 ## marks/
