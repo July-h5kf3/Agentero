@@ -336,65 +336,13 @@ export function AgentPane({
 				<AgentCommonRows settings={settings} patch={patch} />
 			</SettingsGroup>
 
-			<SettingsGroup>
-				<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
-					<Label
-						htmlFor="agent-personal-prompt"
-						className="font-normal text-[13px]"
-					>
-						{t("agent.personalPrompt.label")}
-					</Label>
-					<Textarea
-						id="agent-personal-prompt"
-						value={settings.agentPersonalPrompt}
-						onChange={(e) =>
-							patch({
-								agentPersonalPrompt: e.target.value.slice(0, 8000),
-							})
-						}
-						onBlur={() => {
-							const trimmed = settings.agentPersonalPrompt.trim();
-							if (trimmed !== settings.agentPersonalPrompt) {
-								patch({ agentPersonalPrompt: trimmed });
-							}
-						}}
-						placeholder={t("agent.personalPrompt.placeholder")}
-						rows={4}
-						className="min-h-[88px] resize-y text-xs placeholder:text-muted-foreground/50"
-						spellCheck={true}
-					/>
-				</div>
-			</SettingsGroup>
-
-			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
-				{t("agent.pdfAsk.section")}
-			</p>
-			<SettingsGroup>
-				<AgentModelPicker
-					value={pdfAskValue}
-					onChange={onPdfAskChange}
-					registry={pdfAskRegistry}
-					agentLabel={t("agent.pdfAsk.agentId.label")}
-					modelLabel={t("agent.pdfAsk.modelId.label")}
-					followDefaultLabel={t("agent.pdfAsk.agentId.followDefault")}
-					followDefaultNamedLabel={(name) =>
-						t("agent.pdfAsk.agentId.followDefaultNamed", { name })
-					}
-					followModelLabel={t("agent.pdfAsk.modelId.followAgent")}
-					emptyState={
-						<p className="px-3 py-2 text-muted-foreground text-xs">
-							{t("agent.pdfAsk.agentId.empty")}
-						</p>
-					}
-				/>
-			</SettingsGroup>
-
 			{!isTauri() ? (
 				<p className="mb-3 text-muted-foreground text-xs">
 					{t("agent.desktopHint")}
 				</p>
 			) : null}
 
+			{/* Common agents first — install/update before prefs that pick among them. */}
 			<div className="mb-2 flex items-center justify-between gap-2">
 				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
 					{t("agent.commonAgents")}
@@ -748,6 +696,59 @@ export function AgentPane({
 			<p className="mt-2 mb-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
 				{t("agent.commonAgentsHint")}
 			</p>
+
+			<SettingsGroup>
+				<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
+					<Label
+						htmlFor="agent-personal-prompt"
+						className="font-normal text-[13px]"
+					>
+						{t("agent.personalPrompt.label")}
+					</Label>
+					<Textarea
+						id="agent-personal-prompt"
+						value={settings.agentPersonalPrompt}
+						onChange={(e) =>
+							patch({
+								agentPersonalPrompt: e.target.value.slice(0, 8000),
+							})
+						}
+						onBlur={() => {
+							const trimmed = settings.agentPersonalPrompt.trim();
+							if (trimmed !== settings.agentPersonalPrompt) {
+								patch({ agentPersonalPrompt: trimmed });
+							}
+						}}
+						placeholder={t("agent.personalPrompt.placeholder")}
+						rows={4}
+						className="min-h-[88px] resize-y text-xs placeholder:text-muted-foreground/50"
+						spellCheck={true}
+					/>
+				</div>
+			</SettingsGroup>
+
+			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+				{t("agent.pdfAsk.section")}
+			</p>
+			<SettingsGroup>
+				<AgentModelPicker
+					value={pdfAskValue}
+					onChange={onPdfAskChange}
+					registry={pdfAskRegistry}
+					agentLabel={t("agent.pdfAsk.agentId.label")}
+					modelLabel={t("agent.pdfAsk.modelId.label")}
+					followDefaultLabel={t("agent.pdfAsk.agentId.followDefault")}
+					followDefaultNamedLabel={(name) =>
+						t("agent.pdfAsk.agentId.followDefaultNamed", { name })
+					}
+					followModelLabel={t("agent.pdfAsk.modelId.followAgent")}
+					emptyState={
+						<p className="px-3 py-2 text-muted-foreground text-xs">
+							{t("agent.pdfAsk.agentId.empty")}
+						</p>
+					}
+				/>
+			</SettingsGroup>
 		</>
 	);
 }

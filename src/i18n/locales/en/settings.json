@@ -140,7 +140,7 @@
 		"desktopOnly": "Agent registry requires the desktop app.",
 		"desktopHint": "Run `pnpm tauri dev` to scan agents on this machine.",
 		"commonAgents": "Common agents",
-		"commonAgentsHint": "If ACP fails, try configuring a proxy.",
+		"commonAgentsHint": "If ACP fails, try configuring a proxy under General.",
 		"custom": "Custom",
 		"addCustom": "Add custom agent",
 		"probe": "Refresh",
@@ -162,7 +162,7 @@
 			"default": "default",
 			"installed": "installed",
 			"notInstalled": "not installed",
-			"agentInstalled": "Agent",
+			"agentInstalled": "Agent installed",
 			"agentMissing": "No agent",
 			"acpMissing": "No ACP",
 			"adapterMissing": "ACP adapter missing"
