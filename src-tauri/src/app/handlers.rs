@@ -23,6 +23,7 @@ macro_rules! common_commands {
             crate::features::agent::commands::agent_set_default,
             crate::features::agent::commands::agent_set_enabled,
             crate::features::agent::commands::agent_set_proxy,
+            crate::features::agent::commands::agent_set_user_agent,
             crate::features::agent::commands::agent_probe,
             crate::features::agent::commands::agent_probe_catalog,
             crate::features::agent::commands::agent_cancel_run,

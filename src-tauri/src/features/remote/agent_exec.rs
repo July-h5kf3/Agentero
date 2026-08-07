@@ -92,7 +92,7 @@ pub fn remote_agent_shell_command(
     format!("bash -lc {}", shell_quote(&inner))
 }
 
-/// Proxy-related env keys mirrored into the remote agent process.
+/// Env keys mirrored into the remote agent process (proxy + Codex UA / config).
 pub const REMOTE_PROXY_ENV_KEYS: &[&str] = &[
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -100,9 +100,13 @@ pub const REMOTE_PROXY_ENV_KEYS: &[&str] = &[
     "http_proxy",
     "https_proxy",
     "all_proxy",
+    // Custom User-Agent for Codex / mid-station affinity (#207).
+    "AGENTERO_USER_AGENT",
+    "CODEX_CONFIG",
+    "MODEL_PROVIDER",
 ];
 
-/// Collect proxy env pairs from an agent descriptor (after registry apply_proxy).
+/// Collect proxy / Codex UA env pairs from an agent descriptor (after registry apply).
 pub fn proxy_env_from_map(
     env: &std::collections::HashMap<String, String>,
 ) -> Vec<(String, String)> {

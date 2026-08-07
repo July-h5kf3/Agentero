@@ -45,6 +45,7 @@ impl AgentRegistry {
             .clone();
         refresh_availability(&mut state);
         apply_proxy_settings(&mut state);
+        apply_user_agent_settings(&mut state);
         Ok(state)
     }
 
@@ -91,6 +92,27 @@ impl AgentRegistry {
             .lock()
             .map_err(|_| AppError::message("agent registry lock poisoned"))?;
         Ok((guard.proxy_enabled, normalize_proxy_url(&guard.proxy_url)))
+    }
+
+    /// Persist optional ACP / Codex HTTP User-Agent override (empty = off).
+    pub fn set_user_agent(
+        &self,
+        user_agent: String,
+        user_agent_provider_ids: String,
+    ) -> Result<AgentRegistryState, AppError> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| AppError::message("agent registry lock poisoned"))?;
+        guard.user_agent = user_agent.trim().to_string();
+        guard.user_agent_provider_ids = user_agent_provider_ids
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(",");
+        persist(&self.path, &guard)?;
+        Ok(guard.clone())
     }
 
     pub fn set_default(&self, id: Option<String>) -> Result<AgentRegistryState, AppError> {
@@ -429,6 +451,8 @@ impl AgentRegistry {
             enabled: state.enabled,
             proxy_enabled: state.proxy_enabled,
             proxy_url: state.proxy_url,
+            user_agent: state.user_agent,
+            user_agent_provider_ids: state.user_agent_provider_ids,
         })
     }
 
@@ -564,6 +588,116 @@ fn apply_proxy_to_agent(agent: &mut AgentDescriptor, proxy_enabled: bool, proxy_
     }
 }
 
+/// Env key set on every ACP child when a custom User-Agent is configured.
+pub const AGENTERO_USER_AGENT_ENV: &str = "AGENTERO_USER_AGENT";
+
+fn apply_user_agent_settings(state: &mut AgentRegistryState) {
+    let ua = state.user_agent.trim().to_string();
+    let provider_ids = state.user_agent_provider_ids.clone();
+    for agent in &mut state.agents {
+        apply_user_agent_to_agent(agent, &ua, &provider_ids);
+    }
+}
+
+fn apply_user_agent_to_agent(agent: &mut AgentDescriptor, user_agent: &str, provider_ids: &str) {
+    // Snapshot always starts from persisted env (no prior injection). Only clear
+    // our env key here so empty UA is a no-op for CODEX_CONFIG on disk.
+    agent.env.remove(AGENTERO_USER_AGENT_ENV);
+
+    let ua = user_agent.trim();
+    if ua.is_empty() {
+        return;
+    }
+    agent
+        .env
+        .insert(AGENTERO_USER_AGENT_ENV.to_string(), ua.to_string());
+
+    // Codex ACP merges CODEX_CONFIG into the session config; model_providers.*.http_headers
+    // is the supported place for custom User-Agent (new-api affinity checks codex-cli/*).
+    // Avoid unknown marker keys — Codex may reject them.
+    if matches!(
+        agent.template,
+        AgentTemplate::CodexAcp | AgentTemplate::Custom
+    ) {
+        merge_codex_config_user_agent(&mut agent.env, ua, provider_ids);
+    }
+}
+
+/// Merge User-Agent into `CODEX_CONFIG.model_providers.<id>.http_headers`.
+pub fn merge_codex_config_user_agent(
+    env: &mut HashMap<String, String>,
+    user_agent: &str,
+    provider_ids: &str,
+) {
+    let ua = user_agent.trim();
+    if ua.is_empty() {
+        return;
+    }
+
+    let mut root: serde_json::Value = env
+        .get("CODEX_CONFIG")
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    if !root.is_object() {
+        root = serde_json::json!({});
+    }
+    let obj = root.as_object_mut().expect("object");
+
+    let providers = obj
+        .entry("model_providers")
+        .or_insert_with(|| serde_json::json!({}));
+    let providers = if let Some(map) = providers.as_object_mut() {
+        map
+    } else {
+        *providers = serde_json::json!({});
+        providers.as_object_mut().expect("object")
+    };
+
+    let mut targets: Vec<String> = provider_ids
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+
+    if targets.is_empty() {
+        // Auto: existing CODEX_CONFIG providers + MODEL_PROVIDER + openai fallback.
+        targets.extend(providers.keys().cloned());
+        if let Some(mp) = env.get("MODEL_PROVIDER") {
+            let t = mp.trim();
+            if !t.is_empty() && !targets.iter().any(|x| x == t) {
+                targets.push(t.to_string());
+            }
+        }
+        if targets.is_empty() {
+            targets.push("openai".to_string());
+        }
+    }
+
+    targets.sort();
+    targets.dedup();
+
+    for id in targets {
+        let entry = providers.entry(id).or_insert_with(|| serde_json::json!({}));
+        let Some(p) = entry.as_object_mut() else {
+            continue;
+        };
+        let headers = p
+            .entry("http_headers")
+            .or_insert_with(|| serde_json::json!({}));
+        if let Some(h) = headers.as_object_mut() {
+            h.insert(
+                "User-Agent".to_string(),
+                serde_json::Value::String(ua.to_string()),
+            );
+        }
+    }
+
+    if let Ok(s) = serde_json::to_string(&root) {
+        env.insert("CODEX_CONFIG".to_string(), s);
+    }
+}
+
 fn refresh_availability(state: &mut AgentRegistryState) {
     for agent in &mut state.agents {
         match probe_command(&agent.command) {
@@ -581,7 +715,10 @@ fn refresh_availability(state: &mut AgentRegistryState) {
 
 #[cfg(test)]
 mod tests {
-    use super::migrate_legacy_codex_agents;
+    use super::{
+        apply_user_agent_to_agent, merge_codex_config_user_agent, migrate_legacy_codex_agents,
+        AGENTERO_USER_AGENT_ENV,
+    };
     use crate::features::agent::models::{AgentDescriptor, AgentRegistryState, AgentTemplate};
     use std::collections::HashMap;
 
@@ -617,5 +754,70 @@ mod tests {
         assert_eq!(agent.args, Vec::<String>::new());
         assert!(!agent.env.contains_key("CODEX_PATH"));
         assert_eq!(agent.last_probe_ok, None);
+    }
+
+    #[test]
+    fn merge_codex_config_sets_user_agent_on_target_providers() {
+        let mut env = HashMap::new();
+        env.insert(
+            "CODEX_CONFIG".to_string(),
+            r#"{"model_providers":{"my_proxy":{"base_url":"https://relay.example/v1"}}}"#
+                .to_string(),
+        );
+        merge_codex_config_user_agent(&mut env, "codex-cli/0.50.0", "my_proxy");
+        let raw = env.get("CODEX_CONFIG").expect("CODEX_CONFIG");
+        let v: serde_json::Value = serde_json::from_str(raw).expect("json");
+        assert_eq!(
+            v["model_providers"]["my_proxy"]["http_headers"]["User-Agent"],
+            "codex-cli/0.50.0"
+        );
+        assert_eq!(
+            v["model_providers"]["my_proxy"]["base_url"],
+            "https://relay.example/v1"
+        );
+    }
+
+    #[test]
+    fn merge_codex_config_auto_targets_openai_when_empty() {
+        let mut env = HashMap::new();
+        merge_codex_config_user_agent(&mut env, "codex-cli/0.1.0", "");
+        let raw = env.get("CODEX_CONFIG").expect("CODEX_CONFIG");
+        let v: serde_json::Value = serde_json::from_str(raw).expect("json");
+        assert_eq!(
+            v["model_providers"]["openai"]["http_headers"]["User-Agent"],
+            "codex-cli/0.1.0"
+        );
+    }
+
+    #[test]
+    fn apply_user_agent_sets_env_for_codex() {
+        let mut agent = AgentDescriptor {
+            id: "c".into(),
+            name: "Codex".into(),
+            template: AgentTemplate::CodexAcp,
+            command: "codex-acp".into(),
+            args: vec![],
+            env: HashMap::new(),
+            available: true,
+            last_error: None,
+            last_probe_ok: None,
+            last_probe_agent_name: None,
+            last_probe_error: None,
+            last_probed_at: None,
+        };
+        apply_user_agent_to_agent(&mut agent, "codex-cli/1.2.3", "custom");
+        assert_eq!(
+            agent.env.get(AGENTERO_USER_AGENT_ENV).map(String::as_str),
+            Some("codex-cli/1.2.3")
+        );
+        let raw = agent.env.get("CODEX_CONFIG").expect("CODEX_CONFIG");
+        let v: serde_json::Value = serde_json::from_str(raw).expect("json");
+        assert_eq!(
+            v["model_providers"]["custom"]["http_headers"]["User-Agent"],
+            "codex-cli/1.2.3"
+        );
+        // Empty UA only clears our env key; snapshot always restarts from disk.
+        apply_user_agent_to_agent(&mut agent, "", "");
+        assert!(!agent.env.contains_key(AGENTERO_USER_AGENT_ENV));
     }
 }

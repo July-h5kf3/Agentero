@@ -72,6 +72,15 @@ pub struct AgentRegistryState {
     pub proxy_enabled: bool,
     #[serde(default = "default_agent_proxy_url")]
     pub proxy_url: String,
+    /// Optional HTTP User-Agent injected into ACP agent processes (esp. Codex).
+    /// Empty = do not override. Relays that only allow Codex often expect
+    /// `codex-cli/<version>` (see new-api channel affinity).
+    #[serde(default)]
+    pub user_agent: String,
+    /// Comma-separated Codex `model_providers` ids that receive `http_headers.User-Agent`.
+    /// Empty = auto (existing CODEX_CONFIG providers + MODEL_PROVIDER + `openai`).
+    #[serde(default)]
+    pub user_agent_provider_ids: String,
 }
 
 impl Default for AgentRegistryState {
@@ -82,6 +91,8 @@ impl Default for AgentRegistryState {
             agents: Vec::new(),
             proxy_enabled: false,
             proxy_url: default_agent_proxy_url(),
+            user_agent: String::new(),
+            user_agent_provider_ids: String::new(),
         }
     }
 }
@@ -179,6 +190,12 @@ pub struct CatalogScanResponse {
     pub enabled: bool,
     pub proxy_enabled: bool,
     pub proxy_url: String,
+    /// See [`AgentRegistryState::user_agent`].
+    #[serde(default)]
+    pub user_agent: String,
+    /// See [`AgentRegistryState::user_agent_provider_ids`].
+    #[serde(default)]
+    pub user_agent_provider_ids: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
