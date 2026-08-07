@@ -1,6 +1,6 @@
 # PDF 版面分析（Figures / Tables / Algorithms / Formulas）
 
-实验能力：浏览器内 ONNX（PP-DocLayoutV3）检测 PDF 版面 → 应用层 **文字角色 + 联图聚合 + 公式按编号聚合 + 置信度去重** → 右栏 **Figures**。
+实验能力：浏览器内 ONNX（PP-DocLayoutV3）检测 PDF 版面 → 应用层 **文字角色 + 联图聚合 + 公式按编号框几何聚合（不解析编号文本）+ 置信度去重** → 右栏 **Figures**。
 
 | | |
 |---|---|
@@ -23,21 +23,24 @@
         │  激活中的 tab：有 layout.json → 静默载入 store（无新任务条）
         │  尚无缓存 → 轮询 sidecar，headless 写完后再静默载入
         │  无 paper 目录的散落 PDF：仅 active tab 用 viewer 内分析（asBackgroundTask）
-        │  手动：Figures header「分析」→ force 重跑 + 打开 Figures / 可选 Eye
+        │  手动：Figures header「分析 / 重新分析」
+        │     · 有 `source/layout.json` → **只** JSON→侧栏归并（不重跑 ONNX / 不重写 sidecar）
+        │     · 无缓存 → 全量 PDF→JSON（PP-DocLayoutV3）再归并
+        │     · 打开 Figures / 可选 Eye；`force` 仅内部/将来「强制刷新模型」用
         ▼
-PP-DocLayoutV3  每页: render → detect → map to PDF points
+PP-DocLayoutV3  每页: render → detect → map to PDF points（仅无 sidecar 或 force）
         │  LayoutBlock[]（插件全量标签；页上 LayoutAnalysisLayer 仍画原始框）
         ▼
-① 抽 caption / formula_number 文字（PDF text runs）
+① 抽 caption 文字（PDF text runs）
         │  captionRole: figure_main | table_main | algorithm_main | subpanel | other
-        │  formula 右侧条带也可恢复 "(n)" 编号
-        │  写入 {paper}/source/layout.json；再次分析优先读缓存
+        │  formula / formula_number **不**解析编号文本
+        │  写入 {paper}/source/layout.json
         ▼
-①b source/layout.json 缓存命中
-        │  跳过 PP-DocLayoutV3，只从 raw regions 重新归并
+①b source/layout.json 缓存命中（打开论文 / 点「重新分析」默认路径）
+        │  跳过 PP-DocLayoutV3，只从 raw regions 重新 `mergeCaptionsIntoHosts` + 去重
         ▼
-② mergeCaptionsIntoHosts（联图 / 表题 / 算法题 / 公式按编号）
-        │  输出 PdfLayoutRegion[]（图必有完整 title；公式仅保留有编号）
+② mergeCaptionsIntoHosts（联图 / 表题 / 算法题 / 公式按编号框几何合并）
+        │  输出 PdfLayoutRegion[]（图必有完整 title；公式仅保留有 formula_number 锚点）
         ▼
 ③ 侧栏展示: isSidebarLayoutKind + dedupeLayoutRegions(minScore 默认 0.3)
         │  分区顺序：插图 → 表 → 算法 → **公式（最底）**
@@ -51,7 +54,7 @@ PP-DocLayoutV3  每页: render → detect → map to PDF points
         │
 ④ PDF 页 hover dwell（默认 600ms）→ 视觉批注卡
         │  hit 层用 **post-merge** 区域（与侧栏同源，非插件 raw 框）
-        │  插图 / 表 / 算法 / 有编号公式；打开 VisualAnnotationEditor（不自动发送）
+        │  插图 / 表 / 算法 / 有编号框的公式；打开 VisualAnnotationEditor（不自动发送）
         │  移开源区 / 草稿卡后 hide（默认 1000ms，`LAYOUT_HOVER_HIDE_MS`）
         │  实现：`hit-test.ts` + `pdf-viewer` layout hit + `LAYOUT_HOVER_DWELL_MS` / `LAYOUT_HOVER_HIDE_MS`
         │
@@ -93,7 +96,7 @@ LayoutAnalysisPluginPackage: {
 
 ### Layout sidecar
 
-`{paper}/source/layout.json` 保存 **初步解析结果**：模型标签映射后的 `PdfLayoutRegion[]`，并已尽力补充 caption / formula number 文本与 `captionRole`。它不保存侧栏最终卡片列表，也不保存缩略图；后续 `mergeCaptionsIntoHosts`、去重和置信度筛选都从该 raw sidecar 重新计算。因此修改联图、公式合并或筛选规则后，不需要重新运行 PP-DocLayoutV3。
+`{paper}/source/layout.json` 保存 **初步解析结果**：模型标签映射后的 `PdfLayoutRegion[]`，并已尽力补充 caption 文本与 `captionRole`（公式编号文本不解析）。它不保存侧栏最终卡片列表，也不保存缩略图；后续 `mergeCaptionsIntoHosts`、去重和置信度筛选都从该 raw sidecar 重新计算。因此修改联图、公式合并或筛选规则后，不需要重新运行 PP-DocLayoutV3。
 
 ```ts
 type LayoutSidecar = {
@@ -103,7 +106,9 @@ type LayoutSidecar = {
 };
 ```
 
-缓存只在已知 paper folder 时启用；散落 PDF 没有 `{paper}` 路径，仍使用当前内存流程。点击重新分析时默认先读 `source/layout.json`；需要强制刷新模型输出时走 `force` 路径。
+缓存只在已知 paper folder 时启用；散落 PDF 没有 `{paper}` 路径，仍使用当前内存流程。
+
+**重新分析按钮**（Figures header）：`force: false`。有 `source/layout.json` 时只重跑 JSON→侧栏（`mergeCaptionsIntoHosts` + NMS），**不**再跑 PP-DocLayoutV3，也**不**覆盖 sidecar。无缓存时才走完整 PDF→JSON。需要强制刷新模型输出时由调用方显式传 `force: true`（当前 UI 不暴露）。
 
 ---
 
@@ -116,7 +121,7 @@ type LayoutSidecar = {
 | # | 规则 | 说明 |
 |---|---|---|
 | **A1** | 模型 label → kind | 映射：`image` `chart` `table` `algorithm` `formula` `formula_number` `figure_title` `header` `text`/`aside_text`→`text`；其余丢弃 |
-| **A2** | 侧栏种类 | 展示 **image / chart / table / algorithm / formula（有编号）**；**不展示** 无编号 formula / 裸 `formula_number` / caption |
+| **A2** | 侧栏种类 | 展示 **image / chart / table / algorithm / formula（有 formula_number 框并成功合并）**；**不展示** 无编号框 formula / 裸 `formula_number` / caption |
 | **A3** | image+chart 同区 | 侧栏「插图」分区；NMS 时同属 `figure` 组；**公式分区固定在列表最下方** |
 
 ### B. 文字角色（3）
@@ -150,15 +155,15 @@ type LayoutSidecar = {
 | **E1** | 孤儿 panel | 落在更大联图内（覆盖≥0.55）的无主标题 panel 丢弃 |
 | **E2** | 侧栏 NMS | 默认 `minScore=0.3`、`minArea=0.002`、同组 IoU≥0.45 抑低分、小框被盖≥0.85 丢小 |
 
-### F. 公式编号聚合（3）
+### F. 公式编号框聚合（3）— **不解析编号文本**
 
 | # | 规则 | 说明 |
 |---|---|---|
-| **F1** | 必须有 formula_number | **仅**模型 `formula_number`（formulatitle）可启动合并；无编号框、仅文本恢复的 `(n)` **不**进侧栏 |
+| **F1** | 必须有 formula_number 框 | **仅**模型 `formula_number` 几何锚点可启动合并；无编号框的 formula **不**进侧栏；**不**从 PDF 文字层解析 `(1)` 等编号 |
 | **F2** | 不与 text 重叠 | `formula` / `formula_number` / 合并后 host 若被 `text`/`aside_text` 覆盖 ≥ **0.28** 面积 → **丢弃**（行内公式 / 误检） |
-| **F3** | 侧栏位置 | 合并后的 display formula 放在 **插图 / 表 / 算法之后（列表最底）**；标题用 `(1)` 等；`text` 永不进侧栏 |
+| **F3** | 侧栏位置 | 合并后的 display formula 放在 **插图 / 表 / 算法之后（列表最底）**；侧栏标题用 i18n 回退（如「公式 1」），`title` 不写编号串；`text` 永不进侧栏 |
 
-编号文本解析：`(1)` `(12a)` `(A.1)` `[3]` `Eq. (2)` 等（`extractFormulaNumberLabel`）；拒绝子图 `(a)`。多行仅在编号竖带内、邻接且 gap 无大块 text 时扩展。
+合并为纯几何：编号框左侧竖带内的 formula 体 + 多行竖向邻接扩展（gap 无大块 text）。`titleBbox` 保留编号框几何，不抽编号字符串。
 
 半宽并排（Fig7\|Fig8）仅在双方都是半宽时做**软**水平分开，并**再并回完整 title**；全宽联图不做 mid-split。
 
@@ -211,8 +216,8 @@ type PdfLayoutRegion = {
   readingOrder: number;
   rect: { x, y, w, h };        // PDF points
   bbox: { x, y, w, h };        // 0–1 页相对
-  title?: string;              // 图/表题文字，或公式编号 "(1)"
-  titleBbox?: { x, y, w, h };  // 完整标题/编号框（须 ⊆ bbox）
+  title?: string;              // 图/表题文字（公式不解析编号串）
+  titleBbox?: { x, y, w, h };  // 完整标题框，或公式的 formula_number 几何
   captionRole?: CaptionRole;
 };
 ```
@@ -227,8 +232,8 @@ type PdfLayoutRegion = {
 |---|---|
 | `run-analysis.ts` | 分析 → 文字 → merge → store |
 | `io.ts` | `{paper}/source/layout.json` raw sidecar 读写与 schema 校验 |
-| `title-text.ts` | 抽字、captionRole、公式编号解析 |
-| `merge-captions.ts` | 联图 / 表 / 算法 / **公式按编号**、标题完整包含 |
+| `title-text.ts` | 抽字、captionRole（**不含**公式编号文本解析） |
+| `merge-captions.ts` | 联图 / 表 / 算法 / **公式按 formula_number 几何合并**、标题完整包含 |
 | `normalize.ts` | DocumentLayout → regions（sync 无文字） |
 | `dedupe.ts` | 侧栏 NMS |
 | `labels.ts` / `colors.ts` / `store.ts` / `types.ts` | 映射、色、状态、类型 |

@@ -28,7 +28,11 @@ import type {
 } from "@/lib/pdf/layout/types";
 
 export type RunLayoutAnalysisOptions = {
-	/** Re-analyze even if pages are cached in EmbedPDF or source/layout.json. */
+	/**
+	 * When true, ignore `source/layout.json` and re-run PP-DocLayoutV3 (PDF→JSON).
+	 * When false (default), load the sidecar if present and only re-run
+	 * merge/filter into the sidebar store (JSON→regions).
+	 */
 	force?: boolean;
 	/** Paper folder path; when present, raw layout persists to source/layout.json. */
 	paperAbsPath?: string | null;
@@ -192,11 +196,13 @@ export async function runDocumentLayoutAnalysis(
 	documentId: string,
 	options: RunLayoutAnalysisOptions = {},
 ): Promise<LayoutTask<DocumentLayout, DocumentAnalysisProgress> | null> {
+	// Default path: JSON→sidebar re-merge from layout.json (no ONNX).
+	// `force` skips this and re-runs PDF→JSON via PP-DocLayoutV3.
 	if (!options.force && options.paperAbsPath) {
 		setLayoutAnalysisUi(
 			{
 				stage: "running",
-				message: "Loading cached layout…",
+				message: "Rebuilding from cached layout…",
 				progress: null,
 			},
 			documentId,
@@ -216,6 +222,7 @@ export async function runDocumentLayoutAnalysis(
 			const raw = needsText
 				? await enrichRawRegionsWithPageText(scope, cached.regions, pageSizes)
 				: cached.regions;
+			// Always re-run merge/filter so algorithm tweaks apply without ONNX.
 			const result = buildResultFromRawRegions(documentId, raw);
 			setLayoutDocumentResult(result);
 			const summary = summarizeLayoutResult(result);

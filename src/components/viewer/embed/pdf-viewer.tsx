@@ -3065,7 +3065,8 @@ function PdfViewerInner({
 
 	/**
 	 * Run layout analysis for this document.
-	 * - force: re-run model even when sidecar / store already has results
+	 * - force: re-run PP-DocLayoutV3 (PDF→JSON) even when source/layout.json exists
+	 * - without force: prefer layout.json → merge → sidebar when paper has a sidecar
 	 * - openFigures / showOverlay: UI side-effects for the manual Figures button
 	 * - asBackgroundTask: surface progress in the IDE background-tasks panel
 	 */
@@ -3407,10 +3408,10 @@ function PdfViewerInner({
 				setRegionSelecting((active) => !active);
 			},
 			analyzeLayout: () => {
-				// Manual re-run always forces a fresh model pass when results exist.
-				const force = Boolean(getLayoutDocumentResult(docId));
+				// Prefer source/layout.json → merge → sidebar. Full ONNX (PDF→JSON)
+				// only when there is no sidecar (or force is set elsewhere).
 				startLayoutAnalysisRef.current({
-					force,
+					force: false,
 					openFigures: true,
 					showOverlay: true,
 					asBackgroundTask: true,
