@@ -14,8 +14,11 @@ import {
 	formatAskUserAnswers,
 	isBackgroundWorkflowHistoryTitle,
 	parseAskUserQuestions,
+	providerSessionIdForHistoryLoad,
 	resetAgentChatIds,
 	resolveSelected,
+	shouldDeferSessionEvent,
+	upsertChatSessionTurn,
 	upsertPlanPart,
 } from "@/lib/agent/chat-state";
 
@@ -238,6 +241,98 @@ User comment: 这里最值得读的是什么?`;
 		expect(isBackgroundWorkflowHistoryTitle("这里最值得读的是什么?")).toBe(
 			false,
 		);
+	});
+});
+
+describe("providerSessionIdForHistoryLoad", () => {
+	it("uses the provider id instead of the Agentero runtime id", () => {
+		expect(
+			providerSessionIdForHistoryLoad({
+				id: "runtime-v4",
+				agentId: "codex",
+				source: "local",
+				title: "Earlier conversation",
+				agentName: "Codex",
+				startedAt: "",
+				lines: [],
+				status: "completed",
+				providerSessionId: "provider-v7",
+			}),
+		).toBe("provider-v7");
+	});
+
+	it("falls back to the history id for provider-indexed sessions", () => {
+		expect(
+			providerSessionIdForHistoryLoad({
+				id: "provider-v7",
+				agentId: "codex",
+				source: "external",
+				title: "Earlier conversation",
+				agentName: "Codex",
+				startedAt: "",
+				lines: [],
+				status: "completed",
+			}),
+		).toBe("provider-v7");
+	});
+});
+
+describe("upsertChatSessionTurn", () => {
+	it("keeps one local history item when a resumed turn gets a new runtime id", () => {
+		const previous = {
+			id: "runtime-first",
+			agentId: "codex",
+			source: "local" as const,
+			title: "First question",
+			agentName: "Codex",
+			startedAt: "",
+			lines: [],
+			status: "completed" as const,
+			providerSessionId: "provider-thread",
+		};
+		const next = {
+			...previous,
+			id: "runtime-second",
+			title: "Second question",
+			lines: [
+				{ id: "u1", kind: "user" as const, text: "First question" },
+				{ id: "a1", kind: "agent" as const, parts: [] },
+				{ id: "u2", kind: "user" as const, text: "Second question" },
+			],
+		};
+		const unrelated = {
+			...previous,
+			id: "runtime-other",
+			providerSessionId: "other-thread",
+		};
+
+		expect(
+			upsertChatSessionTurn([previous, unrelated], next, previous),
+		).toEqual([next, unrelated]);
+	});
+});
+
+describe("shouldDeferSessionEvent", () => {
+	it("defers a new runtime event during a resumed turn", () => {
+		expect(
+			shouldDeferSessionEvent({
+				sessionId: "runtime-second",
+				submitting: true,
+				pendingRuntimeSessionId: null,
+				knownSessionIds: new Set(["runtime-first"]),
+			}),
+		).toBe(true);
+	});
+
+	it("does not defer events after the runtime session is known", () => {
+		expect(
+			shouldDeferSessionEvent({
+				sessionId: "runtime-first",
+				submitting: true,
+				pendingRuntimeSessionId: null,
+				knownSessionIds: new Set(["runtime-first"]),
+			}),
+		).toBe(false);
 	});
 });
 

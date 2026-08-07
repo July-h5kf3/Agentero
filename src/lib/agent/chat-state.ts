@@ -109,6 +109,40 @@ export type ChatSessionHistoryItem = {
 	resumeable?: boolean;
 };
 
+/** Resolve the provider-owned id required by ACP session/load and session/resume. */
+export function providerSessionIdForHistoryLoad(
+	item: ChatSessionHistoryItem,
+): string {
+	return item.providerSessionId?.trim() || item.id;
+}
+
+/**
+ * Publish a newly accepted runtime turn without splitting one provider
+ * conversation into multiple Agentero history rows.
+ *
+ * ACP creates a fresh runtime id for every request, including resumed turns.
+ * The provider session id is the durable conversation identity, so remove the
+ * previous active row and any stale row with the same provider id before
+ * prepending the updated transcript.
+ */
+export function upsertChatSessionTurn(
+	sessions: ChatSessionHistoryItem[],
+	next: ChatSessionHistoryItem,
+	previous?: ChatSessionHistoryItem,
+): ChatSessionHistoryItem[] {
+	const providerId = next.providerSessionId?.trim();
+	return [
+		next,
+		...sessions.filter((item) => {
+			if (item.id === next.id || item.id === previous?.id) return false;
+			if (providerId && item.providerSessionId?.trim() === providerId) {
+				return false;
+			}
+			return true;
+		}),
+	];
+}
+
 /** Format prior user/agent turns for agents that cannot session/resume. */
 export function buildLocalTranscriptPrompt(
 	lines: ChatLine[],
@@ -159,6 +193,25 @@ export type PendingSessionEvent =
 	| { kind: "stream"; event: AgentStreamEvent }
 	| { kind: "tool"; event: AgentToolEvent }
 	| { kind: "plan"; event: AgentPlanEvent };
+
+/**
+ * Decide whether an event must wait until the accepted runtime session has
+ * been published to the chat store. The provider id used for ACP resume is
+ * intentionally not part of this correlation check.
+ */
+export function shouldDeferSessionEvent(args: {
+	sessionId: string;
+	submitting: boolean;
+	pendingRuntimeSessionId: string | null;
+	knownSessionIds: ReadonlySet<string>;
+}): boolean {
+	if (!args.submitting) return false;
+	return (
+		args.pendingRuntimeSessionId === args.sessionId ||
+		(args.pendingRuntimeSessionId === null &&
+			!args.knownSessionIds.has(args.sessionId))
+	);
+}
 
 let chatLineSeq = 0;
 export function nextLineId(prefix: string) {
