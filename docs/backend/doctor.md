@@ -36,6 +36,15 @@ Doctor 聚合本地 Vault 的只读完整性检查，并为论文别名与双链
 
 不使用 tmp+rename 式原子替换：那样会被 Vault 文件监听器当成「不完整改名」，误报外部改名未修复链接。
 
+#### 忽略（持久化）
+
+用户可在设置页对单篇或已勾选论文选择 **忽略** 别名检查。忽略列表落在 Vault 本地 `.agentero/doctor.json` 的 `ignoredAliasPaths`（相对 `papers/**/NOTES.md` 路径）：
+
+- 再诊断时这些路径不再计入别名错误 / 修复候选，也不使 `aliases.ok` 为 false；
+- `DoctorReport.aliases.ignoredPaths` 返回仍不完整且仍被忽略的路径，供 UI 恢复；
+- 已补齐至少两个 distinct aliases 的笔记会自动从活跃忽略展示中消失（列表条目可在写盘时保留，无害）；
+- `doctor_ignore_aliases` 以 `ignore: true|false` 增删路径。
+
 ### 双链语义
 
 1. **探测** `doctor_plan_wikilinks`  
@@ -51,8 +60,8 @@ Doctor 聚合本地 Vault 的只读完整性检查，并为论文别名与双链
 ## 入口
 
 - 桌面：设置 → 知识库诊断；远程 Vault 当前显示不可用。
-- CLI：`agentero doctor`、`agentero doctor fix aliases`、`agentero -y doctor fix aliases`。
-- Host：`doctor_check`、`doctor_apply_aliases`、`doctor_set_dirty_paths`、`doctor_plan_wikilinks`、`doctor_apply_wikilinks`。
+- CLI：`agentero doctor`、`agentero doctor fix aliases`、`agentero -y doctor fix aliases`（CLI 诊断同样尊重 `.agentero/doctor.json` 忽略列表）。
+- Host：`doctor_check`、`doctor_apply_aliases`、`doctor_ignore_aliases`、`doctor_set_dirty_paths`、`doctor_plan_wikilinks`、`doctor_apply_wikilinks`。
 
 ![Vault Doctor 设置页](../assets/doctor-settings.png)
 

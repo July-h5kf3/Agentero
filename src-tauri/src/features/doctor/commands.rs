@@ -1,7 +1,7 @@
 use super::{
     apply_alias_repairs, apply_wikilink_repairs, diagnose, plan_wikilink_repairs,
-    AliasRepairChange, AliasRepairResult, DoctorDirtyPathsState, DoctorReport,
-    WikilinkRepairChange, WikilinkRepairPlan, WikilinkRepairResult,
+    set_ignored_alias_paths, AliasRepairChange, AliasRepairResult, DoctorDirtyPathsState,
+    DoctorReport, DoctorVaultState, WikilinkRepairChange, WikilinkRepairPlan, WikilinkRepairResult,
 };
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::wiki::WikiIndexState;
@@ -30,6 +30,16 @@ pub struct DoctorSetDirtyPathsArgs {
     pub vault_path: String,
     #[serde(default)]
     pub dirty_paths: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoctorIgnoreAliasesArgs {
+    pub vault_path: String,
+    #[serde(default)]
+    pub paths: Vec<String>,
+    /// `true` = add to ignore list; `false` = restore (remove from list).
+    pub ignore: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +78,15 @@ pub fn doctor_check(args: DoctorCheckArgs) -> ApiResult<DoctorReport> {
     }
     match diagnose(&vault) {
         Ok(report) => ApiResult::ok(report),
+        Err(error) => map_err(error),
+    }
+}
+
+#[tauri::command]
+pub fn doctor_ignore_aliases(args: DoctorIgnoreAliasesArgs) -> ApiResult<DoctorVaultState> {
+    let vault = PathBuf::from(&args.vault_path);
+    match set_ignored_alias_paths(&vault, &args.paths, args.ignore) {
+        Ok(state) => ApiResult::ok(state),
         Err(error) => map_err(error),
     }
 }

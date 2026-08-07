@@ -39,6 +39,7 @@ macro_rules! common_commands {
             crate::features::wiki::commands::wiki_cache_rebuild,
             crate::features::doctor::commands::doctor_check,
             crate::features::doctor::commands::doctor_apply_aliases,
+            crate::features::doctor::commands::doctor_ignore_aliases,
             crate::features::doctor::commands::doctor_set_dirty_paths,
             crate::features::doctor::commands::doctor_plan_wikilinks,
             crate::features::doctor::commands::doctor_apply_wikilinks,

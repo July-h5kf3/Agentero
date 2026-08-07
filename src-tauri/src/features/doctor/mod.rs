@@ -78,7 +78,96 @@ pub struct AliasDoctorSection {
     pub checked_papers: u32,
     pub complete_papers: u32,
     pub candidates: Vec<AliasRepairCandidate>,
+    /// Incomplete paper NOTES paths the user chose to ignore (persisted).
+    #[serde(default)]
+    pub ignored_paths: Vec<String>,
     pub issues: Vec<DoctorIssue>,
+}
+
+/// Vault-local Doctor preferences (`.agentero/doctor.json`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DoctorVaultState {
+    /// Relative `papers/**/NOTES.md` paths skipped by paper-alias checks.
+    #[serde(default)]
+    pub ignored_alias_paths: Vec<String>,
+}
+
+const DOCTOR_STATE_REL: &str = ".agentero/doctor.json";
+
+fn normalize_rel_path(raw: &str) -> String {
+    raw.replace('\\', "/").trim_matches('/').to_string()
+}
+
+fn doctor_state_path(vault: &Path) -> PathBuf {
+    vault.join(DOCTOR_STATE_REL)
+}
+
+/// Load vault-local Doctor state. Missing or invalid file → empty defaults.
+pub fn load_doctor_state(vault: &Path) -> DoctorVaultState {
+    let path = doctor_state_path(vault);
+    let Ok(raw) = fs::read_to_string(&path) else {
+        return DoctorVaultState::default();
+    };
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+/// Persist vault-local Doctor state (creates `.agentero/` if needed).
+pub fn save_doctor_state(vault: &Path, state: &DoctorVaultState) -> Result<(), AppError> {
+    let path = doctor_state_path(vault);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            AppError::message(format!("create .agentero for doctor state: {error}"))
+        })?;
+    }
+    let mut normalized = state
+        .ignored_alias_paths
+        .iter()
+        .map(|path| normalize_rel_path(path))
+        .filter(|path| !path.is_empty() && safe_relative_path(path))
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    let cleaned = DoctorVaultState {
+        ignored_alias_paths: normalized,
+    };
+    let body = serde_json::to_string_pretty(&cleaned)
+        .map_err(|error| AppError::message(format!("serialize doctor state: {error}")))?;
+    fs::write(&path, format!("{body}\n"))
+        .map_err(|error| AppError::message(format!("write doctor state: {error}")))?;
+    Ok(())
+}
+
+/// Add or remove paper NOTES paths from the persisted alias-ignore list.
+pub fn set_ignored_alias_paths(
+    vault: &Path,
+    paths: &[String],
+    ignore: bool,
+) -> Result<DoctorVaultState, AppError> {
+    if !vault.is_dir() {
+        return Err(AppError::message("vault path is not a directory"));
+    }
+    let mut state = load_doctor_state(vault);
+    let mut set = state
+        .ignored_alias_paths
+        .into_iter()
+        .map(|path| normalize_rel_path(&path))
+        .filter(|path| !path.is_empty())
+        .collect::<HashSet<_>>();
+    for raw in paths {
+        let path = normalize_rel_path(raw);
+        if path.is_empty() || !safe_relative_path(&path) {
+            return Err(AppError::message(format!("invalid ignore path: {raw}")));
+        }
+        if ignore {
+            set.insert(path);
+        } else {
+            set.remove(&path);
+        }
+    }
+    state.ignored_alias_paths = set.into_iter().collect();
+    save_doctor_state(vault, &state)?;
+    Ok(load_doctor_state(vault))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -371,6 +460,11 @@ fn disambiguate_short(
 
 fn alias_section(vault: &Path, papers: &[PaperRecord], index: &WikiIndex) -> AliasDoctorSection {
     let owners = alias_owners(index);
+    let ignored = load_doctor_state(vault)
+        .ignored_alias_paths
+        .into_iter()
+        .map(|path| normalize_rel_path(&path))
+        .collect::<HashSet<_>>();
     let mut report = AliasDoctorSection {
         ok: true,
         ..AliasDoctorSection::default()
@@ -378,6 +472,7 @@ fn alias_section(vault: &Path, papers: &[PaperRecord], index: &WikiIndex) -> Ali
     let mut reserved = HashSet::new();
     let mut sorted = papers.to_vec();
     sorted.sort_by(|left, right| left.path.cmp(&right.path));
+    let mut live_ignored = Vec::new();
 
     for (alias, paths) in &owners {
         if !alias.is_empty() && paths.len() > 1 {
@@ -410,6 +505,13 @@ fn alias_section(vault: &Path, papers: &[PaperRecord], index: &WikiIndex) -> Ali
         let inspection = inspect_aliases(&content);
         if distinct_aliases(&inspection.aliases) >= 2 {
             report.complete_papers += 1;
+            continue;
+        }
+
+        // User-ignored incomplete notes: still counted as checked, but not
+        // reported as errors and not offered as repair candidates.
+        if ignored.contains(&path) {
+            live_ignored.push(path);
             continue;
         }
 
@@ -462,6 +564,8 @@ fn alias_section(vault: &Path, papers: &[PaperRecord], index: &WikiIndex) -> Ali
         ));
         report.ok = false;
     }
+    live_ignored.sort();
+    report.ignored_paths = live_ignored;
     report
 }
 
@@ -779,6 +883,61 @@ fn write_note_bytes(path: &Path, contents: &[u8]) -> Result<(), String> {
 mod tests {
     use super::*;
     use uuid::Uuid;
+
+    fn temp_vault(name: &str) -> PathBuf {
+        let vault = std::env::temp_dir().join(format!("agentero-doctor-{name}-{}", Uuid::new_v4()));
+        fs::create_dir_all(vault.join("papers/demo")).unwrap();
+        fs::create_dir_all(vault.join("notes")).unwrap();
+        fs::create_dir_all(vault.join("plans")).unwrap();
+        vault
+    }
+
+    fn seed_paper(vault: &Path, title: &str, notes: &str) {
+        let connection = catalog::ensure_catalog(vault).unwrap();
+        connection
+            .execute(
+                "INSERT INTO papers(path, id, type, title, added_at, updated_at)
+                 VALUES('papers/demo', 'demo', 'paper', ?1, 'now', 'now')",
+                [title],
+            )
+            .unwrap();
+        fs::write(vault.join("papers/demo/NOTES.md"), notes).unwrap();
+    }
+
+    #[test]
+    fn ignored_alias_paths_persist_and_skip_candidates() {
+        let vault = temp_vault("ignore");
+        seed_paper(
+            &vault,
+            "Attention Is All You Need",
+            "# Notes without aliases\n",
+        );
+        let path = "papers/demo/NOTES.md".to_string();
+
+        let before = diagnose(&vault).unwrap();
+        assert!(!before.aliases.ok);
+        assert_eq!(before.aliases.candidates.len(), 1);
+        assert!(before.aliases.ignored_paths.is_empty());
+
+        let state = set_ignored_alias_paths(&vault, std::slice::from_ref(&path), true).unwrap();
+        assert_eq!(state.ignored_alias_paths, vec![path.clone()]);
+        assert!(doctor_state_path(&vault).is_file());
+
+        let after = diagnose(&vault).unwrap();
+        assert!(after.aliases.ok);
+        assert!(after.aliases.candidates.is_empty());
+        assert_eq!(after.aliases.ignored_paths, vec![path.clone()]);
+        assert_eq!(after.aliases.checked_papers, 1);
+        assert_eq!(after.aliases.complete_papers, 0);
+
+        let restored = set_ignored_alias_paths(&vault, &[path], false).unwrap();
+        assert!(restored.ignored_alias_paths.is_empty());
+        let again = diagnose(&vault).unwrap();
+        assert!(!again.aliases.ok);
+        assert_eq!(again.aliases.candidates.len(), 1);
+
+        let _ = fs::remove_dir_all(vault);
+    }
 
     #[test]
     fn suggests_expected_short_aliases() {

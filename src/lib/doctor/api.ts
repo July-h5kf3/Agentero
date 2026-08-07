@@ -58,8 +58,14 @@ export type DoctorReport = {
 		checkedPapers: number;
 		completePapers: number;
 		candidates: AliasRepairCandidate[];
+		/** Incomplete NOTES paths the user chose to ignore (persisted in vault). */
+		ignoredPaths: string[];
 		issues: DoctorIssue[];
 	};
+};
+
+export type DoctorVaultState = {
+	ignoredAliasPaths: string[];
 };
 
 export type AliasRepairChange = {
@@ -144,6 +150,17 @@ export function doctorApplyAliases(
 ): Promise<{ updatedPaths: string[] }> {
 	return invokeApi<{ updatedPaths: string[] }>("doctor_apply_aliases", {
 		args: { vaultPath, changes },
+	});
+}
+
+/** Persist ignore/restore for paper-alias candidates (vault `.agentero/doctor.json`). */
+export function doctorIgnoreAliases(
+	vaultPath: string,
+	paths: string[],
+	ignore: boolean,
+): Promise<DoctorVaultState> {
+	return invokeApi<DoctorVaultState>("doctor_ignore_aliases", {
+		args: { vaultPath, paths, ignore },
 	});
 }
 

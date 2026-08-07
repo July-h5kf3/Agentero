@@ -21,6 +21,7 @@ Vault/
 ├── .agents/skills/
 └── .agentero/
     ├── catalog.sqlite
+    ├── doctor.json     # 可选：Doctor 忽略列表等 Vault 本地偏好
     └── .trash/
 ```
 

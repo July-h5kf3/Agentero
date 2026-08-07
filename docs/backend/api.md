@@ -1884,6 +1884,13 @@ snapshot 保存所有 Wiki target 的 size+mtime stat 指纹（不读文件内�
 - 仅接受 Catalog paper 对应的 `papers/**/NOTES.md`。
 - 批量预检脏路径、哈希、alias 冲突与 YAML 安全范围；全部通过后**原地写入** frontmatter（不改 path），失败按规划内容回滚。不使用 tmp+rename，以免被 watcher 误报为外部改名。
 
+#### `doctor_ignore_aliases`
+
+- 参数：`{ vaultPath, paths, ignore }`。`paths` 为 Vault 相对 `papers/**/NOTES.md`；`ignore: true` 写入忽略列表，`false` 从列表移除。
+- 落盘：`.agentero/doctor.json` 的 `ignoredAliasPaths`。
+- 返回：更新后的 `DoctorVaultState`（`{ ignoredAliasPaths }`）。
+- 随后 `doctor_check` 不再把这些路径算作别名错误；报告中的 `aliases.ignoredPaths` 列出仍不完整且仍被忽略的路径。
+
 #### `doctor_plan_wikilinks`
 
 - 参数：`{ vaultPath }`。

@@ -1,4 +1,10 @@
-import { CheckCircle2, Copy, RefreshCw, TriangleAlert } from "lucide-react";
+import {
+	CheckCircle2,
+	Copy,
+	EyeOff,
+	RefreshCw,
+	TriangleAlert,
+} from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
@@ -40,6 +46,7 @@ import {
 	doctorApplyAliases,
 	doctorApplyWikilinks,
 	doctorCheck,
+	doctorIgnoreAliases,
 	doctorPlanWikilinks,
 	type WikiCheckIssue,
 	type WikilinkRepairResidual,
@@ -507,6 +514,21 @@ export function DoctorPane({
 		}
 	};
 
+	const ignorePaths = async (paths: string[], ignore: boolean) => {
+		if (!vaultPath || paths.length === 0) return;
+		try {
+			await doctorIgnoreAliases(vaultPath, paths, ignore);
+			notifySuccess(
+				ignore
+					? t("doctor.repair.ignored", { count: paths.length })
+					: t("doctor.repair.restored", { count: paths.length }),
+			);
+			await refresh();
+		} catch (error) {
+			notifyError(error instanceof Error ? error.message : String(error));
+		}
+	};
+
 	/** Deterministic plan only → review list + optional Agent prompt handoff. */
 	const startWikiProbe = async () => {
 		if (!vaultPath) return;
@@ -634,6 +656,7 @@ export function DoctorPane({
 	const catalogIssues = report?.catalog.issues ?? [];
 	const wikiIssues = report?.wikilinks.issues ?? [];
 	const aliasIssues = report?.aliases.issues ?? [];
+	const ignoredAliasPaths = report?.aliases.ignoredPaths ?? [];
 	const aliasIssueCount =
 		drafts.length +
 		aliasIssues.filter(
@@ -844,20 +867,39 @@ export function DoctorPane({
 				issueCount={aliasIssueCount}
 				action={
 					hasFixableAliases ? (
-						<Button
-							type="button"
-							size="sm"
-							disabled={selected.length === 0}
-							onClick={() => setConfirmOpen(true)}
-						>
-							{t("doctor.repair.apply")}
-						</Button>
+						<div className="flex shrink-0 items-center gap-2">
+							{selected.length > 0 ? (
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onClick={() =>
+										void ignorePaths(
+											selected.map((draft) => draft.path),
+											true,
+										)
+									}
+								>
+									{t("doctor.repair.ignoreSelected")}
+								</Button>
+							) : null}
+							<Button
+								type="button"
+								size="sm"
+								disabled={selected.length === 0}
+								onClick={() => setConfirmOpen(true)}
+							>
+								{t("doctor.repair.apply")}
+							</Button>
+						</div>
 					) : undefined
 				}
 				scrollable
 				showDivider={false}
 			>
-				{drafts.length > 0 || aliasIssues.length > 0 ? (
+				{drafts.length > 0 ||
+				aliasIssues.length > 0 ||
+				ignoredAliasPaths.length > 0 ? (
 					<>
 						{drafts.map((draft) => (
 							<div
@@ -875,12 +917,31 @@ export function DoctorPane({
 											patchDraft(draft.path, { selected: checked === true })
 										}
 									/>
-									<div className="min-w-0">
+									<div className="min-w-0 flex-1">
 										<p className="truncate text-[13px]">{draft.paperTitle}</p>
 										<p className="truncate text-muted-foreground text-xs">
 											{draft.path}
 										</p>
 									</div>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon"
+												className="size-7 shrink-0"
+												aria-label={t("doctor.repair.ignore", {
+													path: draft.path,
+												})}
+												onClick={() => void ignorePaths([draft.path], true)}
+											>
+												<EyeOff className="size-3.5" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent>
+											{t("doctor.repair.ignoreHint")}
+										</TooltipContent>
+									</Tooltip>
 								</div>
 								{draft.fixable ? (
 									<div className="grid gap-2 pl-6">
@@ -936,14 +997,82 @@ export function DoctorPane({
 									key={`${issue.code}:${issue.path ?? ""}:${issue.message}`}
 									className="border-b px-3.5 py-2.5 last:border-b-0"
 								>
-									<p className="text-[13px] leading-snug">{issue.message}</p>
-									{issue.path ? (
-										<p className="mt-0.5 truncate text-muted-foreground text-xs">
-											{issue.path}
-										</p>
-									) : null}
+									<div className="flex items-start gap-2">
+										<div className="min-w-0 flex-1">
+											<p className="text-[13px] leading-snug">
+												{issue.message}
+											</p>
+											{issue.path ? (
+												<p className="mt-0.5 truncate text-muted-foreground text-xs">
+													{issue.path}
+												</p>
+											) : null}
+										</div>
+										{issue.path ? (
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon"
+														className="size-7 shrink-0"
+														aria-label={t("doctor.repair.ignore", {
+															path: issue.path,
+														})}
+														onClick={() =>
+															void ignorePaths([issue.path as string], true)
+														}
+													>
+														<EyeOff className="size-3.5" />
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent>
+													{t("doctor.repair.ignoreHint")}
+												</TooltipContent>
+											</Tooltip>
+										) : null}
+									</div>
 								</div>
 							))}
+						{ignoredAliasPaths.length > 0 ? (
+							<div className="border-b px-3.5 py-2.5 last:border-b-0">
+								<div className="mb-1.5 flex items-center justify-between gap-2">
+									<p className="text-muted-foreground text-xs">
+										{t("doctor.repair.ignoredCount", {
+											count: ignoredAliasPaths.length,
+										})}
+									</p>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-7 px-2 text-xs"
+										onClick={() => void ignorePaths(ignoredAliasPaths, false)}
+									>
+										{t("doctor.repair.restoreAll")}
+									</Button>
+								</div>
+								<ul className="space-y-1">
+									{ignoredAliasPaths.map((path) => (
+										<li
+											key={path}
+											className="flex items-center gap-2 text-muted-foreground text-xs"
+										>
+											<span className="min-w-0 flex-1 truncate">{path}</span>
+											<Button
+												type="button"
+												variant="ghost"
+												size="sm"
+												className="h-6 shrink-0 px-1.5 text-xs"
+												onClick={() => void ignorePaths([path], false)}
+											>
+												{t("doctor.repair.restore")}
+											</Button>
+										</li>
+									))}
+								</ul>
+							</div>
+						) : null}
 					</>
 				) : null}
 			</DoctorSection>
