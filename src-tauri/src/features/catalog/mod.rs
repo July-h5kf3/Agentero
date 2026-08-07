@@ -1,7 +1,6 @@
 //! Vault paper catalog: `.agentero/catalog.sqlite`.
 //!
 //! Authoritative store for paper set + structured metadata.
-//! `metadata.json` is a projection synced after SQLite writes.
 //! See `docs/backend/catalog.md`.
 
 pub mod papers;

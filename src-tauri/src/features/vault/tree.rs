@@ -42,7 +42,7 @@ const ALLOWED_DOT_NAMES: &[&str] = &[".env.example", ".agents"];
 const EAGER_ROOT_NAMES: &[&str] = &["papers", "notes", "plans", ".agents"];
 
 /// Any of these marks a directory as a paper unit whose `source/` is lazy.
-const PAPER_MARKER_FILES: &[&str] = &["metadata.json", "NOTES.md", "PAPER.md"];
+const PAPER_MARKER_FILES: &[&str] = &["NOTES.md", "PAPER.md"];
 
 const LAZY_PAPER_DIR: &str = "source";
 

@@ -54,11 +54,7 @@ export const TREE_EAGER_ROOT_NAMES = new Set([
 const TREE_ALLOWED_DOT_NAMES = new Set([".env.example", ".agents"]);
 
 /** Any of these marks a directory as a paper unit whose `source/` is lazy. */
-const PAPER_MARKER_FILE_NAMES = new Set([
-	"metadata.json",
-	"NOTES.md",
-	"PAPER.md",
-]);
+const PAPER_MARKER_FILE_NAMES = new Set(["NOTES.md", "PAPER.md"]);
 
 /** Paper subdirectory listed lazily (arXiv e-prints hold hundreds of files). */
 const LAZY_PAPER_DIR_NAME = "source";

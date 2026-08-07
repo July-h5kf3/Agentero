@@ -1,5 +1,4 @@
 //! papers table CRUD. Catalog is the authority for paper metadata.
-//! `metadata.json` is a projection written after SQLite upsert.
 
 use super::schema::ensure_catalog;
 use crate::core::error::AppError;
@@ -171,11 +170,10 @@ pub struct PaperRecord {
     pub updated_at: String,
 }
 
-/// Upsert paper row, then sync `metadata.json` under the paper folder.
+/// Upsert paper row to catalog.
 pub fn upsert_paper(vault_root: &Path, record: &PaperRecord) -> Result<PaperRecord, AppError> {
     let conn = ensure_catalog(vault_root)?;
     upsert_conn(&conn, record)?;
-    sync_metadata_json(vault_root, record)?;
     Ok(record.clone())
 }
 
@@ -293,8 +291,8 @@ pub fn list_all_conn(conn: &Connection) -> Result<Vec<PaperRecord>, AppError> {
     Ok(rows)
 }
 
-/// Rebuild missing catalog rows by scanning `papers/` on disk and re-importing
-/// each folder's `metadata.json` (the projection). Idempotent — existing rows
+/// Rebuild missing catalog rows by scanning `papers/` on disk.
+/// Detects paper folders by NOTES.md presence. Idempotent — existing rows
 /// are refreshed and disk-only papers are re-added. Returns the count imported.
 pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
     let papers_dir = vault_root.join("papers");
@@ -305,20 +303,69 @@ pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
     let mut count = 0usize;
     let mut stack = vec![papers_dir];
     while let Some(dir) = stack.pop() {
-        if dir.join("metadata.json").is_file() {
-            // A paper folder is a leaf: re-import it and do not descend.
-            if let Some(mut record) = record_from_metadata(vault_root, &dir) {
-                // When body_source is unknown, scan the local folder for TeX files
-                // so papers with TeX in lazy‑loaded source/ don't show a false
-                // "download TeX" indicator in the frontend.
-                if record.body_source.is_none() && has_local_tex_in_tree(&dir) {
-                    record.body_source = Some("latex".to_string());
-                    if record.body_quality.is_none() {
-                        record.body_quality = Some("high".to_string());
+        if dir.join("NOTES.md").is_file() {
+            // A paper folder is a leaf: create minimal record and do not descend.
+            let rel = dir
+                .strip_prefix(vault_root)
+                .ok()
+                .and_then(|p| p.to_str())
+                .map(|s| s.replace('\\', "/").trim_matches('/').to_string());
+            if let Some(rel_path) = rel {
+                if !rel_path.is_empty() {
+                    // Check if already in catalog
+                    if get_conn(&conn, &rel_path).ok().flatten().is_none() {
+                        // Create minimal record from folder name
+                        let folder_name = dir
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or(&rel_path)
+                            .to_string();
+                        let now =
+                            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                        let record = PaperRecord {
+                            path: rel_path,
+                            id: folder_name.clone(),
+                            paper_type: "pdf".to_string(),
+                            title: folder_name,
+                            authors: vec![],
+                            creators: None,
+                            year: None,
+                            date: None,
+                            abstract_text: None,
+                            tags: vec![],
+                            arxiv_id: None,
+                            doi: None,
+                            isbn: None,
+                            issn: None,
+                            pmid: None,
+                            publication: None,
+                            volume: None,
+                            issue: None,
+                            pages: None,
+                            publisher: None,
+                            place: None,
+                            series: None,
+                            language: None,
+                            pdf_url: None,
+                            html_url: None,
+                            source_url: None,
+                            body_source: None,
+                            body_quality: None,
+                            bibtex_key: None,
+                            citation_count: None,
+                            zotero_item_type: None,
+                            meta_source: None,
+                            extra: None,
+                            summary: None,
+                            status: "completed".to_string(),
+                            is_read: false,
+                            added_at: now.clone(),
+                            updated_at: now,
+                        };
+                        if upsert_conn(&conn, &record).is_ok() {
+                            count += 1;
+                        }
                     }
-                }
-                if upsert_conn(&conn, &record).is_ok() {
-                    count += 1;
                 }
             }
             continue;
@@ -333,54 +380,6 @@ pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
         }
     }
     Ok(count)
-}
-
-/// True when a paper folder (or its source/ subdirectory) contains at least one
-/// .tex or .ltx file. Scans the filesystem directly, so it works for lazy‑loaded
-/// directories that the file tree skips.
-fn has_local_tex_in_tree(dir: &Path) -> bool {
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(current) = stack.pop() {
-        if !current.is_dir() {
-            continue;
-        }
-        if let Ok(entries) = fs::read_dir(&current) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    if stack.len() < 64 {
-                        stack.push(path);
-                    }
-                } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    let lower = ext.to_ascii_lowercase();
-                    if lower == "tex" || lower == "ltx" {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    false
-}
-
-/// Read a paper folder's `metadata.json`, re-injecting the folder path (which
-/// the projection omits) so it deserializes into a full [`PaperRecord`].
-fn record_from_metadata(vault_root: &Path, dir: &Path) -> Option<PaperRecord> {
-    let rel = dir
-        .strip_prefix(vault_root)
-        .ok()?
-        .to_str()?
-        .replace('\\', "/")
-        .trim_matches('/')
-        .to_string();
-    if rel.is_empty() {
-        return None;
-    }
-    let raw = fs::read_to_string(dir.join("metadata.json")).ok()?;
-    let mut val: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    let obj = val.as_object_mut()?;
-    obj.insert("path".to_string(), serde_json::Value::String(rel));
-    serde_json::from_value::<PaperRecord>(val).ok()
 }
 
 /// Set `is_read` for a paper path; returns the updated row.
@@ -797,24 +796,6 @@ fn get_conn(conn: &Connection, path: &str) -> Result<Option<PaperRecord>, AppErr
         .map_err(AppError::from)?;
 
     Ok(row)
-}
-
-/// Projection: write metadata.json next to NOTES after catalog change.
-pub fn sync_metadata_json(vault_root: &Path, record: &PaperRecord) -> Result<(), AppError> {
-    let paper_dir = vault_root.join(&record.path);
-    if !paper_dir.exists() {
-        fs::create_dir_all(&paper_dir)?;
-    }
-    // Omit vault-relative path from file copy (folder identity is the path itself)
-    let mut file_copy =
-        serde_json::to_value(record).map_err(|e| AppError::message(e.to_string()))?;
-    if let Some(obj) = file_copy.as_object_mut() {
-        obj.remove("path");
-    }
-    let json =
-        serde_json::to_string_pretty(&file_copy).map_err(|e| AppError::message(e.to_string()))?;
-    fs::write(paper_dir.join("metadata.json"), format!("{json}\n"))?;
-    Ok(())
 }
 
 #[cfg(test)]

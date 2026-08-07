@@ -17,12 +17,6 @@ export function isUnderPapers(path: string | null): boolean {
 	return /(^|\/)papers\//i.test(norm);
 }
 
-/** `<paperDir>/metadata.json` — write-side projection for rescan / external tools. */
-export function metadataPathForPaper(paperDir: string): string {
-	const sep = paperDir.endsWith("/") ? "" : "/";
-	return `${paperDir}${sep}metadata.json`;
-}
-
 /** `<paperDir>/NOTES.md` — structured notes for the paper. */
 export function notesPathForPaper(paperDir: string): string {
 	const sep = paperDir.endsWith("/") ? "" : "/";

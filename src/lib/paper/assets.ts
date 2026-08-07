@@ -1,8 +1,4 @@
-export const PAPER_FILE_MARKERS = [
-	"NOTES.md",
-	"PAPER.md",
-	"metadata.json",
-] as const;
+export const PAPER_FILE_MARKERS = ["NOTES.md", "PAPER.md"] as const;
 
 /** Direct-child directory names that mark a paper folder. */
 export const PAPER_DIR_MARKERS = ["source", "assets", "marks"] as const;

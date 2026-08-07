@@ -3,7 +3,6 @@ import { paperNeedsAssetDownload } from "@/lib/paper/assets";
 import {
 	isPapersRoot,
 	isUnderPapers,
-	metadataPathForPaper,
 	notesPathForPaper,
 } from "@/lib/paper/paths";
 import { readVaultFile } from "@/lib/vault/fs";
@@ -16,7 +15,7 @@ type NameKind = {
 	children?: NameKind[];
 };
 
-const PAPER_FILE_MARKERS = new Set(["notes.md", "paper.md", "metadata.json"]);
+const PAPER_FILE_MARKERS = new Set(["notes.md", "paper.md"]);
 const PAPER_DIR_MARKERS = new Set(["source", "assets", "marks"]);
 
 function isDirectoryEntry(entry: NameKind): boolean {
@@ -290,12 +289,6 @@ export async function detectPaperDirectory(path: string): Promise<boolean> {
 	if (!isUnderPapers(path) || isPapersRoot(path)) return false;
 	try {
 		await readVaultFile(notesPathForPaper(path));
-		return true;
-	} catch {
-		// continue
-	}
-	try {
-		await readVaultFile(metadataPathForPaper(path));
 		return true;
 	} catch {
 		return false;

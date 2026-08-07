@@ -116,7 +116,7 @@ export async function listPapers(vaultPath: string): Promise<PaperMetadata[]> {
 
 export type PaperRescanResult = { count: number };
 
-/** Rebuild catalog rows from papers/ metadata.json (recover disk-only papers). */
+/** Rebuild catalog rows from papers/ on disk (recover disk-only papers). */
 export async function rescanPapers(vaultPath: string): Promise<number> {
 	if (!isTauri()) return 0;
 	const { isRemoteVaultHandle, remotePaperRescan, remoteSessionIdFromHandle } =

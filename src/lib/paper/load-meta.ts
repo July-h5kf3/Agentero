@@ -17,7 +17,6 @@ function enrichArxivUrls(data: PaperMetadata): PaperMetadata {
 
 /**
  * Vault-relative paper folder path for catalog APIs.
- * `metadata.json` omits `path` (folder identity is the path); callers must re-inject it.
  */
 export function paperCatalogPath(
 	paperDir: string,
@@ -35,7 +34,6 @@ export function paperCatalogPath(
  * Load paper metadata from catalog.sqlite via Host `paper_get`.
  *
  * Always sets `path` (vault-relative) when `vaultRoot` is known.
- * Projection file `metadata.json` is write-only for rescan / external tools.
  *
  * @param paperDir absolute paper folder path
  * @param vaultRoot absolute vault root (needed for catalog lookup)
