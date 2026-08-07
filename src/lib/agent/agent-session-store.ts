@@ -84,6 +84,8 @@ type AgentSessionStore = {
 			| ((prev: AgentSessionRecord[]) => AgentSessionRecord[]),
 	) => void;
 	setActiveTabId: (id: string) => void;
+	/** Start an empty draft without mutating the transcript of the active session. */
+	startDraft: () => void;
 	/** Replace/update lines for the active tab (draft or session row). */
 	setLines: (update: ChatLine[] | ((prev: ChatLine[]) => ChatLine[])) => void;
 	setSubmitting: (v: boolean) => void;
@@ -95,6 +97,12 @@ type AgentSessionStore = {
 	upsertSession: (
 		session: AgentSessionRecord,
 		opts?: { activate?: boolean },
+	) => void;
+	/** Atomically publish a loaded transcript and make that history item active. */
+	hydrateAndActivateSession: (
+		session: AgentSessionRecord,
+		lines: ChatLine[],
+		title?: string,
 	) => void;
 	/** Patch lines on a session by id (stream correlation or product id). */
 	updateSessionLines: (
@@ -150,6 +158,8 @@ export const agentSessionStore = createStore<AgentSessionStore>((set, get) => ({
 			return { activeTabId: id };
 		}),
 
+	startDraft: () => set({ activeTabId: "draft", draftLines: EMPTY_CHAT_LINES }),
+
 	setLines: (update) =>
 		set((s) => {
 			if (s.activeTabId === "draft") {
@@ -199,6 +209,30 @@ export const agentSessionStore = createStore<AgentSessionStore>((set, get) => ({
 			}
 			if (sessions === s.sessions) return s;
 			return { sessions };
+		});
+	},
+
+	hydrateAndActivateSession: (session, lines, title) => {
+		set((s) => {
+			const idx = s.sessions.findIndex(
+				(item) => item.id === session.id && item.agentId === session.agentId,
+			);
+			const current = idx >= 0 ? s.sessions[idx] : undefined;
+			const hydrated = {
+				...session,
+				...current,
+				...(title !== undefined ? { title } : {}),
+				lines,
+			};
+			const sessions =
+				idx >= 0
+					? s.sessions.map((item, i) => (i === idx ? hydrated : item))
+					: [hydrated, ...s.sessions];
+			return {
+				sessions,
+				activeTabId: hydrated.id,
+				draftLines: EMPTY_CHAT_LINES,
+			};
 		});
 	},
 

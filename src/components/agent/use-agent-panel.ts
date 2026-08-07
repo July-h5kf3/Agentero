@@ -88,7 +88,10 @@ import {
 	nextPartId,
 	type PendingSessionEvent,
 	type PendingTerminalEvent,
+	providerSessionIdForHistoryLoad,
 	resolveSelected,
+	shouldDeferSessionEvent,
+	upsertChatSessionTurn,
 	upsertPlanPart,
 } from "@/lib/agent/chat-state";
 import {
@@ -265,6 +268,10 @@ export function useAgentPanel({
 	const setSessionHistory = useAgentSessionStore((s) => s.setSessions);
 	const activeTabId = useAgentSessionStore((s) => s.activeTabId);
 	const setActiveTabId = useAgentSessionStore((s) => s.setActiveTabId);
+	const startDraft = useAgentSessionStore((s) => s.startDraft);
+	const hydrateAndActivateSession = useAgentSessionStore(
+		(s) => s.hydrateAndActivateSession,
+	);
 	const setStoreSubmitting = useAgentSessionStore((s) => s.setSubmitting);
 	const [switching, setSwitching] = useState(false);
 	const [usage, setUsage] = useState<{ used: number; size: number } | null>(
@@ -362,6 +369,7 @@ export function useAgentPanel({
 	const pendingSessionEventsRef = useRef(
 		new Map<string, PendingSessionEvent[]>(),
 	);
+	/** Runtime id awaiting publication; never the provider id used for resume. */
 	const pendingSubmissionSessionIdRef = useRef<string | null>(null);
 	const knownSessionIdsRef = useRef(new Set<string>());
 	/** Per-session <think> tag parsers for message-channel reasoning (DeepSeek etc.). */
@@ -1042,12 +1050,12 @@ export function useAgentPanel({
 	);
 
 	const shouldDeferTerminalEvent = useCallback((sessionId: string) => {
-		if (!submittingRef.current) return false;
-		const expectedSessionId = pendingSubmissionSessionIdRef.current;
-		return (
-			expectedSessionId === sessionId ||
-			(expectedSessionId === null && !knownSessionIdsRef.current.has(sessionId))
-		);
+		return shouldDeferSessionEvent({
+			sessionId,
+			submitting: submittingRef.current,
+			pendingRuntimeSessionId: pendingSubmissionSessionIdRef.current,
+			knownSessionIds: knownSessionIdsRef.current,
+		});
 	}, []);
 
 	useEffect(() => {
@@ -1195,13 +1203,23 @@ export function useAgentPanel({
 				(s) => !isBackgroundWorkflowHistoryTitle(s.title ?? ""),
 			);
 			setSessionHistory((prev) => {
-				const existing = new Map(
-					prev
-						.filter((item) => item.agentId === selectedAgentId)
-						.map((item) => [item.id, item]),
+				const existingForAgent = prev.filter(
+					(item) => item.agentId === selectedAgentId,
+				);
+				const existingById = new Map(
+					existingForAgent.map((item) => [item.id, item]),
+				);
+				const existingByProvider = new Map(
+					existingForAgent
+						.filter((item) => item.providerSessionId?.trim())
+						.map((item) => [item.providerSessionId?.trim() as string, item]),
 				);
 				const imported = chatSessions.map((session) => {
-					const current = existing.get(session.sessionId);
+					// A local runtime row may have a different id from the durable
+					// provider session returned by session/list after a resumed turn.
+					const current =
+						existingById.get(session.sessionId) ??
+						existingByProvider.get(session.sessionId);
 					const startedAt = session.updatedAt
 						? new Date(session.updatedAt).toLocaleString(i18n.language)
 						: "";
@@ -1247,6 +1265,7 @@ export function useAgentPanel({
 					(item) =>
 						item.agentId === selectedAgentId &&
 						!importedIds.has(item.id) &&
+						!importedIds.has(item.providerSessionId?.trim() ?? "") &&
 						!isBackgroundWorkflowHistoryTitle(item.title) &&
 						(item.status === "running" ||
 							(item.source === "local" && item.lines.length > 0)),
@@ -1940,7 +1959,10 @@ export function useAgentPanel({
 			const resumeSessionId = resumeAllowed
 				? (providerContinueId ?? undefined)
 				: undefined;
-			pendingSubmissionSessionIdRef.current = resumeSessionId ?? null;
+			// Terminal/stream events are correlated by the fresh Agentero runtime
+			// id, not the provider id used to resume ACP. Keep this empty until the
+			// host accepts the request, then bind it to accepted.sessionId below.
+			pendingSubmissionSessionIdRef.current = null;
 			const accepted = await runOnce({
 				agentId,
 				sessionId: resumeSessionId,
@@ -1967,6 +1989,7 @@ export function useAgentPanel({
 				return false;
 			}
 			knownSessionIdsRef.current.add(accepted.sessionId);
+			pendingSubmissionSessionIdRef.current = accepted.sessionId;
 			// Bind disk finalizers for this runtime session:
 			// - first turn with visualDrafts → create mark files
 			// - follow-up on a bound pin (no new drafts) → re-register pending
@@ -2128,42 +2151,45 @@ export function useAgentPanel({
 				options?.paperAbsPath?.trim() ||
 				historyPaperAbs ||
 				resolvedVisualDrafts[0]?.paperAbsPath;
-			setSessionHistory((prev) => [
-				{
-					id: accepted.sessionId,
-					agentId,
-					source: "local",
-					title: historyTitle || activeHistory?.title || t("defaultName"),
-					agentName: selected?.name ?? t("defaultName"),
-					startedAt:
-						activeHistory?.startedAt ||
-						new Date().toLocaleString(i18n.language),
-					lines: historyLines,
-					status: "running",
-					// Carry over pin session provider id until completed event.
-					providerSessionId: activeHistory?.providerSessionId ?? null,
-					resumeable: true,
-					...(boundVisualTraceId ? { visualTraceId: boundVisualTraceId } : {}),
-					...(boundPaperAbs ? { paperAbsPath: boundPaperAbs } : {}),
-				},
-				// Drop superseded visual-trace placeholder / duplicate runtime rows.
-				...prev.filter(
-					(item) =>
-						item.id !== accepted.sessionId &&
-						!(
-							activeHistory &&
-							isVisualTraceHistoryId(activeHistory.id) &&
-							item.id === activeHistory.id
-						) &&
-						!(
-							boundVisualTraceId &&
-							"visualTraceId" in item &&
-							(item as { visualTraceId?: string }).visualTraceId ===
+			const nextHistoryItem: ChatSessionHistoryItem = {
+				id: accepted.sessionId,
+				agentId,
+				source: "local",
+				title: activeHistory?.title || historyTitle || t("defaultName"),
+				agentName: selected?.name ?? t("defaultName"),
+				startedAt:
+					activeHistory?.startedAt || new Date().toLocaleString(i18n.language),
+				lines: historyLines,
+				status: "running",
+				// Carry over pin session provider id until completed event.
+				providerSessionId: activeHistory?.providerSessionId ?? null,
+				resumeable: true,
+				...(boundVisualTraceId ? { visualTraceId: boundVisualTraceId } : {}),
+				...(boundPaperAbs ? { paperAbsPath: boundPaperAbs } : {}),
+			};
+			setSessionHistory((prev) =>
+				upsertChatSessionTurn(
+					// Drop superseded visual-trace placeholders before applying the
+					// provider-id based conversation merge.
+					prev.filter(
+						(item) =>
+							!(
+								activeHistory &&
+								isVisualTraceHistoryId(activeHistory.id) &&
+								item.id === activeHistory.id
+							) &&
+							!(
 								boundVisualTraceId &&
-							item.id !== accepted.sessionId
-						),
+								"visualTraceId" in item &&
+								(item as { visualTraceId?: string }).visualTraceId ===
+									boundVisualTraceId &&
+								item.id !== accepted.sessionId
+							),
+					),
+					nextHistoryItem,
+					activeHistory,
 				),
-			]);
+			);
 			setLines(pendingLines);
 			for (const pendingEvent of pendingSessionEvents) {
 				if (pendingEvent.kind === "stream") {
@@ -2779,9 +2805,8 @@ export function useAgentPanel({
 	const newConversation = () => {
 		if (submittingRef.current) return;
 		historyHydrationGenRef.current += 1;
-		setLines([]);
+		startDraft();
 		resetComposerSession("draft");
-		setActiveTabId("draft");
 		activeTabRef.current = "draft";
 		activeConversationRef.current = null;
 		clearMessageQueue();
@@ -2822,18 +2847,19 @@ export function useAgentPanel({
 
 	const openHistorySession = (item: ChatSessionHistoryItem) => {
 		if (submittingRef.current) return;
+		const providerSessionId = providerSessionIdForHistoryLoad(item);
 		const hydrationGeneration = ++historyHydrationGenRef.current;
 		setHistoryOpen(false);
 		clearMessageQueue();
 		if (!supportsResume || item.lines.length > 0) {
+			const localLines = sanitizeChatLines(item.lines);
 			activateComposerSession(item.id);
-			setLines(sanitizeChatLines(item.lines));
 			activeTabRef.current = item.id;
-			setActiveTabId(item.id);
+			hydrateAndActivateSession(item, localLines);
 			// Visual-trace (and other non-resumeable) sessions keep multi-turn
 			// context in local lines; never set an ACP resume id for them.
 			if (supportsResume && item.resumeable !== false) {
-				activeConversationRef.current = item.providerSessionId ?? item.id;
+				activeConversationRef.current = providerSessionId;
 			} else {
 				activeConversationRef.current = null;
 			}
@@ -2846,7 +2872,7 @@ export function useAgentPanel({
 			try {
 				const history = await loadSession({
 					agentId: requestAgentId,
-					sessionId: item.id,
+					sessionId: providerSessionId,
 					vaultPath: requestVaultPath ?? undefined,
 				});
 				if (
@@ -2932,22 +2958,10 @@ export function useAgentPanel({
 					firstUser?.kind === "user"
 						? displayHistoryTitle(firstUser.text, history.title ?? "")
 						: displayHistoryTitle(history.title ?? "");
-				setSessionHistory((prev) =>
-					prev.map((entry) =>
-						entry.id === item.id && entry.agentId === requestAgentId
-							? {
-									...entry,
-									title: titleFromBody,
-									lines: nextLines,
-								}
-							: entry,
-					),
-				);
-				activeConversationRef.current = item.providerSessionId ?? item.id;
+				activeConversationRef.current = providerSessionId;
 				activateComposerSession(item.id);
 				activeTabRef.current = item.id;
-				setActiveTabId(item.id);
-				setLines(nextLines);
+				hydrateAndActivateSession(item, nextLines, titleFromBody);
 			} catch (error) {
 				if (
 					hydrationGeneration !== historyHydrationGenRef.current ||
