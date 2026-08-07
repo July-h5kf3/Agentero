@@ -5,6 +5,7 @@ Create Vault seeds these when missing. Pick with `$` in Composer.
 | Skill | Role |
 | --- | --- |
 | `paper-reader` | 精读 → `{paper}/NOTES.md`，只创建可解析双链 |
+| `equation-annotation` | 公式与变量释义 → `{paper}/Annotation.md`（en / zh-CN 单语） |
 | `agentero-cli` | headless `agentero` CLI，含只读双链检查 |
 | `vault-normalizer` | 整理现有研究目录并对比迁移前后的双链诊断 |
 | `idea-evaluator` | 研究 idea 评审 |
@@ -19,4 +20,4 @@ Create Vault seeds these when missing. Pick with `$` in Composer.
 **License: [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)**  
 Full text: [`LICENSE-Supervisor-Skills.txt`](LICENSE-Supervisor-Skills.txt)
 
-`paper-reader` / `agentero-cli` / `vault-normalizer` are first-party (Agentero license).
+`paper-reader` / `equation-annotation` / `agentero-cli` / `vault-normalizer` are first-party (Agentero license).
