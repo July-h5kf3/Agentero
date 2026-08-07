@@ -46,10 +46,16 @@ export type CatalogEntry = {
 	installHint: string;
 	/** Shell command for guided install (e.g. Claude ACP adapter via npm). */
 	installCommand?: string | null;
-	/** Host CLI present but ACP entrypoint missing — show install button. */
+	/** Host CLI present but ACP entrypoint missing — offer ACP install. */
 	offerInstall?: boolean;
+	/** Local silent install via `runToolLifecycle` is supported. */
+	canInstall?: boolean;
+	/** Host detect binary differs from ACP entrypoint (Claude/Codex adapters). */
+	adapterDistinct?: boolean;
+	/** Agent host CLI on PATH (`detect_command`). */
 	binaryAvailable: boolean;
 	resolvedPath?: string | null;
+	/** ACP entrypoint on PATH (`command`). */
 	acpCommandAvailable: boolean;
 	acpStatus: CatalogAcpStatus;
 	registeredId?: string | null;
@@ -336,12 +342,29 @@ export async function probeCatalogAgent(
 	return invokeAgentApi("agent_probe_catalog", { templateId });
 }
 
+export type ToolLifecycleAction = "install" | "update";
+
 /**
- * Open the system terminal with the template's install command and wait for
- * the user to confirm (Enter) before running. Host only allows known templates.
+ * Silently install or update a catalog Agent CLI (and ACP adapter when needed).
+ * Host only allows known templates — no free-form shell from the UI.
  */
-export async function openInstallTerminal(templateId: string): Promise<void> {
-	await invokeAgentApi("agent_open_install_terminal", { templateId });
+export async function runToolLifecycle(
+	templateId: string,
+	action: ToolLifecycleAction,
+): Promise<void> {
+	await invokeAgentApi("agent_run_tool_lifecycle", { templateId, action });
+}
+
+/** Whether silent install/update is available for this catalog template. */
+export async function toolLifecycleSupported(
+	templateId: string,
+): Promise<boolean> {
+	return invokeAgentApi("agent_tool_lifecycle_supported", { templateId });
+}
+
+/** Platform-specific manual install commands (copyable help text). */
+export async function toolInstallCommands(): Promise<string> {
+	return invokeAgentApi("agent_tool_install_commands", {});
 }
 
 export type PromptImage = {

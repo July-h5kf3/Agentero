@@ -61,9 +61,24 @@ export function catalogNeedsProbe(
 	entry: CatalogEntry,
 	force: boolean,
 ): boolean {
-	if (!(entry.binaryAvailable || entry.acpCommandAvailable)) return false;
+	// Only probe when the ACP entrypoint exists (not merely host CLI).
+	if (!entry.acpCommandAvailable) return false;
 	if (force) return true;
 	return entry.acpStatus === "not-probed" || entry.acpStatus === "failed";
+}
+
+/** Local silent install of the host Agent CLI (and adapter when needed). */
+export function showInstallAgent(entry: CatalogEntry): boolean {
+	return Boolean(entry.canInstall) && !entry.binaryAvailable;
+}
+
+/**
+ * Host CLI present but ACP entrypoint missing — install adapter / ACP mode only.
+ * For native-ACP agents (detect === command), host missing is handled by Install Agent.
+ */
+export function showInstallAcp(entry: CatalogEntry): boolean {
+	if (!entry.binaryAvailable || entry.acpCommandAvailable) return false;
+	return Boolean(entry.offerInstall || entry.canInstall);
 }
 
 export function patchCatalogProbe(

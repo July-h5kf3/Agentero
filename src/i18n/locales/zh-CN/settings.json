@@ -140,13 +140,20 @@
 		"probing": "探测中…",
 		"scanning": "扫描中…",
 		"useDefault": "设为默认",
+		"installAgent": "安装",
+		"installAgentAria": "安装 {{name}} Agent CLI",
+		"installAgentTitle": "后台安装 Agent CLI",
 		"installAdapter": "安装 ACP",
-		"installAdapterAria": "在终端中安装 {{name}} 的 ACP 适配器",
-		"installAdapterTitle": "打开终端：{{command}}（按 Enter 确认）",
+		"installAdapterAria": "安装 {{name}} 的 ACP 适配器",
+		"installAdapterTitle": "后台安装 ACP 适配器",
+		"installSuccess": "已安装 {{name}}",
 		"badges": {
 			"default": "默认",
 			"installed": "已安装",
 			"notInstalled": "未安装",
+			"agentInstalled": "Agent",
+			"agentMissing": "无 Agent",
+			"acpMissing": "无 ACP",
 			"adapterMissing": "缺 ACP 适配器"
 		},
 		"permission": {

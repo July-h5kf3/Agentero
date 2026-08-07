@@ -147,13 +147,20 @@
 		"probing": "Probing…",
 		"scanning": "Scanning…",
 		"useDefault": "Use default",
+		"installAgent": "Install",
+		"installAgentAria": "Install {{name}} agent CLI",
+		"installAgentTitle": "Install agent CLI in the background",
 		"installAdapter": "Install ACP",
-		"installAdapterAria": "Install ACP adapter for {{name}} in Terminal",
-		"installAdapterTitle": "Open Terminal: {{command}} (press Enter to confirm)",
+		"installAdapterAria": "Install ACP adapter for {{name}}",
+		"installAdapterTitle": "Install ACP adapter in the background",
+		"installSuccess": "Installed {{name}}",
 		"badges": {
 			"default": "default",
 			"installed": "installed",
 			"notInstalled": "not installed",
+			"agentInstalled": "Agent",
+			"agentMissing": "No agent",
+			"acpMissing": "No ACP",
 			"adapterMissing": "ACP adapter missing"
 		},
 		"permission": {
