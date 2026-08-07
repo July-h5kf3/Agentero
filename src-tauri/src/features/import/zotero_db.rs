@@ -113,6 +113,8 @@ pub struct ZoteroMigrateResult {
     pub copied_pdfs: usize,
     /// Zotero notes backfilled into existing papers' NOTES.md (already-present papers).
     pub notes_added: usize,
+    /// Already-imported papers moved into their collection folder on re-migration.
+    pub relocated: usize,
     /// Orphan catalog rows removed before import (paper folder gone from disk).
     pub pruned: usize,
     pub paths: Vec<String>,
@@ -288,6 +290,13 @@ pub async fn migrate_zotero(
                 out.notes_added += 1;
                 out.paths.push(path);
             }
+            Ok(MigrateOutcome::Relocated { path, backfilled }) => {
+                out.relocated += 1;
+                if backfilled {
+                    out.notes_added += 1;
+                }
+                out.paths.push(path);
+            }
             Ok(MigrateOutcome::Skipped) => out.skipped += 1,
             Err(e) => out.errors.push(e.to_string()),
         }
@@ -320,6 +329,7 @@ pub async fn migrate_zotero(
 enum MigrateOutcome {
     Imported { path: String, copied_pdf: bool },
     NotesBackfilled { path: String },
+    Relocated { path: String, backfilled: bool },
     Skipped,
 }
 
@@ -347,26 +357,54 @@ async fn migrate_one(
 
     let blocks = note_blocks(item, flags.migrate_notes, flags.migrate_annotations);
 
-    if dedup.contains(&meta) {
-        // Paper already in the vault: backfill missing notes/annotations into its
-        // NOTES.md (idempotent by content); never re-import or touch other content.
-        if !blocks.is_empty() {
-            if let Some(existing) = dedup.existing_path(&meta) {
-                let notes_md = vault.join(&existing).join("NOTES.md");
-                if notes_md.is_file() && append_markdown_blocks(&notes_md, &blocks) {
-                    return Ok(MigrateOutcome::NotesBackfilled { path: existing });
-                }
-            }
-        }
-        return Ok(MigrateOutcome::Skipped);
-    }
-
     // Recreate the Zotero collection folder under the base parent when requested.
     let base_parent = if flags.preserve_collections && !item.collection_path.is_empty() {
         format!("{parent_rel}/{}", item.collection_path.join("/"))
     } else {
         parent_rel.to_string()
     };
+
+    if dedup.contains(&meta) {
+        // Paper already in the vault. When it sits outside its collection
+        // folder (e.g. a legacy flat import), move it into place so a
+        // re-migration converges onto the Zotero tree; then backfill missing
+        // notes/annotations into NOTES.md (idempotent by content). Never
+        // re-import or touch other content.
+        let mut path = dedup.existing_path(&meta);
+        let mut relocated = false;
+        if flags.preserve_collections && !item.collection_path.is_empty() {
+            if let Some(existing) = path.clone() {
+                if let Some(new_rel) = plan_relocation(&existing, &base_parent) {
+                    relocate_paper(vault, &existing, &new_rel)?;
+                    dedup.insert(&meta, &new_rel);
+                    path = Some(new_rel);
+                    relocated = true;
+                }
+            }
+        }
+        let mut backfilled = false;
+        if !blocks.is_empty() {
+            if let Some(p) = &path {
+                let notes_md = vault.join(p).join("NOTES.md");
+                if notes_md.is_file() && append_markdown_blocks(&notes_md, &blocks) {
+                    backfilled = true;
+                }
+            }
+        }
+        if relocated {
+            return Ok(MigrateOutcome::Relocated {
+                path: path.unwrap_or_default(),
+                backfilled,
+            });
+        }
+        if backfilled {
+            return Ok(MigrateOutcome::NotesBackfilled {
+                path: path.unwrap_or_default(),
+            });
+        }
+        return Ok(MigrateOutcome::Skipped);
+    }
+
     let (folder_id, path_rel, paper_dir) = allocate_paper_path(vault, &base_parent, &id);
     meta.id = folder_id;
     fs::create_dir_all(&paper_dir)?;
@@ -392,6 +430,63 @@ async fn migrate_one(
         path: path_rel,
         copied_pdf: copied,
     })
+}
+
+/// New vault-relative path when an existing paper sits outside its collection
+/// folder; `None` when it already lives where the collection tree would put it.
+fn plan_relocation(existing: &str, base_parent: &str) -> Option<String> {
+    let existing = existing.trim_matches('/');
+    let folder_id = existing.rsplit('/').next()?.trim();
+    if folder_id.is_empty() {
+        return None;
+    }
+    let existing_parent = existing.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+    if existing_parent == base_parent.trim_matches('/') {
+        return None;
+    }
+    Some(format!("{base_parent}/{folder_id}"))
+}
+
+/// Move a paper folder to a new vault-relative path and rewrite its catalog
+/// row (keyed by path). Refuses to overwrite anything on disk or in the
+/// catalog; rolls the folder back when the catalog rewrite fails.
+fn relocate_paper(vault: &Path, existing: &str, new_rel: &str) -> Result<(), AppError> {
+    let record = papers::get_by_path(vault, existing)?
+        .ok_or_else(|| AppError::message(format!("catalog row missing for {existing}")))?;
+    if papers::get_by_path(vault, new_rel)?.is_some() {
+        return Err(AppError::message(format!(
+            "target already cataloged: {new_rel}"
+        )));
+    }
+    let src = vault.join(existing);
+    let dst = vault.join(new_rel);
+    if !src.is_dir() {
+        return Err(AppError::message(format!(
+            "paper folder missing: {existing}"
+        )));
+    }
+    if dst.exists() {
+        return Err(AppError::message(format!(
+            "target already exists: {new_rel}"
+        )));
+    }
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::rename(&src, &dst)?;
+    let rewrite = (|| -> Result<(), AppError> {
+        papers::delete_under_path(vault, existing)?;
+        let mut moved = record;
+        moved.path = new_rel.replace('\\', "/");
+        papers::upsert_paper(vault, &moved)?;
+        Ok(())
+    })();
+    if rewrite.is_err() {
+        // Best-effort rollback so disk and catalog agree again.
+        let _ = fs::rename(&dst, &src);
+        return rewrite;
+    }
+    Ok(())
 }
 
 /// Append Markdown blocks not already present in NOTES.md (idempotent by content).
@@ -1196,6 +1291,80 @@ mod tests {
         assert_eq!(out.paths[0], "papers/NLP/Transformers/10_5555_abc");
         // Empty collection still materializes so the tree matches Zotero.
         assert!(vault.join("papers/Empty Sibling").is_dir());
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn relocation_planning() {
+        // Legacy flat paper → collection folder.
+        assert_eq!(
+            plan_relocation("papers/10_5555_abc", "papers/NLP/Transformers").as_deref(),
+            Some("papers/NLP/Transformers/10_5555_abc")
+        );
+        // Old leaf-flat folder → full hierarchy.
+        assert_eq!(
+            plan_relocation("papers/Agent/2303.11366", "papers/LLM/Agent").as_deref(),
+            Some("papers/LLM/Agent/2303.11366")
+        );
+        // Already in place → nothing to do.
+        assert_eq!(
+            plan_relocation(
+                "papers/NLP/Transformers/10_5555_abc",
+                "papers/NLP/Transformers"
+            ),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn remigration_relocates_legacy_flat_papers() {
+        let base = std::env::temp_dir().join(format!("motif-zreloc-{}", now_nanos()));
+        let vault = base.join("vault");
+        let zdir = base.join("zotero");
+        fs::create_dir_all(&zdir).unwrap();
+        {
+            let conn = Connection::open(zdir.join("zotero.sqlite")).unwrap();
+            conn.execute_batch(SEED_SQL).unwrap();
+        }
+
+        // Pre-existing flat paper (legacy import) matching the seeded item by DOI.
+        let flat_rel = "papers/10_5555_abc";
+        fs::create_dir_all(vault.join(flat_rel)).unwrap();
+        fs::write(vault.join(flat_rel).join("NOTES.md"), "# user notes\n").unwrap();
+        let conn = seed_db();
+        let (items, _c) = read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
+        let meta = map_zotero_item(&items[0].json).unwrap();
+        let record = paper_record_from_meta(flat_rel, &meta);
+        papers::upsert_paper(&vault, &record).unwrap();
+
+        let out = migrate_zotero(
+            ZoteroMigrateArgs {
+                vault_path: vault.to_string_lossy().to_string(),
+                zotero_dir: zdir.to_string_lossy().to_string(),
+                parent_dir: Some("papers".into()),
+                copy_pdfs: false,
+                preserve_collections: true,
+                include_collections: None,
+                include_items: None,
+                migrate_notes: false,
+                migrate_annotations: false,
+            },
+            |_c, _t, _p| {},
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(out.imported, 0);
+        assert_eq!(out.relocated, 1);
+        let new_rel = "papers/NLP/Transformers/10_5555_abc";
+        assert_eq!(out.paths[0], new_rel);
+        // Folder + user content moved; old location gone.
+        assert!(vault.join(new_rel).join("NOTES.md").is_file());
+        assert!(!vault.join(flat_rel).exists());
+        // Catalog row rewritten to the new path.
+        assert!(papers::get_by_path(&vault, new_rel).unwrap().is_some());
+        assert!(papers::get_by_path(&vault, flat_rel).unwrap().is_none());
 
         let _ = fs::remove_dir_all(&base);
     }
