@@ -45,7 +45,7 @@ const HOVER_EXPAND_MS = 400;
 
 /** Center icon for the primary active task kind. */
 function kindIcon(kind: BackgroundTaskKind | undefined) {
-	const cls = "relative size-3.5 text-primary";
+	const cls = "relative size-3.5 text-foreground";
 	switch (kind) {
 		case "download":
 		case "downloadAll":
@@ -244,18 +244,23 @@ function ProgressRing({
 	return (
 		<button
 			type="button"
-			className="relative flex size-9 items-center justify-center bg-transparent text-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+			className="relative flex size-9 items-center justify-center rounded-full bg-background text-foreground shadow-sm ring-1 ring-border transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
 			aria-label={label}
 			aria-expanded={false}
 			onClick={onActivate}
 			onFocus={onActivate}
 		>
-			{/* Progress ring is the outermost visual — no chip background. */}
+			{/*
+			 * Opaque disk (button bg) + SVG ring.
+			 * Use ring-1 (box-shadow) not border so the content box stays size-9
+			 * and the SVG (inset-0 size-full) shares the same center.
+			 */}
 			<svg
-				className="pointer-events-none absolute inset-0 size-9 -rotate-90"
+				className="pointer-events-none absolute inset-0 size-full -rotate-90"
 				viewBox="0 0 40 40"
 				aria-hidden="true"
 			>
+				{/* Track: muted-foreground (not --muted, which is nearly white in light mode). */}
 				<circle
 					cx="20"
 					cy="20"
@@ -263,7 +268,7 @@ function ProgressRing({
 					fill="none"
 					stroke="currentColor"
 					strokeWidth="3"
-					className="text-muted"
+					className="text-muted-foreground/30"
 				/>
 				<circle
 					cx="20"
@@ -288,8 +293,8 @@ function ProgressRing({
 					)}
 				/>
 			</svg>
-			{/* Center content — same midpoint as the ring */}
-			<span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+			{/* Center content — flex-centered on the same size-9 box as the SVG */}
+			<span className="pointer-events-none relative z-10 flex items-center justify-center">
 				{center}
 			</span>
 		</button>
