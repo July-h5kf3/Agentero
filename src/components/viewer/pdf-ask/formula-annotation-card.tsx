@@ -10,6 +10,8 @@ import { symbolTexSource } from "@/lib/pdf/equation-annotation";
 
 /** Wider so meaning + plain columns wrap without clipping. */
 const CARD_WIDTH = 440;
+/** Preferred max height; body scrolls when the symbol table is taller. */
+const CARD_MAX_HEIGHT = 420;
 
 function FormulaSymbolCell({ symbol }: { symbol: string }) {
 	const ref = useRef<HTMLSpanElement>(null);
@@ -81,11 +83,13 @@ export function FormulaAnnotationCard({
 		<SelectionCard
 			screen={screen}
 			width={CARD_WIDTH}
+			height={CARD_MAX_HEIGHT}
 			preferRight
-			// Content-sized: table grows with rows; no maxHeight / scrollbar.
+			// Stick near the formula; body scrolls when the table exceeds maxHeight.
 			trackPin
-			bodyScroll={false}
+			bodyScroll
 			placementWidth={CARD_WIDTH}
+			placementHeight={CARD_MAX_HEIGHT}
 			title={t("equationAnnotation.title")}
 			icon={FunctionSquare}
 			ariaLabel={t("equationAnnotation.aria")}
@@ -100,7 +104,7 @@ export function FormulaAnnotationCard({
 				</p>
 			) : (
 				<table className="w-full table-fixed border-collapse text-left text-[12px]">
-					<thead>
+					<thead className="sticky top-0 z-[1] bg-background/95 backdrop-blur-sm">
 						<tr className="border-border/60 border-b text-[11px] text-muted-foreground">
 							<th className="w-[18%] px-3 py-1.5 font-medium">
 								{t("equationAnnotation.colSymbol")}
