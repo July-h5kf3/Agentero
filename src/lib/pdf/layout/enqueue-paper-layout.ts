@@ -7,7 +7,6 @@ import i18n from "@/i18n";
 import {
 	enqueueBackgroundTask,
 	isBackgroundTaskCancelledError,
-	setBackgroundTasksExpanded,
 } from "@/lib/core/background-tasks";
 import { logger } from "@/lib/core/logger";
 import { analyzePaperLayoutHeadless } from "@/lib/pdf/layout/headless-analyze";
@@ -48,7 +47,6 @@ export function enqueuePaperLayoutAnalysis(opts: {
 				return;
 			}
 
-			setBackgroundTasksExpanded(true);
 			await enqueueBackgroundTask(
 				{
 					kind: "parse",

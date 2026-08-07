@@ -160,7 +160,6 @@ import {
 	BackgroundTaskCancelledError,
 	enqueueBackgroundTask,
 	isBackgroundTaskCancelledError,
-	setBackgroundTasksExpanded,
 } from "@/lib/core/background-tasks";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
@@ -223,6 +222,7 @@ import {
 } from "@/lib/pdf/highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import {
+	enqueuePaperLayoutAnalysis,
 	getLayoutDocumentResult,
 	getPdfAiRuntime,
 	hoverableLayoutRegionsOnPage,
@@ -3160,8 +3160,6 @@ function PdfViewerInner({
 				});
 
 			if (opts?.asBackgroundTask) {
-				// Show the floater so progress is visible without hunting for it.
-				setBackgroundTasksExpanded(true);
 				void enqueueBackgroundTask(
 					{
 						kind: "parse",
@@ -3234,38 +3232,77 @@ function PdfViewerInner({
 		[docId, paperAbsPath, paperRelPath, t],
 	);
 
-	// Open paper → auto layout analysis: cache hit is silent; otherwise background task.
+	// Any open paper (active or not) → headless queue so multi-tab can all
+	// land in the background-tasks panel. ONNX still serial (concurrency:1).
+	useEffect(() => {
+		if (!paperAbsPath) return;
+		enqueuePaperLayoutAnalysis({
+			paperAbsPath,
+			paperLabel: paperRelPath || undefined,
+		});
+	}, [paperAbsPath, paperRelPath]);
+
+	// Active viewer: pull layout into the tab store once sidecar exists.
+	// Headless may still be writing it for this paper (or a sibling tab);
+	// poll until ready. Loose PDFs (no paper folder) still analyze in-viewer.
 	const layoutAutoStartedForDocRef = useRef<string | null>(null);
 	useEffect(() => {
 		if (!isActive) return;
 		if (!layoutCap || totalPages <= 0) return;
 		if (getLayoutDocumentResult(docId)) return;
-		if (layoutAutoStartedForDocRef.current === docId) return;
 		if (!layoutCap.forDocument(docId)) return;
 
-		layoutAutoStartedForDocRef.current = docId;
 		let cancelled = false;
+		let pollTimer: ReturnType<typeof setTimeout> | null = null;
+		/** Stop polling after ~15 min so a permanent headless failure does not spin. */
+		const pollDeadline = Date.now() + 15 * 60 * 1000;
 
-		void (async () => {
+		const clearPoll = () => {
+			if (pollTimer != null) {
+				clearTimeout(pollTimer);
+				pollTimer = null;
+			}
+		};
+
+		const loadSilent = () => {
+			if (layoutAutoStartedForDocRef.current === docId) return;
+			layoutAutoStartedForDocRef.current = docId;
+			startLayoutAnalysis({
+				force: false,
+				openFigures: false,
+				showOverlay: false,
+				asBackgroundTask: false,
+				notifyOnError: false,
+			});
+		};
+
+		const tryLoad = async () => {
+			if (cancelled) return;
+			if (getLayoutDocumentResult(docId)) return;
+
 			try {
-				const hasSidecar = paperAbsPath
-					? Boolean(await readLayoutSidecar(paperAbsPath))
-					: false;
-				if (cancelled) return;
-				if (getLayoutDocumentResult(docId)) return;
-
-				if (hasSidecar) {
-					// Quiet cache load — no tasks panel, no Figures tab.
-					startLayoutAnalysis({
-						force: false,
-						openFigures: false,
-						showOverlay: false,
-						asBackgroundTask: false,
-						notifyOnError: false,
-					});
+				if (paperAbsPath) {
+					const hasSidecar = Boolean(await readLayoutSidecar(paperAbsPath));
+					if (cancelled) return;
+					if (getLayoutDocumentResult(docId)) return;
+					if (hasSidecar) {
+						loadSilent();
+						return;
+					}
+					// Sidecar not ready yet — headless job may be queued/running.
+					if (Date.now() < pollDeadline) {
+						pollTimer = setTimeout(() => {
+							void tryLoad();
+						}, 1500);
+					} else if (layoutAutoStartedForDocRef.current === docId) {
+						layoutAutoStartedForDocRef.current = null;
+					}
 					return;
 				}
 
+				// No paper folder (loose PDF): only the active tab can run in-viewer.
+				if (layoutAutoStartedForDocRef.current === docId) return;
+				layoutAutoStartedForDocRef.current = docId;
 				startLayoutAnalysis({
 					force: false,
 					openFigures: false,
@@ -3274,16 +3311,23 @@ function PdfViewerInner({
 					notifyOnError: false,
 				});
 			} catch {
-				// Allow a later mount/open to retry if probe failed before start.
 				if (layoutAutoStartedForDocRef.current === docId) {
 					layoutAutoStartedForDocRef.current = null;
 				}
+				if (!cancelled && paperAbsPath && Date.now() < pollDeadline) {
+					pollTimer = setTimeout(() => {
+						void tryLoad();
+					}, 2500);
+				}
 			}
-		})();
+		};
+
+		void tryLoad();
 
 		return () => {
 			cancelled = true;
-			// Strict-mode remount / tab switch before result: allow retry.
+			clearPoll();
+			// Strict-mode remount / leave tab before result: allow retry on re-activate.
 			if (!getLayoutDocumentResult(docId)) {
 				layoutAutoStartedForDocRef.current = null;
 			}

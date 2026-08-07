@@ -270,6 +270,9 @@ export function failBackgroundTask(id: string, error: string): void {
 		error,
 		detail: error,
 	});
+	// Panel expands on failure only while the pointer is over it / briefly;
+	// see background-tasks-panel (hover leave always returns to the ring).
+	setBackgroundTasksExpanded(true);
 	schedulePrune(id);
 }
 

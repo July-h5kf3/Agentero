@@ -3,7 +3,6 @@ import i18n from "@/i18n";
 import {
 	completeBackgroundTask,
 	failBackgroundTask,
-	setBackgroundTasksExpanded,
 	startBackgroundTask,
 	updateBackgroundTask,
 } from "@/lib/core/background-tasks";
@@ -55,7 +54,6 @@ function ensurePanelRow(
 		detail: detail ?? i18n.t("app:tasks.layoutModelDetail"),
 		progress: progress === undefined ? 0 : progress,
 	});
-	setBackgroundTasksExpanded(true);
 }
 
 /**

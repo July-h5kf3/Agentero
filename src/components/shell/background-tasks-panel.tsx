@@ -18,7 +18,7 @@ import {
 	Search,
 	X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -296,41 +296,65 @@ function ProgressRing({
 	);
 }
 
+/** Auto-collapse error detail if the pointer never enters the panel. */
+const ERROR_DETAIL_MS = 5000;
+
 export function BackgroundTasksPanel({ className }: { className?: string }) {
 	const { t } = useTranslation("app");
-	const { tasks, expanded } = useBackgroundTasks();
+	const { tasks } = useBackgroundTasks();
+	/** Detail open is hover-driven; store.expanded is only a fail signal. */
+	const [detailOpen, setDetailOpen] = useState(false);
+	const pointerInsideRef = useRef(false);
 	const hoverExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
+	const errorCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	const seenFailedIdsRef = useRef<Set<string>>(new Set());
 
-	const clearHoverExpandTimer = () => {
+	const openDetail = useCallback(() => {
+		setDetailOpen(true);
+		setBackgroundTasksExpanded(true);
+	}, []);
+
+	const closeDetail = useCallback(() => {
 		if (hoverExpandTimerRef.current) {
 			clearTimeout(hoverExpandTimerRef.current);
 			hoverExpandTimerRef.current = null;
 		}
-	};
+		if (errorCollapseTimerRef.current) {
+			clearTimeout(errorCollapseTimerRef.current);
+			errorCollapseTimerRef.current = null;
+		}
+		setDetailOpen(false);
+		setBackgroundTasksExpanded(false);
+	}, []);
 
-	const scheduleHoverExpand = () => {
-		clearHoverExpandTimer();
+	const scheduleHoverExpand = useCallback(() => {
+		pointerInsideRef.current = true;
+		if (errorCollapseTimerRef.current) {
+			clearTimeout(errorCollapseTimerRef.current);
+			errorCollapseTimerRef.current = null;
+		}
+		if (hoverExpandTimerRef.current) {
+			clearTimeout(hoverExpandTimerRef.current);
+			hoverExpandTimerRef.current = null;
+		}
 		hoverExpandTimerRef.current = setTimeout(() => {
 			hoverExpandTimerRef.current = null;
-			setBackgroundTasksExpanded(true);
-		}, HOVER_EXPAND_MS);
-	};
-
-	const collapseOnLeave = () => {
-		clearHoverExpandTimer();
-		setBackgroundTasksExpanded(false);
-	};
-
-	useEffect(() => {
-		return () => {
-			if (hoverExpandTimerRef.current) {
-				clearTimeout(hoverExpandTimerRef.current);
-				hoverExpandTimerRef.current = null;
+			if (pointerInsideRef.current) {
+				setDetailOpen(true);
+				setBackgroundTasksExpanded(true);
 			}
-		};
+		}, HOVER_EXPAND_MS);
 	}, []);
+
+	const collapseOnLeave = useCallback(() => {
+		pointerInsideRef.current = false;
+		// Always return to the ring when the pointer leaves the panel.
+		closeDetail();
+	}, [closeDetail]);
 
 	const active = useMemo(() => getActiveBackgroundTasks(tasks), [tasks]);
 	const visible = useMemo(() => {
@@ -344,6 +368,55 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 
 	const hasFinished = tasks.some(isFinishedBackgroundTask);
 	const hasFailed = visible.some((task) => task.status === "failed");
+	const failedIdsKey = useMemo(
+		() =>
+			tasks
+				.filter((task) => task.status === "failed")
+				.map((task) => task.id)
+				.sort()
+				.join("|"),
+		[tasks],
+	);
+
+	// New failures: open detail briefly so the user can see the error; if they
+	// never hover, collapse back to the ring automatically.
+	useEffect(() => {
+		if (!failedIdsKey) {
+			seenFailedIdsRef.current = new Set();
+			return;
+		}
+		const ids = failedIdsKey.split("|").filter(Boolean);
+		const fresh = ids.filter((id) => !seenFailedIdsRef.current.has(id));
+		for (const id of ids) seenFailedIdsRef.current.add(id);
+		if (fresh.length === 0) return;
+
+		openDetail();
+		if (errorCollapseTimerRef.current) {
+			clearTimeout(errorCollapseTimerRef.current);
+		}
+		errorCollapseTimerRef.current = setTimeout(() => {
+			errorCollapseTimerRef.current = null;
+			if (!pointerInsideRef.current) closeDetail();
+		}, ERROR_DETAIL_MS);
+	}, [failedIdsKey, openDetail, closeDetail]);
+
+	useEffect(() => {
+		return () => {
+			if (hoverExpandTimerRef.current) {
+				clearTimeout(hoverExpandTimerRef.current);
+				hoverExpandTimerRef.current = null;
+			}
+			if (errorCollapseTimerRef.current) {
+				clearTimeout(errorCollapseTimerRef.current);
+				errorCollapseTimerRef.current = null;
+			}
+		};
+	}, []);
+
+	// No tasks left → force ring state for the next job.
+	useEffect(() => {
+		if (tasks.length === 0 && detailOpen) closeDetail();
+	}, [tasks.length, detailOpen, closeDetail]);
 
 	if (tasks.length === 0) return null;
 
@@ -369,14 +442,14 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 			<section
 				className={cn(
 					"pointer-events-auto fixed bottom-3 left-3 z-50 flex flex-col items-start gap-1",
-					expanded ? "w-[min(20rem,calc(100vw-1.5rem))]" : "w-9",
+					detailOpen ? "w-[min(20rem,calc(100vw-1.5rem))]" : "w-9",
 					className,
 				)}
 				aria-label={t("tasks.title")}
 				onMouseEnter={scheduleHoverExpand}
 				onMouseLeave={collapseOnLeave}
 			>
-				{expanded ? (
+				{detailOpen ? (
 					<div className="w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
 						<div className="flex h-8 items-center gap-1 border-b bg-muted/40 px-2">
 							<span className="min-w-0 flex-1 truncate px-1 font-medium text-xs">
@@ -424,7 +497,14 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 						label={ringLabel}
 						progress={ringProgress}
 						taskKind={active[0]?.kind}
-						onActivate={() => setBackgroundTasksExpanded(true)}
+						onActivate={() => {
+							pointerInsideRef.current = true;
+							if (hoverExpandTimerRef.current) {
+								clearTimeout(hoverExpandTimerRef.current);
+								hoverExpandTimerRef.current = null;
+							}
+							openDetail();
+						}}
 					/>
 				)}
 			</section>
