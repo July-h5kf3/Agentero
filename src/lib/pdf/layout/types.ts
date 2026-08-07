@@ -2,9 +2,9 @@ import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
 
 /**
  * Layout kinds we may store from PP-DocLayoutV3.
- * Sidebar surfaces image/chart/table/algorithm/formula (numbered only);
- * figure_title/header/formula_number/abstract/text are intermediate or
- * debug-only and never (or not primarily) listed as figure cards.
+ * Sidebar surfaces image/chart/table/algorithm/formula (merged with a model
+ * formula_number box only); figure_title/header/formula_number/abstract/text
+ * are intermediate or debug-only and never (or not primarily) listed as cards.
  */
 export type PdfLayoutKind =
 	| "image"
@@ -27,7 +27,8 @@ export type PdfLayoutKind =
  * `score` is model confidence 0–1 (UI may show as percent).
  * After caption merge, figure regions may include `title` from nearby
  * figure_title / caption-like header + PDF text runs.
- * Numbered formulas store the equation id (e.g. "(3)") in `title`.
+ * Merged formulas keep `titleBbox` (the formula_number box) but do not parse
+ * equation-id text into `title`.
  */
 export type PdfLayoutRegion = {
 	id: string;
@@ -45,8 +46,8 @@ export type PdfLayoutRegion = {
 	bbox: PdfAskNormalizedRect;
 	/**
 	 * Caption / figure title text (from PDF text layer over the caption box).
-	 * For formulas: equation number label such as "(1)" or "(A.2)".
-	 * Set after merge + text enrichment.
+	 * Formulas do not parse equation numbers into this field.
+	 * Set after merge + text enrichment for figures/tables/algorithms.
 	 */
 	title?: string;
 	/**
@@ -54,7 +55,10 @@ export type PdfLayoutRegion = {
 	 * this region's bbox (not used for figure-caption merge).
 	 */
 	text?: string;
-	/** Normalized caption box (before union into bbox), if a title was attached. */
+	/**
+	 * Normalized caption box (before union into bbox), if a title was attached.
+	 * For formulas: the model `formula_number` box geometry (no text parse).
+	 */
 	titleBbox?: PdfAskNormalizedRect;
 	/**
 	 * Semantic role of a caption box (from text / geometry).

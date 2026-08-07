@@ -5,10 +5,6 @@ import {
 	mergeFormulasByNumber,
 	selectFormulasForNumber,
 } from "@/lib/pdf/layout/merge-captions";
-import {
-	extractFormulaNumberLabel,
-	looksLikeFormulaNumber,
-} from "@/lib/pdf/layout/title-text";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
 
 function region(
@@ -29,23 +25,6 @@ function region(
 	};
 }
 
-describe("extractFormulaNumberLabel", () => {
-	it("parses common equation number forms", () => {
-		expect(extractFormulaNumberLabel("(1)")).toBe("(1)");
-		expect(extractFormulaNumberLabel("(12a)")).toBe("(12a)");
-		expect(extractFormulaNumberLabel("(A.1)")).toBe("(A.1)");
-		expect(extractFormulaNumberLabel("[3]")).toBe("(3)");
-		expect(extractFormulaNumberLabel("Eq. (2)")).toBe("(2)");
-		expect(extractFormulaNumberLabel("1")).toBe("(1)");
-	});
-
-	it("rejects subpanel letters and plain prose", () => {
-		expect(extractFormulaNumberLabel("(a)")).toBeNull();
-		expect(extractFormulaNumberLabel("Figure 1")).toBeNull();
-		expect(looksLikeFormulaNumber("hello")).toBe(false);
-	});
-});
-
 describe("selectFormulasForNumber", () => {
 	it("picks left-side formula bodies in the number band", () => {
 		const num = region({
@@ -53,7 +32,6 @@ describe("selectFormulasForNumber", () => {
 			kind: "formula_number",
 			score: 0.9,
 			bbox: { x: 0.85, y: 0.4, w: 0.08, h: 0.04 },
-			title: "(3)",
 		});
 		const body = region({
 			id: "f1",
@@ -77,7 +55,6 @@ describe("selectFormulasForNumber", () => {
 			kind: "formula_number",
 			score: 0.9,
 			bbox: { x: 0.88, y: 0.42, w: 0.06, h: 0.08 },
-			title: "(5)",
 		});
 		const line1 = region({
 			id: "f1",
@@ -107,7 +84,6 @@ describe("selectFormulasForNumber", () => {
 			kind: "formula_number",
 			score: 0.9,
 			bbox: { x: 0.85, y: 0.4, w: 0.08, h: 0.04 },
-			title: "(1)",
 		});
 		const inline = region({
 			id: "f-inline",
@@ -143,7 +119,6 @@ describe("selectFormulasForNumber", () => {
 			kind: "formula_number",
 			score: 0.9,
 			bbox: { x: 0.85, y: 0.21, w: 0.08, h: 0.04 },
-			title: "(2)",
 		});
 		const textLow = region({
 			id: "t-low",
@@ -162,7 +137,7 @@ describe("selectFormulasForNumber", () => {
 });
 
 describe("mergeFormulasByNumber", () => {
-	it("aggregates by formula_number and drops unnumbered formulas", () => {
+	it("aggregates by formula_number geometry and drops unnumbered formulas", () => {
 		const numberedBody = region({
 			id: "f1",
 			kind: "formula",
@@ -174,7 +149,6 @@ describe("mergeFormulasByNumber", () => {
 			kind: "formula_number",
 			score: 0.9,
 			bbox: { x: 0.85, y: 0.31, w: 0.08, h: 0.04 },
-			title: "(1)",
 		});
 		const unnumbered = region({
 			id: "f2",
@@ -185,7 +159,8 @@ describe("mergeFormulasByNumber", () => {
 		const out = mergeFormulasByNumber([numberedBody, number, unnumbered]);
 		expect(out).toHaveLength(1);
 		expect(out[0]?.kind).toBe("formula");
-		expect(out[0]?.title).toBe("(1)");
+		// No equation-id text parse onto title.
+		expect(out[0]?.title).toBeUndefined();
 		expect(out[0]?.titleBbox).toEqual(number.bbox);
 		// Body ∪ number
 		expect(out[0]!.bbox.x).toBeLessThanOrEqual(numberedBody.bbox.x + 1e-9);
@@ -194,13 +169,12 @@ describe("mergeFormulasByNumber", () => {
 		);
 	});
 
-	it("drops formulas with only recovered title and no formula_number", () => {
+	it("drops bare formulas without a model formula_number box", () => {
 		const f = region({
 			id: "f1",
 			kind: "formula",
 			score: 0.9,
 			bbox: { x: 0.2, y: 0.4, w: 0.5, h: 0.05 },
-			title: "(7)",
 		});
 		const out = mergeFormulasByNumber([f]);
 		expect(out).toHaveLength(0);
@@ -218,7 +192,6 @@ describe("mergeFormulasByNumber", () => {
 			kind: "formula_number",
 			score: 0.85,
 			bbox: { x: 0.85, y: 0.4, w: 0.08, h: 0.04 },
-			title: "(3)",
 		});
 		const text = region({
 			id: "t1",
@@ -233,7 +206,7 @@ describe("mergeFormulasByNumber", () => {
 });
 
 describe("mergeCaptionsIntoHosts + formulas", () => {
-	it("places numbered formulas in final hosts and drops unnumbered", () => {
+	it("places merged formulas in final hosts and drops unnumbered", () => {
 		const image = region({
 			id: "img",
 			kind: "image",
@@ -259,7 +232,6 @@ describe("mergeCaptionsIntoHosts + formulas", () => {
 			kind: "formula_number",
 			score: 0.88,
 			bbox: { x: 0.85, y: 0.51, w: 0.08, h: 0.04 },
-			title: "(2)",
 		});
 		const bare = region({
 			id: "f2",
@@ -271,7 +243,8 @@ describe("mergeCaptionsIntoHosts + formulas", () => {
 		const out = mergeCaptionsIntoHosts([image, figTitle, formula, num, bare]);
 		const formulas = out.filter((r) => r.kind === "formula");
 		expect(formulas).toHaveLength(1);
-		expect(formulas[0]?.title).toBe("(2)");
+		expect(formulas[0]?.title).toBeUndefined();
+		expect(formulas[0]?.titleBbox).toEqual(num.bbox);
 		expect(out.some((r) => r.kind === "image" || r.kind === "chart")).toBe(
 			true,
 		);

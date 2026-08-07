@@ -3,8 +3,6 @@ import type { PdfTextRun } from "@embedpdf/models";
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
 import {
 	isCaptionLayoutKind,
-	isFormulaLayoutKind,
-	isFormulaNumberLayoutKind,
 	isLayoutBodyTextKind,
 } from "@/lib/pdf/layout/labels";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
@@ -98,43 +96,10 @@ export function resolveCaptionRole(region: PdfLayoutRegion): CaptionRole {
 	return captionRoleFromGeometry(region) ?? "other";
 }
 
-/** Digit-bearing equation id body: 1, 12a, 1.2, A1, A.1 */
-const FORMULA_NUM_ID = String.raw`[A-Za-z]?\d+(?:\.\d+)?[a-z]?|[A-Za-z]\.\d+[a-z]?`;
-
-/**
- * Equation number labels: "(1)", "(12a)", "(A.1)", "[2]".
- * Rejects subpanel-style "(a)" (letter-only).
- */
-export function extractFormulaNumberLabel(text: string): string | null {
-	const t = text.replace(/\s+/g, " ").trim();
-	if (!t || t.length > 24) return null;
-	// Prefer parenthesized forms that contain a digit.
-	const paren = t.match(new RegExp(String.raw`\(\s*(${FORMULA_NUM_ID})\s*\)`));
-	if (paren?.[1]) return `(${paren[1]})`;
-	const bracket = t.match(/\[\s*(\d+[a-z]?)\s*\]/);
-	if (bracket?.[1]) return `(${bracket[1]})`;
-	// Bare "1" / "1a" / "A.1" only when the whole string is just the number.
-	const bare = t.match(new RegExp(String.raw`^(${FORMULA_NUM_ID})$`));
-	if (bare?.[1] && /\d/.test(bare[1])) return `(${bare[1]})`;
-	// "Eq. (3)" / "Equation 3"
-	const eq = t.match(
-		new RegExp(
-			String.raw`^(?:eq(?:uation)?\.?\s*)\(?\s*(${FORMULA_NUM_ID})\s*\)?$`,
-			"i",
-		),
-	);
-	if (eq?.[1]) return `(${eq[1]})`;
-	return null;
-}
-
-export function looksLikeFormulaNumber(text: string): boolean {
-	return extractFormulaNumberLabel(text) !== null;
-}
-
 /**
  * Write extracted text + role onto caption-like regions (figure_title / header)
- * and formula_number boxes; body text/abstract into `text`. Also try to
- * recover equation ids on formula hosts from text inside / just to the right.
+ * and body text/abstract into `text`.
+ * Formula / formula_number: no text parse — merge is geometry-only on model boxes.
  */
 export function enrichCaptionRegionsWithText(
 	regions: PdfLayoutRegion[],
@@ -177,50 +142,6 @@ export function enrichCaptionRegionsWithText(
 			);
 			if (!body) return region;
 			return { ...region, text: body };
-		}
-
-		if (isFormulaNumberLayoutKind(region.kind)) {
-			const raw = textFromRunsInBbox(
-				runs,
-				region.bbox,
-				pageSize.width,
-				pageSize.height,
-			);
-			const text = raw || region.title || "";
-			const label = text ? extractFormulaNumberLabel(text) : null;
-			return {
-				...region,
-				title: label || text || region.title,
-			};
-		}
-
-		if (isFormulaLayoutKind(region.kind) && !region.title?.trim()) {
-			// Number is often on the right margin of the formula line.
-			const rightStrip: PdfAskNormalizedRect = {
-				x: Math.min(0.95, region.bbox.x + region.bbox.w * 0.65),
-				y: Math.max(0, region.bbox.y - 0.01),
-				w: Math.max(
-					0.02,
-					Math.min(0.2, 1 - (region.bbox.x + region.bbox.w * 0.65)),
-				),
-				h: region.bbox.h + 0.02,
-			};
-			const fromRight = textFromRunsInBbox(
-				runs,
-				rightStrip,
-				pageSize.width,
-				pageSize.height,
-			);
-			const fromBody = textFromRunsInBbox(
-				runs,
-				region.bbox,
-				pageSize.width,
-				pageSize.height,
-			);
-			const label =
-				extractFormulaNumberLabel(fromRight) ||
-				extractFormulaNumberLabel(fromBody);
-			if (label) return { ...region, title: label };
 		}
 
 		return region;

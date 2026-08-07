@@ -9,10 +9,7 @@ import {
 	isTableLayoutKind,
 	isTextLayoutKind,
 } from "@/lib/pdf/layout/labels";
-import {
-	extractFormulaNumberLabel,
-	resolveCaptionRole,
-} from "@/lib/pdf/layout/title-text";
+import { resolveCaptionRole } from "@/lib/pdf/layout/title-text";
 import type { PdfLayoutKind, PdfLayoutRegion } from "@/lib/pdf/layout/types";
 
 /** Semantic family for layout hosts — never cross-attach captions across families. */
@@ -953,11 +950,7 @@ function mergeFormulaCluster(
 		number.readingOrder,
 		...formulas.map((f) => f.readingOrder),
 	);
-	const label =
-		extractFormulaNumberLabel(number.title ?? "") ||
-		number.title?.trim() ||
-		extractFormulaNumberLabel(formulas.map((f) => f.title ?? "").join(" ")) ||
-		undefined;
+	// No equation-id text parse: host has geometry only; sidebar uses fallback label.
 	return {
 		id: number.id,
 		pageIndex: number.pageIndex,
@@ -968,16 +961,16 @@ function mergeFormulaCluster(
 		rect,
 		bbox,
 		titleBbox: number.bbox,
-		title: label,
 	};
 }
 
 /**
- * Number-first formula aggregation (strict):
- * - Only model `formula_number` anchors (no title-only recovery)
+ * Number-first formula aggregation (strict, geometry-only):
+ * - Only model `formula_number` anchors (no text-id recovery)
  * - Only formula bodies that do **not** substantially overlap `text`
  * - Drop unnumbered formulas, text-overlapped formulas, bare numbers
  * - `text` regions are never returned (blockers only)
+ * - Does **not** parse equation number strings onto `title`
  */
 export function mergeFormulasByNumber(
 	regions: PdfLayoutRegion[],
@@ -1016,8 +1009,7 @@ export function mergeFormulasByNumber(
 		for (const f of cluster) usedFormulaIds.add(f.id);
 	}
 
-	// No Phase B: recovered "(n)" on a bare formula without formula_number is
-	// not enough — user rule requires a formula title/number box.
+	// Bare formula without model formula_number box is dropped (geometry only).
 
 	merged.sort(
 		(a, b) =>

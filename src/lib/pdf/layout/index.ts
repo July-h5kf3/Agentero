@@ -139,9 +139,7 @@ export {
 	captionRoleFromGeometry,
 	captionRoleFromText,
 	enrichCaptionRegionsWithText,
-	extractFormulaNumberLabel,
 	looksLikeFigureCaption,
-	looksLikeFormulaNumber,
 	resolveCaptionRole,
 	textFromRunsInBbox,
 } from "@/lib/pdf/layout/title-text";

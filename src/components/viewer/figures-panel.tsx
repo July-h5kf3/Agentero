@@ -93,7 +93,7 @@ function FigureCard({
 					: kind === "chart"
 						? t("figures.chartItem", { n: index })
 						: t("figures.figureItem", { n: index });
-	// Prefer PDF caption text: figure/table titles, or formula number "(1)".
+	// Prefer PDF caption text for figures/tables; formulas have no number parse.
 	const caption = region.title?.trim() || "";
 	const title = caption || fallbackTitle;
 
