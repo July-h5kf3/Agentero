@@ -12,6 +12,7 @@ import {
 	loadModelCatalog,
 	warmAgent,
 } from "@/lib/agent";
+import { ensureModelsInclude } from "@/lib/agent/chat-state";
 import { isTauri } from "@/lib/core/tauri";
 import { listAvailableAgents } from "@/lib/translate";
 import { SettingsRow } from "./settings-layout";
@@ -27,7 +28,8 @@ export type AgentModelValue = {
 
 /**
  * Load agent registry (optional) + model catalog for the resolved agent.
- * Clears stale agentId / modelId via onChange when catalog no longer contains them.
+ * Clears stale agentId via onChange when the agent is gone; free-form model ids
+ * outside the advertised ACP catalog are kept (third-party / gateway; #216).
  */
 export function useAgentModelCatalog({
 	active = true,
@@ -77,20 +79,40 @@ export function useAgentModelCatalog({
 		: undefined;
 	const resolvedAgentId = value.agentId.trim() || registry?.defaultId || "";
 
+	// Warm + load catalog on agent change only. Custom modelId is merged below so
+	// free-form pins (third-party / gateway) stay visible without re-warming.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally omit value.modelId
 	useEffect(() => {
 		if (!active || !resolvedAgentId) {
 			setModels([]);
 			return;
 		}
+		const pinnedModelId = value.modelId;
 		const cached = loadModelCatalog(resolvedAgentId);
-		setModels(cached?.models ?? []);
+		setModels(
+			ensureModelsInclude(cached?.models ?? [], [
+				pinnedModelId,
+				cached?.currentId,
+			]),
+		);
 		if (!isTauri()) return;
 		let cancelled = false;
 		void warmAgent({ agentId: resolvedAgentId }).catch(() => undefined);
 		const tmr = window.setTimeout(() => {
 			if (cancelled) return;
 			const next = loadModelCatalog(resolvedAgentId);
-			if (next?.models?.length) setModels(next.models);
+			if (next?.models?.length) {
+				setModels((prev) => {
+					const extras = prev
+						.map((m) => m.id)
+						.filter((id) => !next.models.some((m) => m.id === id));
+					return ensureModelsInclude(next.models, [
+						pinnedModelId,
+						next.currentId,
+						...extras,
+					]);
+				});
+			}
 		}, 800);
 		return () => {
 			cancelled = true;
@@ -98,29 +120,20 @@ export function useAgentModelCatalog({
 		};
 	}, [active, resolvedAgentId]);
 
-	// Drop stale agentId / modelId
+	// Keep custom / third-party modelId in the select options without re-warming.
+	useEffect(() => {
+		if (!active || !value.modelId?.trim()) return;
+		setModels((prev) => ensureModelsInclude(prev, [value.modelId]));
+	}, [active, value.modelId]);
+
+	// Drop stale agentId only. Do not clear free-form model ids missing from the
+	// advertised ACP catalog (third-party / gateway models; #216).
 	useEffect(() => {
 		if (!active || !registry) return;
 		if (value.agentId && !availableAgents.some((a) => a.id === value.agentId)) {
 			onChange({ agentId: "", modelId: "" });
-			return;
 		}
-		if (
-			value.modelId &&
-			models.length > 0 &&
-			!models.some((m) => m.id === value.modelId)
-		) {
-			onChange({ agentId: value.agentId, modelId: "" });
-		}
-	}, [
-		active,
-		registry,
-		availableAgents,
-		models,
-		value.agentId,
-		value.modelId,
-		onChange,
-	]);
+	}, [active, registry, availableAgents, value.agentId, onChange]);
 
 	const agentSelectValue = value.agentId.trim()
 		? value.agentId

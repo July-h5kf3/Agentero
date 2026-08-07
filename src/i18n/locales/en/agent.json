@@ -135,11 +135,16 @@
 		"removeFromFavorites": "Remove from favorites",
 		"selectTooltip": "Select model (ACP)",
 		"reportedTooltip": "Models appear after your agent reports them",
+		"customOrReportedTooltip": "Search or type a custom model id (third-party / gateway)",
 		"loading": "Loading…",
 		"button": "Model",
 		"searchPlaceholder": "Search models…",
+		"searchOrCustomPlaceholder": "Search or type a model id…",
+		"customGroup": "Custom",
+		"useCustom": "Use “{{id}}”",
 		"emptyNone": "No models yet. Run once so the ACP agent can advertise models.",
-		"emptyNoMatch": "No match."
+		"emptyNoneCustom": "No models yet. Type a model id above to use a third-party model.",
+		"emptyNoMatch": "No match. Type a full model id to use it as custom."
 	},
 	"messages": {
 		"cancelled": "Stopped the current run.",

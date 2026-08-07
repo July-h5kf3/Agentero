@@ -635,3 +635,30 @@ export function dedupeModelsClient(
 	}
 	return out;
 }
+
+/**
+ * Ensure free-form / third-party model ids appear in the catalog even when the
+ * ACP agent only advertises a fixed official list (e.g. Codex + gateway).
+ * Extra ids are prepended with optional custom group label.
+ */
+export function ensureModelsInclude(
+	models: AgentModelChoice[],
+	extraIds: Array<string | null | undefined>,
+	customGroup?: string | null,
+): AgentModelChoice[] {
+	const extras: AgentModelChoice[] = [];
+	const seen = new Set(
+		models.map((m) => m.id.trim()).filter((id) => id.length > 0),
+	);
+	for (const raw of extraIds) {
+		const id = typeof raw === "string" ? raw.trim() : "";
+		if (!id || seen.has(id)) continue;
+		seen.add(id);
+		extras.push({
+			id,
+			name: id,
+			group: customGroup ?? null,
+		});
+	}
+	return dedupeModelsClient([...extras, ...models]);
+}

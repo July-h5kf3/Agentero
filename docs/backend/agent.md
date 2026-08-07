@@ -73,6 +73,12 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 - 输出约定：工作流要求 `## Sources`（相对 Vault 路径）；双链保留 `[[...]]`。
 - 规划：自动注入 Vault 根 `AGENTS.md`（路线图 0.3）。
 
+## 模型协商
+
+- `session/new`（及 config 更新）中的 `SessionConfigOption`（category=Model 或 name 回退）解析为 `agent:models`。
+- 若 `current_value` 不在 selector 选项中（第三方网关 / cc-switch 等只改默认 model、目录仍是官方列表），Host **注入**该 current id，避免 UI 丢失。
+- `preferred_model_id`（warm / run_once）在与 current 不同时 **始终尝试** `session/set_config_option`，不要求 id 已在上报列表中；失败仅 debug 日志，不阻断会话。
+
 ## 注册表（非模型 BYOK）
 
 配置「如何启动本机 Agent」：id、name、template、command、args、env、默认 id。  
