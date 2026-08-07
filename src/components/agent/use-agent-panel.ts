@@ -80,6 +80,7 @@ import {
 	type ChatLine,
 	type ChatSessionHistoryItem,
 	dedupeModelsClient,
+	ensureModelsInclude,
 	errorChatLine,
 	errorText,
 	isBackgroundWorkflowHistoryTitle,
@@ -387,22 +388,28 @@ export function useAgentPanel({
 			currentId: string;
 			models: AgentModelChoice[];
 		}) => {
-			if (ev.models.length === 0) return;
-			// Defense in depth: host already dedupes; keep unique by id then name.
-			const models = dedupeModelsClient(ev.models);
+			const cur = selectedAgentIdRef.current;
+			const pref = loadModelPref(ev.agentId)?.trim() || null;
+			const current = ev.currentId?.trim() || null;
+			// Keep user/custom prefs and agent current even when not in the fixed
+			// official catalog (third-party / gateway model ids; Fix #216).
+			const catalogModels = ensureModelsInclude(dedupeModelsClient(ev.models), [
+				current,
+				pref,
+			]);
+			if (catalogModels.length === 0) return;
 			saveModelCatalog(ev.agentId, {
 				configId: ev.configId,
 				currentId: ev.currentId,
-				models,
+				models: catalogModels,
 			});
-			const cur = selectedAgentIdRef.current;
 			if (cur && cur !== ev.agentId) return;
-			setModels(models);
 			setModelId((prev) => {
-				const pref = loadModelPref(ev.agentId);
-				if (pref && models.some((m) => m.id === pref)) return pref;
-				if (prev && models.some((m) => m.id === prev)) return prev;
-				return ev.currentId || models[0]?.id || null;
+				const prevId = prev?.trim() || null;
+				const next = pref || prevId || current || catalogModels[0]?.id || null;
+				// Nested setState: keep free-form selection visible in the picker.
+				setModels(ensureModelsInclude(catalogModels, [next, prevId]));
+				return next;
 			});
 		},
 		[],
@@ -592,19 +599,22 @@ export function useAgentPanel({
 		const catalog = loadModelCatalog(selectedAgentId);
 		const pref = loadModelPref(selectedAgentId);
 		if (catalog?.models.length) {
-			const models = dedupeModelsClient(catalog.models);
-			setModels(models);
 			const preferred =
-				(pref && models.some((m) => m.id === pref) && pref) ||
-				(catalog.currentId &&
-					models.some((m) => m.id === catalog.currentId) &&
-					catalog.currentId) ||
-				models[0]?.id ||
+				(pref?.trim() ? pref.trim() : null) ||
+				(catalog.currentId?.trim() ? catalog.currentId.trim() : null) ||
+				catalog.models[0]?.id ||
 				null;
+			const models = ensureModelsInclude(dedupeModelsClient(catalog.models), [
+				preferred,
+				catalog.currentId,
+				pref,
+			]);
+			setModels(models);
 			setModelId(preferred);
 		} else {
-			setModels([]);
-			setModelId(pref);
+			const models = ensureModelsInclude([], [pref]);
+			setModels(models);
+			setModelId(pref?.trim() ? pref.trim() : null);
 		}
 	}, [selectedAgentId]);
 
@@ -1575,10 +1585,14 @@ export function useAgentPanel({
 	);
 
 	const pickModel = (id: string) => {
+		const next = id.trim();
+		if (!next) return;
 		setModelSelectorOpen(false);
-		setModelId(id);
+		// Free-form / third-party ids may not be in the advertised catalog yet.
+		setModels((prev) => ensureModelsInclude(prev, [next]));
+		setModelId(next);
 		if (!selectedAgentId) return;
-		saveModelPref(selectedAgentId, id);
+		saveModelPref(selectedAgentId, next);
 		if (!isTauri() || !agentListenersReady) return;
 
 		const agentId = selectedAgentId;
@@ -1591,12 +1605,12 @@ export function useAgentPanel({
 		void runWarmAgent({
 			agentId,
 			vaultPath: requestVaultPath,
-			modelId: id,
+			modelId: next,
 			generation,
 			stillValid: () =>
 				selectedAgentIdRef.current === agentId &&
 				vaultPathRef.current === requestVaultPath &&
-				loadModelPref(agentId) === id,
+				loadModelPref(agentId) === next,
 			stillWarming: () =>
 				selectedAgentIdRef.current === agentId &&
 				vaultPathRef.current === requestVaultPath,

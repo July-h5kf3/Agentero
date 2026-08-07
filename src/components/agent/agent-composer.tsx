@@ -392,6 +392,16 @@ export function AgentComposer({
 	// Nested enter/leave counter so moving over chips/textarea does not flicker the drop ring.
 	const fileDragDepthRef = useRef(0);
 	const [isFileDragOver, setIsFileDragOver] = useState(false);
+	/** Controlled search so free-form / third-party model ids can be entered (#216). */
+	const [modelQuery, setModelQuery] = useState("");
+	const customModelId = modelQuery.trim();
+	const canUseCustomModel =
+		customModelId.length > 0 &&
+		!models.some(
+			(m) =>
+				m.id === customModelId ||
+				m.name.trim().toLowerCase() === customModelId.toLowerCase(),
+		);
 
 	const resetFileDragHighlight = useCallback(() => {
 		fileDragDepthRef.current = 0;
@@ -940,17 +950,20 @@ export function AgentComposer({
 						<PromptInputTools className="min-w-0 flex-1 flex-wrap gap-1">
 							<ModelSelector
 								open={modelSelectorOpen}
-								onOpenChange={onModelSelectorOpenChange}
+								onOpenChange={(open) => {
+									onModelSelectorOpenChange(open);
+									if (!open) setModelQuery("");
+								}}
 							>
 								<ModelSelectorTrigger asChild>
 									<PromptInputButton
 										type="button"
 										className="h-7 max-w-[min(16rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
-										disabled={warming || models.length === 0}
+										disabled={warming}
 										tooltip={
-											models.length > 0
+											models.length > 0 || selectedModelName
 												? t("models.selectTooltip")
-												: t("models.reportedTooltip")
+												: t("models.customOrReportedTooltip")
 										}
 									>
 										<span className="truncate text-xs">
@@ -962,9 +975,23 @@ export function AgentComposer({
 								</ModelSelectorTrigger>
 								<ModelSelectorContent className="sm:max-w-md">
 									<ModelSelectorInput
-										placeholder={t("models.searchPlaceholder")}
+										value={modelQuery}
+										onValueChange={setModelQuery}
+										placeholder={t("models.searchOrCustomPlaceholder")}
 									/>
 									<ModelSelectorList className="max-h-64">
+										{canUseCustomModel ? (
+											<ModelSelectorGroup heading={t("models.customGroup")}>
+												<ModelSelectorItem
+													value={customModelId}
+													onSelect={() => onPickModel(customModelId)}
+												>
+													<span className="flex-1 truncate">
+														{t("models.useCustom", { id: customModelId })}
+													</span>
+												</ModelSelectorItem>
+											</ModelSelectorGroup>
+										) : null}
 										{groupedModels.map((group) => (
 											<ModelSelectorGroup
 												key={group.id}
@@ -1027,9 +1054,11 @@ export function AgentComposer({
 											</ModelSelectorGroup>
 										))}
 										<ModelSelectorEmpty>
-											{models.length === 0
-												? t("models.emptyNone")
-												: t("models.emptyNoMatch")}
+											{canUseCustomModel
+												? null
+												: models.length === 0
+													? t("models.emptyNoneCustom")
+													: t("models.emptyNoMatch")}
 										</ModelSelectorEmpty>
 									</ModelSelectorList>
 								</ModelSelectorContent>

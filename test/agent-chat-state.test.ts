@@ -9,6 +9,7 @@ import {
 	buildOptions,
 	type ChatLine,
 	dedupeModelsClient,
+	ensureModelsInclude,
 	errorChatLine,
 	errorText,
 	formatAskUserAnswers,
@@ -219,6 +220,25 @@ describe("dedupeModelsClient", () => {
 			{ id: "a", name: "Alpha", group: undefined },
 			{ id: "c", name: "Gamma", group: undefined },
 		]);
+	});
+});
+
+describe("ensureModelsInclude", () => {
+	it("prepends free-form ids missing from the catalog", () => {
+		const out = ensureModelsInclude(
+			[
+				{ id: "gpt-5", name: "GPT-5" },
+				{ id: "gpt-4.1", name: "GPT-4.1" },
+			],
+			["deepseek-chat", "gpt-5", "  ", null],
+			"Custom",
+		);
+		expect(out[0]).toEqual({
+			id: "deepseek-chat",
+			name: "deepseek-chat",
+			group: "Custom",
+		});
+		expect(out.map((m) => m.id)).toEqual(["deepseek-chat", "gpt-5", "gpt-4.1"]);
 	});
 });
 

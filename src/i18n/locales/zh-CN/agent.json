@@ -135,11 +135,16 @@
 		"removeFromFavorites": "取消收藏",
 		"selectTooltip": "选择模型 (ACP)",
 		"reportedTooltip": "Agent 上报模型后将在此显示",
+		"customOrReportedTooltip": "搜索或输入自定义模型 id（第三方 / 中转）",
 		"loading": "加载中……",
 		"button": "模型",
 		"searchPlaceholder": "搜索模型……",
+		"searchOrCustomPlaceholder": "搜索或输入模型 id……",
+		"customGroup": "自定义",
+		"useCustom": "使用 “{{id}}”",
 		"emptyNone": "暂无模型。先运行一次，让 ACP Agent 上报可用模型。",
-		"emptyNoMatch": "无匹配项。"
+		"emptyNoneCustom": "暂无模型。可在上方输入模型 id 以使用第三方模型。",
+		"emptyNoMatch": "无匹配项。输入完整模型 id 可作为自定义模型使用。"
 	},
 	"messages": {
 		"cancelled": "已停止当前运行。",
