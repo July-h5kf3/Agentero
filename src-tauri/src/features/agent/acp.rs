@@ -317,7 +317,29 @@ fn models_from_config_options(
         };
         let raw = collect_choices_from_select(sel);
         let raw_len = raw.len();
-        let models = dedupe_model_choices(raw);
+        let mut models = dedupe_model_choices(raw);
+        let current_id = sel.current_value.to_string();
+        // Third-party / gateway defaults (e.g. DeepSeek via cc-switch) may set a
+        // current model id that is not present in the advertised selector catalog.
+        // Surface it so the client can select and persist it.
+        let current_trim = current_id.trim();
+        if !current_trim.is_empty() && !models.iter().any(|m| m.id == current_trim) {
+            models.insert(
+                0,
+                AgentModelChoice {
+                    id: current_trim.to_string(),
+                    name: current_trim.to_string(),
+                    group: None,
+                },
+            );
+            log::debug!(
+                target: "agentero::agent",
+                "agent={} config_id={} injected current model not in catalog: {}",
+                agent_id,
+                opt.id,
+                current_trim
+            );
+        }
         if models.is_empty() {
             continue;
         }
@@ -335,7 +357,7 @@ fn models_from_config_options(
             session_id: session_id.to_string(),
             agent_id: agent_id.to_string(),
             config_id: opt.id.to_string(),
-            current_id: sel.current_value.to_string(),
+            current_id,
             models,
         });
     }
@@ -1117,8 +1139,11 @@ pub async fn run_once(
                 ) {
                     // Model changes can affect supported effort and service tiers, so retain the
                     // complete response before resolving the remaining preferences.
+                    // Also attempt custom / third-party model ids not in the advertised catalog
+                    // (gateway models, cc-switch, free-form provider ids).
                     if let Some(pref) = preferred_model.clone() {
-                        if pref != ev.current_id && ev.models.iter().any(|m| m.id == pref) {
+                        if pref != ev.current_id {
+                            let listed = ev.models.iter().any(|m| m.id == pref);
                             let response = tokio::select! {
                                 result = timed_acp_request(
                                     "set model",
@@ -1126,14 +1151,26 @@ pub async fn run_once(
                                         .send_request(SetSessionConfigOptionRequest::new(
                                             acp_session_id.clone(),
                                             SessionConfigId::new(ev.config_id.as_str()),
-                                            SessionConfigOptionValue::value_id(pref),
+                                            SessionConfigOptionValue::value_id(pref.clone()),
                                         ))
                                         .block_task(),
-                                ) => result.ok(),
+                                ) => result,
                                 () = wait_for_cancellation(&mut cancellation) => return_cancelled!(),
                             };
-                            if let Some(response) = response {
-                                config_options = response.config_options;
+                            match response {
+                                Ok(response) => {
+                                    config_options = response.config_options;
+                                }
+                                Err(e) => {
+                                    log::debug!(
+                                        target: "agentero::agent",
+                                        "agent={} set model failed (listed={}): pref={} err={}",
+                                        agent_id_for_models,
+                                        listed,
+                                        pref,
+                                        e
+                                    );
+                                }
                             }
                         }
                     }
@@ -1438,21 +1475,36 @@ pub async fn warm_agent(
                 if let Some(ev) =
                     models_from_config_options(&session_for_conn, &agent_for_conn, &config_options)
                 {
+                    // Attempt preferred model even when not in the advertised catalog
+                    // (third-party / gateway free-form ids).
                     if let Some(pref) = preferred.clone() {
-                        if pref != ev.current_id && ev.models.iter().any(|m| m.id == pref) {
-                            if let Ok(response) = timed_acp_request(
+                        if pref != ev.current_id {
+                            let listed = ev.models.iter().any(|m| m.id == pref);
+                            match timed_acp_request(
                                 "set model",
                                 connection
                                     .send_request(SetSessionConfigOptionRequest::new(
                                         acp_session_id.clone(),
                                         SessionConfigId::new(ev.config_id.as_str()),
-                                        SessionConfigOptionValue::value_id(pref),
+                                        SessionConfigOptionValue::value_id(pref.clone()),
                                     ))
                                     .block_task(),
                             )
                             .await
                             {
-                                config_options = response.config_options;
+                                Ok(response) => {
+                                    config_options = response.config_options;
+                                }
+                                Err(e) => {
+                                    log::debug!(
+                                        target: "agentero::agent",
+                                        "agent={} warm set model failed (listed={}): pref={} err={}",
+                                        agent_for_conn,
+                                        listed,
+                                        pref,
+                                        e
+                                    );
+                                }
                             }
                         }
                     }
@@ -1937,7 +1989,9 @@ mod cancelled_payload_tests {
 
 #[cfg(test)]
 mod config_option_tests {
-    use super::{effort_from_config_options, fast_mode_from_config_options};
+    use super::{
+        effort_from_config_options, fast_mode_from_config_options, models_from_config_options,
+    };
     use agent_client_protocol::schema::v1::{
         SessionConfigOption, SessionConfigOptionCategory, SessionConfigSelectOption,
     };
@@ -1977,6 +2031,44 @@ mod config_option_tests {
         let fast = fast_mode_from_config_options("session", "codex", &options)
             .expect("Codex fast mode should be exposed");
         assert!(fast.enabled);
+    }
+
+    #[test]
+    fn injects_current_model_when_missing_from_catalog() {
+        let options = vec![SessionConfigOption::select(
+            "model",
+            "Model",
+            "deepseek-chat",
+            vec![
+                SessionConfigSelectOption::new("gpt-5", "GPT-5"),
+                SessionConfigSelectOption::new("gpt-4.1", "GPT-4.1"),
+            ],
+        )
+        .category(SessionConfigOptionCategory::Model)];
+
+        let models = models_from_config_options("session", "codex", &options)
+            .expect("model selector should be exposed");
+        assert_eq!(models.current_id, "deepseek-chat");
+        assert_eq!(models.models[0].id, "deepseek-chat");
+        assert!(models.models.iter().any(|m| m.id == "gpt-5"));
+    }
+
+    #[test]
+    fn does_not_duplicate_current_when_already_listed() {
+        let options = vec![SessionConfigOption::select(
+            "model",
+            "Model",
+            "gpt-5",
+            vec![
+                SessionConfigSelectOption::new("gpt-5", "GPT-5"),
+                SessionConfigSelectOption::new("gpt-4.1", "GPT-4.1"),
+            ],
+        )
+        .category(SessionConfigOptionCategory::Model)];
+
+        let models = models_from_config_options("session", "codex", &options)
+            .expect("model selector should be exposed");
+        assert_eq!(models.models.iter().filter(|m| m.id == "gpt-5").count(), 1);
     }
 }
 
