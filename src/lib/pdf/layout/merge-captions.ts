@@ -44,16 +44,72 @@ export const LAYOUT_MERGE = {
 	orphanContainment: 0.55,
 	/** Max horizontal gap between formula body and formula_number. */
 	formulaNumberMaxGap: 0.28,
-	/** Vertical pad around formula_number when collecting multi-line bodies. */
-	formulaNumberBandPad: 0.05,
-	/** Max vertical gap to grow multi-line formula cluster. */
-	formulaNeighborGap: 0.06,
 	/**
-	 * Fraction of formula area covered by a body-text box → treat as inline
-	 * math / false positive; do not merge into a numbered host.
+	 * Vertical pad around formula_number when matching same-line bodies.
+	 * Kept tight — no multi-line vertical grow into body text.
 	 */
-	formulaTextOverlap: 0.28,
+	formulaNumberBandPad: 0.02,
+	/**
+	 * Min model score for a `formula_number` box to start a merge.
+	 * Aligns with sidebar gate; filters dual-label / margin noise (~0.01–0.05).
+	 */
+	formulaNumberMinScore: 0.3,
+	/**
+	 * Min score for a formula body to be a merge seed.
+	 * Tiny score~0.02 fragments next to the number would otherwise win seed sort.
+	 */
+	formulaBodyMinScore: 0.3,
+	/**
+	 * Max normalized height of a formula body seed.
+	 * Taller boxes are usually paragraph dual-labels / stacked inline math,
+	 * not a single display equation line.
+	 */
+	formulaMaxBodyHeight: 0.055,
+	/**
+	 * Page midline for two-column reading order (left column before right).
+	 * Equation numbers sit on the outer edge of each column; center-x vs mid
+	 * is enough for typical academic PDFs.
+	 */
+	columnMidX: 0.5,
 } as const;
+
+/**
+ * 0 = left column, 1 = right column (two-column page reading order).
+ * Single-column papers usually put numbers on the right → all col 1 → sort by y.
+ */
+export function layoutReadingColumn(
+	bbox: PdfAskNormalizedRect,
+	midX: number = LAYOUT_MERGE.columnMidX,
+): 0 | 1 {
+	return bbox.x + bbox.w / 2 < midX ? 0 : 1;
+}
+
+/** Prefer equation-number box for column/y order when present. */
+export function formulaSortAnchor(
+	region: PdfLayoutRegion,
+): PdfAskNormalizedRect {
+	return region.titleBbox ?? region.bbox;
+}
+
+/**
+ * Reading order for layout hosts: page → left column → right column → top→bottom.
+ * Matches equation-number sequence on two-column papers better than raw y-only.
+ */
+export function compareLayoutReadingOrder(
+	a: PdfLayoutRegion,
+	b: PdfLayoutRegion,
+	anchor: (r: PdfLayoutRegion) => PdfAskNormalizedRect = (r) => r.bbox,
+): number {
+	const aa = anchor(a);
+	const ba = anchor(b);
+	return (
+		a.pageIndex - b.pageIndex ||
+		layoutReadingColumn(aa) - layoutReadingColumn(ba) ||
+		aa.y - ba.y ||
+		aa.x - ba.x ||
+		a.readingOrder - b.readingOrder
+	);
+}
 
 function clamp01(value: number): number {
 	if (!Number.isFinite(value)) return 0;
@@ -809,43 +865,30 @@ export function bboxCoveredBy(
 }
 
 /**
- * True when a formula (or candidate host) substantially overlaps body text —
- * typical of inline math / false formula detections inside paragraphs.
- */
-export function formulaOverlapsText(
-	box: PdfAskNormalizedRect,
-	pageIndex: number,
-	textBlocks: PdfLayoutRegion[],
-	threshold: number = LAYOUT_MERGE.formulaTextOverlap,
-): boolean {
-	for (const t of textBlocks) {
-		if (t.pageIndex !== pageIndex) continue;
-		if (!isTextLayoutKind(t.kind)) continue;
-		if (bboxCoveredBy(box, t.bbox) >= threshold) return true;
-	}
-	return false;
-}
-
-/**
- * Collect formula bodies belonging to one formula_number (number-first).
- * Rules (strict — avoid over-merge):
- * - Only bodies left of the number in the same vertical band
- * - Reject bodies that substantially overlap `text` boxes
- * - Multi-line grow is vertical neighbors only, and never across text
+ * Collect formula bodies for one formula_number (number-first, same-line only).
+ *
+ * - No multi-line vertical grow: stacked / interline body-text formulas must
+ *   not be unioned into the display equation (they swallow paragraphs).
+ * - Only short, confident bodies left of the number on the same baseline band.
+ * - Same-line fragments may still merge when they heavily overlap the seed.
  */
 export function selectFormulasForNumber(
 	number: PdfLayoutRegion,
 	formulas: PdfLayoutRegion[],
-	textBlocks: PdfLayoutRegion[] = [],
 ): PdfLayoutRegion[] {
 	const pad = LAYOUT_MERGE.formulaNumberBandPad;
 	const maxGap = LAYOUT_MERGE.formulaNumberMaxGap;
 	const num = number.bbox;
 	const numCy = num.y + num.h / 2;
+	// Band height locked to the number box — never scale with a tall body.
+	const halfBand = Math.max(num.h, 0.012) * 0.75 + pad;
 
 	const eligible = (f: PdfLayoutRegion): boolean => {
 		if (f.pageIndex !== number.pageIndex) return false;
-		if (formulaOverlapsText(f.bbox, f.pageIndex, textBlocks)) return false;
+		// Seeds must be confident formula bodies — not score~0.02 dual-label scraps.
+		if (f.score < LAYOUT_MERGE.formulaBodyMinScore) return false;
+		// Reject paragraph-tall "formula" mislabels / multi-line text blocks.
+		if (f.bbox.h > LAYOUT_MERGE.formulaMaxBodyHeight) return false;
 		const fRight = f.bbox.x + f.bbox.w;
 		const fCy = f.bbox.y + f.bbox.h / 2;
 		// Mostly left of the number (equation body, not another margin tag).
@@ -854,81 +897,34 @@ export function selectFormulasForNumber(
 		if (gap > maxGap) return false;
 		if (gap < -0.12) return false; // heavy overlap with number box → skip
 		const vOv = verticalOverlapRatio(f.bbox, expandBbox(num, 0, pad));
-		const inBand = fCy >= num.y - pad && fCy <= num.y + num.h + pad;
-		const nearMid =
-			Math.abs(fCy - numCy) <= Math.max(num.h, f.bbox.h) * 0.75 + pad;
-		return vOv >= 0.15 || inBand || nearMid;
+		const inBand = Math.abs(fCy - numCy) <= halfBand;
+		return vOv >= 0.2 || inBand;
 	};
 
 	const seeds = formulas.filter(eligible);
 	if (!seeds.length) return [];
 
-	// Prefer the single best seed (closest to the number, highest score)
-	// then only grow to direct vertical neighbors — not every free formula.
+	// Prefer highest-confidence body, then closest to the number.
+	// (dy-first used to pick tiny margin scraps next to the number box.)
 	seeds.sort((a, b) => {
 		const aGap = Math.abs(num.x - (a.bbox.x + a.bbox.w));
 		const bGap = Math.abs(num.x - (b.bbox.x + b.bbox.w));
 		const aDy = Math.abs(a.bbox.y + a.bbox.h / 2 - numCy);
 		const bDy = Math.abs(b.bbox.y + b.bbox.h / 2 - numCy);
-		return aDy - bDy || aGap - bGap || b.score - a.score;
+		const aArea = a.bbox.w * a.bbox.h;
+		const bArea = b.bbox.w * b.bbox.h;
+		return b.score - a.score || bArea - aArea || aDy - bDy || aGap - bGap;
 	});
 
-	// Grow multi-line equation: stacked formula boxes next to the same number.
-	const pool = formulas.filter(
-		(f) =>
-			f.pageIndex === number.pageIndex &&
-			!formulaOverlapsText(f.bbox, f.pageIndex, textBlocks),
-	);
+	// Same-line fragments only — never grow to lines above/below (body text).
 	const chosen = new Set<string>([seeds[0]!.id]);
-	// Also take other seeds that are already in-band (same line fragments).
 	for (const s of seeds) {
 		if (verticalOverlapRatio(s.bbox, seeds[0]!.bbox) >= 0.35) {
 			chosen.add(s.id);
 		}
 	}
 
-	let grew = true;
-	while (grew) {
-		grew = false;
-		const current = pool.filter((f) => chosen.has(f.id));
-		const body = unionMany(current.map((c) => c.bbox));
-		if (!body) break;
-		for (const f of pool) {
-			if (chosen.has(f.id)) continue;
-			if (f.bbox.x >= num.x + num.w * 0.5) continue;
-			const gapX = num.x - (f.bbox.x + f.bbox.w);
-			if (gapX > maxGap || gapX < -0.12) continue;
-			// Must horizontally overlap the current body (same column).
-			if (horizontalOverlapRatio(f.bbox, body) < 0.2) continue;
-			const fBottom = f.bbox.y + f.bbox.h;
-			const bodyBottom = body.y + body.h;
-			const vGap = Math.max(
-				0,
-				Math.max(f.bbox.y - bodyBottom, body.y - fBottom),
-			);
-			if (vGap > LAYOUT_MERGE.formulaNeighborGap) continue;
-			// Stay near the number's vertical neighborhood (tighter than before).
-			const fCy = f.bbox.y + f.bbox.h / 2;
-			if (fCy < num.y - 0.12 || fCy > num.y + num.h + 0.12) continue;
-			// Gap strip between body and candidate must not be mostly text.
-			const gapBox: PdfAskNormalizedRect = {
-				x: Math.min(body.x, f.bbox.x),
-				y: Math.min(bodyBottom, fBottom) === bodyBottom ? bodyBottom : fBottom,
-				w: Math.max(body.w, f.bbox.w),
-				h: vGap,
-			};
-			if (
-				vGap > 0.005 &&
-				formulaOverlapsText(gapBox, f.pageIndex, textBlocks, 0.4)
-			) {
-				continue;
-			}
-			chosen.add(f.id);
-			grew = true;
-		}
-	}
-
-	return pool.filter((f) => chosen.has(f.id));
+	return formulas.filter((f) => chosen.has(f.id));
 }
 
 function mergeFormulaCluster(
@@ -965,19 +961,22 @@ function mergeFormulaCluster(
 }
 
 /**
- * Number-first formula aggregation (strict, geometry-only):
- * - Only model `formula_number` anchors (no text-id recovery)
- * - Only formula bodies that do **not** substantially overlap `text`
- * - Drop unnumbered formulas, text-overlapped formulas, bare numbers
- * - `text` regions are never returned (blockers only)
+ * Number-first formula aggregation (geometry-only):
+ * - Only model `formula_number` anchors with score ≥ formulaNumberMinScore
+ * - Drop unnumbered formulas and bare / low-score numbers
+ * - No text-overlap gate (paragraph text boxes routinely contain display eqs;
+ *   dual-label low-score `text` on the same bbox used to kill all merges)
  * - Does **not** parse equation number strings onto `title`
  */
 export function mergeFormulasByNumber(
 	regions: PdfLayoutRegion[],
 ): PdfLayoutRegion[] {
 	const formulas = regions.filter((r) => isFormulaLayoutKind(r.kind));
-	const numbers = regions.filter((r) => isFormulaNumberLayoutKind(r.kind));
-	const textBlocks = regions.filter((r) => isTextLayoutKind(r.kind));
+	const numbers = regions.filter(
+		(r) =>
+			isFormulaNumberLayoutKind(r.kind) &&
+			r.score >= LAYOUT_MERGE.formulaNumberMinScore,
+	);
 	const rest = regions.filter(
 		(r) =>
 			!isFormulaLayoutKind(r.kind) &&
@@ -988,37 +987,28 @@ export function mergeFormulasByNumber(
 	const usedFormulaIds = new Set<string>();
 	const merged: PdfLayoutRegion[] = [];
 
-	const sortedNumbers = [...numbers].sort(
-		(a, b) =>
-			a.pageIndex - b.pageIndex || a.bbox.y - b.bbox.y || a.bbox.x - b.bbox.x,
+	// Process numbers in reading order so eq sequence is stable (two-column aware).
+	const sortedNumbers = [...numbers].sort((a, b) =>
+		compareLayoutReadingOrder(a, b),
 	);
 
 	for (const num of sortedNumbers) {
-		// formula_number itself sitting inside a paragraph → skip
-		if (formulaOverlapsText(num.bbox, num.pageIndex, textBlocks)) continue;
-
 		const free = formulas.filter((f) => !usedFormulaIds.has(f.id));
-		const cluster = selectFormulasForNumber(num, free, textBlocks);
+		const cluster = selectFormulasForNumber(num, free);
 		if (!cluster.length) continue;
 
 		const host = mergeFormulaCluster(cluster, num);
-		// Final host must not mostly cover body text either.
-		if (formulaOverlapsText(host.bbox, host.pageIndex, textBlocks)) continue;
-
 		merged.push(host);
 		for (const f of cluster) usedFormulaIds.add(f.id);
 	}
 
 	// Bare formula without model formula_number box is dropped (geometry only).
+	// Sort by number-box column/y so sidebar follows eq order on dual-column pages.
+	merged.sort((a, b) => compareLayoutReadingOrder(a, b, formulaSortAnchor));
+	// Rewrite readingOrder to match so NMS / gallery keep this sequence.
+	const ordered = merged.map((r, i) => ({ ...r, readingOrder: i }));
 
-	merged.sort(
-		(a, b) =>
-			a.pageIndex - b.pageIndex ||
-			a.readingOrder - b.readingOrder ||
-			a.bbox.y - b.bbox.y,
-	);
-
-	return [...rest, ...merged];
+	return [...rest, ...ordered];
 }
 
 /**
@@ -1040,12 +1030,9 @@ export function mergeCaptionsIntoHosts(
 	const tables = tagged.filter((r) => isTableLayoutKind(r.kind));
 	const algorithms = tagged.filter((r) => isAlgorithmLayoutKind(r.kind));
 	const captions = tagged.filter((r) => isCaptionLayoutKind(r.kind));
-	// formula + formula_number + body text (blocker only for formula merge).
+	// formula + formula_number only (text no longer used as a formula merge gate).
 	const formulaRelated = tagged.filter(
-		(r) =>
-			isFormulaLayoutKind(r.kind) ||
-			isFormulaNumberLayoutKind(r.kind) ||
-			isTextLayoutKind(r.kind),
+		(r) => isFormulaLayoutKind(r.kind) || isFormulaNumberLayoutKind(r.kind),
 	);
 	const others = tagged.filter(
 		(r) =>

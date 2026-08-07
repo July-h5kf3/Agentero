@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	compareLayoutReadingOrder,
+	formulaSortAnchor,
 	mergeCaptionsIntoHosts,
 	mergeFormulasByNumber,
 	selectFormulasForNumber,
@@ -49,90 +51,83 @@ describe("selectFormulasForNumber", () => {
 		expect(picked.map((p) => p.id)).toEqual(["f1"]);
 	});
 
-	it("grows multi-line formula stacks next to one number", () => {
+	it("does not vertically merge stacked lines or interline body formulas", () => {
 		const num = region({
 			id: "n1",
 			kind: "formula_number",
 			score: 0.9,
-			bbox: { x: 0.88, y: 0.42, w: 0.06, h: 0.08 },
+			bbox: { x: 0.88, y: 0.42, w: 0.06, h: 0.02 },
 		});
 		const line1 = region({
 			id: "f1",
 			kind: "formula",
 			score: 0.9,
-			bbox: { x: 0.15, y: 0.4, w: 0.65, h: 0.04 },
+			bbox: { x: 0.15, y: 0.415, w: 0.65, h: 0.025 },
 		});
+		// Next display-ish line — must NOT union into host (swallows body text).
 		const line2 = region({
 			id: "f2",
 			kind: "formula",
 			score: 0.9,
-			bbox: { x: 0.15, y: 0.45, w: 0.65, h: 0.04 },
+			bbox: { x: 0.15, y: 0.46, w: 0.65, h: 0.025 },
 		});
-		const far = region({
-			id: "f3",
+		// Inline scrap in paragraph above.
+		const interline = region({
+			id: "f-inline",
 			kind: "formula",
-			score: 0.9,
-			bbox: { x: 0.15, y: 0.75, w: 0.65, h: 0.04 },
+			score: 0.85,
+			bbox: { x: 0.2, y: 0.35, w: 0.15, h: 0.02 },
 		});
-		const picked = selectFormulasForNumber(num, [line1, line2, far]);
-		expect(picked.map((p) => p.id).sort()).toEqual(["f1", "f2"]);
+		const picked = selectFormulasForNumber(num, [line1, line2, interline]);
+		expect(picked.map((p) => p.id)).toEqual(["f1"]);
 	});
 
-	it("rejects formula bodies that substantially overlap text", () => {
+	it("rejects paragraph-tall formula mislabels as seeds", () => {
 		const num = region({
 			id: "n1",
 			kind: "formula_number",
 			score: 0.9,
-			bbox: { x: 0.85, y: 0.4, w: 0.08, h: 0.04 },
+			bbox: { x: 0.89, y: 0.5, w: 0.03, h: 0.015 },
 		});
-		const inline = region({
-			id: "f-inline",
-			kind: "formula",
-			score: 0.8,
-			// Nested inside a paragraph text box.
-			bbox: { x: 0.25, y: 0.4, w: 0.3, h: 0.04 },
-		});
-		const display = region({
-			id: "f-display",
+		const tall = region({
+			id: "f-tall",
 			kind: "formula",
 			score: 0.95,
-			bbox: { x: 0.2, y: 0.39, w: 0.55, h: 0.05 },
+			// Whole column of body text dual-labeled as formula.
+			bbox: { x: 0.1, y: 0.4, w: 0.7, h: 0.2 },
 		});
-		const text = region({
-			id: "t1",
-			kind: "text",
-			score: 0.99,
-			bbox: { x: 0.1, y: 0.35, w: 0.55, h: 0.15 },
-		});
-		const picked = selectFormulasForNumber(num, [inline, display], [text]);
-		// display mostly outside text? display x=0.2 w=0.55 covers a lot of text
-		// recalculate: display and text overlap heavily → both might reject.
-		// Use a clean display formula away from text.
-		const clean = region({
-			id: "f-clean",
+		const line = region({
+			id: "f-line",
 			kind: "formula",
-			score: 0.95,
-			bbox: { x: 0.2, y: 0.2, w: 0.55, h: 0.05 },
-		});
-		const num2 = region({
-			id: "n2",
-			kind: "formula_number",
 			score: 0.9,
-			bbox: { x: 0.85, y: 0.21, w: 0.08, h: 0.04 },
+			bbox: { x: 0.15, y: 0.495, w: 0.65, h: 0.025 },
 		});
-		const textLow = region({
-			id: "t-low",
-			kind: "text",
-			score: 0.99,
-			bbox: { x: 0.1, y: 0.5, w: 0.7, h: 0.2 },
+		const picked = selectFormulasForNumber(num, [tall, line]);
+		expect(picked.map((p) => p.id)).toEqual(["f-line"]);
+	});
+
+	it("prefers high-score body over tiny scraps next to the number", () => {
+		const num = region({
+			id: "n1",
+			kind: "formula_number",
+			score: 0.8,
+			bbox: { x: 0.89, y: 0.613, w: 0.022, h: 0.014 },
 		});
-		const pickedClean = selectFormulasForNumber(
-			num2,
-			[clean, inline],
-			[textLow],
-		);
-		expect(pickedClean.map((p) => p.id)).toEqual(["f-clean"]);
-		expect(picked.map((p) => p.id)).not.toContain("f-inline");
+		const main = region({
+			id: "f-main",
+			kind: "formula",
+			score: 0.84,
+			bbox: { x: 0.622, y: 0.612, w: 0.173, h: 0.017 },
+		});
+		const scrap = region({
+			id: "f-scrap",
+			kind: "formula",
+			score: 0.02,
+			bbox: { x: 0.86, y: 0.613, w: 0.022, h: 0.014 },
+		});
+		const picked = selectFormulasForNumber(num, [scrap, main]);
+		expect(picked.map((p) => p.id)).toContain("f-main");
+		expect(picked.map((p) => p.id)).not.toContain("f-scrap");
 	});
 });
 
@@ -180,27 +175,105 @@ describe("mergeFormulasByNumber", () => {
 		expect(out).toHaveLength(0);
 	});
 
-	it("drops numbered formulas that sit inside text blocks", () => {
+	it("orders formulas left-column then right-column then top-to-bottom", () => {
+		// Two-column page: left bottom eq should come before right-column top eqs
+		// when reading left column fully first (academic dual-column order).
+		const pairs: Array<{
+			body: ReturnType<typeof region>;
+			num: ReturnType<typeof region>;
+		}> = [
+			{
+				// right column, top
+				body: region({
+					id: "fr1",
+					kind: "formula",
+					score: 0.9,
+					bbox: { x: 0.55, y: 0.15, w: 0.3, h: 0.03 },
+					readingOrder: 10,
+				}),
+				num: region({
+					id: "nr1",
+					kind: "formula_number",
+					score: 0.9,
+					bbox: { x: 0.88, y: 0.15, w: 0.04, h: 0.02 },
+					readingOrder: 11,
+				}),
+			},
+			{
+				// left column, lower
+				body: region({
+					id: "fl1",
+					kind: "formula",
+					score: 0.9,
+					bbox: { x: 0.1, y: 0.65, w: 0.3, h: 0.03 },
+					readingOrder: 50,
+				}),
+				num: region({
+					id: "nl1",
+					kind: "formula_number",
+					score: 0.9,
+					bbox: { x: 0.42, y: 0.65, w: 0.04, h: 0.02 },
+					readingOrder: 51,
+				}),
+			},
+			{
+				// right column, middle
+				body: region({
+					id: "fr2",
+					kind: "formula",
+					score: 0.9,
+					bbox: { x: 0.55, y: 0.4, w: 0.3, h: 0.03 },
+					readingOrder: 20,
+				}),
+				num: region({
+					id: "nr2",
+					kind: "formula_number",
+					score: 0.9,
+					bbox: { x: 0.88, y: 0.4, w: 0.04, h: 0.02 },
+					readingOrder: 21,
+				}),
+			},
+		];
+		const out = mergeFormulasByNumber(pairs.flatMap((p) => [p.body, p.num]));
+		const formulas = out.filter((r) => r.kind === "formula");
+		expect(formulas.map((f) => f.id)).toEqual(["nl1", "nr1", "nr2"]);
+		// Stable for sidebar re-sort.
+		const resorted = [...formulas].sort((a, b) =>
+			compareLayoutReadingOrder(a, b, formulaSortAnchor),
+		);
+		expect(resorted.map((f) => f.id)).toEqual(["nl1", "nr1", "nr2"]);
+	});
+
+	it("ignores low-score formula_number noise and co-located text dual-labels", () => {
 		const body = region({
 			id: "f1",
 			kind: "formula",
-			score: 0.9,
-			bbox: { x: 0.2, y: 0.4, w: 0.4, h: 0.04 },
+			score: 0.84,
+			bbox: { x: 0.62, y: 0.61, w: 0.17, h: 0.017 },
 		});
-		const num = region({
-			id: "n1",
+		const goodNum = region({
+			id: "n-good",
 			kind: "formula_number",
-			score: 0.85,
-			bbox: { x: 0.85, y: 0.4, w: 0.08, h: 0.04 },
+			score: 0.8,
+			bbox: { x: 0.89, y: 0.613, w: 0.022, h: 0.014 },
 		});
-		const text = region({
-			id: "t1",
+		const noiseNum = region({
+			id: "n-noise",
+			kind: "formula_number",
+			score: 0.015,
+			bbox: { x: 0.62, y: 0.61, w: 0.17, h: 0.017 },
+		});
+		const dualText = region({
+			id: "t-dual",
 			kind: "text",
-			score: 0.99,
-			bbox: { x: 0.1, y: 0.35, w: 0.75, h: 0.15 },
+			score: 0.024,
+			// Same box as formula — previously killed every merge via F2.
+			bbox: { x: 0.62, y: 0.61, w: 0.17, h: 0.017 },
 		});
-		const out = mergeFormulasByNumber([body, num, text]);
-		expect(out.filter((r) => r.kind === "formula")).toHaveLength(0);
+		const out = mergeFormulasByNumber([body, goodNum, noiseNum, dualText]);
+		const formulas = out.filter((r) => r.kind === "formula");
+		expect(formulas).toHaveLength(1);
+		expect(formulas[0]?.id).toBe("n-good");
 		expect(out.some((r) => r.kind === "text")).toBe(false);
 	});
 });

@@ -155,15 +155,21 @@ type LayoutSidecar = {
 | **E1** | 孤儿 panel | 落在更大联图内（覆盖≥0.55）的无主标题 panel 丢弃 |
 | **E2** | 侧栏 NMS | 默认 `minScore=0.3`、`minArea=0.002`、同组 IoU≥0.45 抑低分、小框被盖≥0.85 丢小 |
 
-### F. 公式编号框聚合（3）— **不解析编号文本**
+### F. 公式编号框聚合 — **同行-only，不解析编号文本**
 
 | # | 规则 | 说明 |
 |---|---|---|
-| **F1** | 必须有 formula_number 框 | **仅**模型 `formula_number` 几何锚点可启动合并；无编号框的 formula **不**进侧栏；**不**从 PDF 文字层解析 `(1)` 等编号 |
-| **F2** | 不与 text 重叠 | `formula` / `formula_number` / 合并后 host 若被 `text`/`aside_text` 覆盖 ≥ **0.28** 面积 → **丢弃**（行内公式 / 误检） |
-| **F3** | 侧栏位置 | 合并后的 display formula 放在 **插图 / 表 / 算法之后（列表最底）**；侧栏标题用 i18n 回退（如「公式 1」），`title` 不写编号串；`text` 永不进侧栏 |
+| **F1** | 必须有够分的 formula_number 框 | **仅**模型 `formula_number` 且 **score ≥ 0.3** 可启动合并；无编号框 / 低分噪声编号 **不**进侧栏；**不**解析 `(1)` 等编号文本 |
+| **F2** | 主体 seed 够分且够矮 | formula 体 **score ≥ 0.3** 且 **h ≤ 0.055**（拒段落级误检）；优先高分 / 大宽 |
+| **F3** | **禁止竖向多行 grow** | 只并**同一基线带**内、与 seed 竖向重叠 ≥0.35 的碎片；**不**把上下行 / 正文行间公式并进 host |
+| **F4** | 侧栏位置 | 合并后 display formula 在 **插图 / 表 / 算法之后（最底）**；标题用 i18n 回退；`title` 不写编号串 |
+| **F5** | 排序 = 阅读序 / 序号序 | **页 → 左栏 → 右栏 → 栏内自上而下**（以 `titleBbox`/编号框中心 vs `columnMidX=0.5` 分栏）；双栏避免纯 y 排序把左右栏交错 |
 
-合并为纯几何：编号框左侧竖带内的 formula 体 + 多行竖向邻接扩展（gap 无大块 text）。`titleBbox` 保留编号框几何，不抽编号字符串。
+竖向 band 只按 **编号框高度** 收紧（`bandPad=0.02`），不随 body 高度放大。`titleBbox` 保留编号框几何。
+
+**已废止：**
+- 与 text 重叠 ≥0.28 则丢（旧 F2）— 段落 text / 双标低分 text 会全灭公式
+- 多行竖向邻接扩展（`formulaNeighborGap`）— 会把正文行间公式连成整段高亮
 
 半宽并排（Fig7\|Fig8）仅在双方都是半宽时做**软**水平分开，并**再并回完整 title**；全宽联图不做 mid-split。
 
@@ -180,6 +186,8 @@ type LayoutSidecar = {
 | 侧栏默认 50% 置信度 | **已改为固定 30%**（无 UI 滑条） |
 | 文档写死 0.5 / 无 merge 流水线 | **以本文为准** |
 | `looksLikeFigureCaption` | 兼容别名，等价 `captionRoleFromText` 主类判断，勿再扩展 |
+| formula 与 text 重叠即丢（旧 F2） | **已废止**（双标 text / 段落包公式 → 侧栏永远为空） |
+| 公式多行竖向 grow | **已废止**（会吞并正文行间公式；现同行-only） |
 
 ---
 
@@ -196,9 +204,13 @@ type LayoutSidecar = {
 | `LAYOUT_MERGE.panelNeighborGap` | 0.08 | 子图邻接 |
 | `LAYOUT_MERGE.orphanContainment` | 0.55 | 吞并孤儿 panel |
 | `LAYOUT_MERGE.formulaNumberMaxGap` | 0.28 | 公式体与编号水平间距 |
-| `LAYOUT_MERGE.formulaNumberBandPad` | 0.05 | 编号竖带 |
-| `LAYOUT_MERGE.formulaNeighborGap` | 0.06 | 多行公式竖向扩展 |
-| `LAYOUT_MERGE.formulaTextOverlap` | 0.28 | formula 被 text 覆盖比 → 不合并 |
+| `LAYOUT_MERGE.formulaNumberBandPad` | 0.02 | 同行竖带（相对编号框） |
+| `LAYOUT_MERGE.formulaNumberMinScore` | 0.3 | formula_number 锚点最低置信度 |
+| `LAYOUT_MERGE.formulaBodyMinScore` | 0.3 | formula 主体 seed 最低置信度 |
+| `LAYOUT_MERGE.formulaMaxBodyHeight` | 0.055 | 拒绝过高「公式」误检 |
+| `LAYOUT_MERGE.columnMidX` | 0.5 | 双栏分栏中线（公式排序） |
+| ~~`formulaNeighborGap` / 竖向 grow~~ | — | **已废止** |
+| ~~`formulaTextOverlap`~~ | ~~0.28~~ | **已废止** |
 | NMS `iouThreshold` | 0.45 | 去重 |
 | NMS `containmentThreshold` | 0.85 | 去重 |
 
