@@ -1,18 +1,24 @@
 /**
- * IDE-style background tasks floater (bottom-left).
- * Collapsed chip when work is running; click expands queue + progress.
- * Hidden when there are no tasks.
+ * Background tasks floater (bottom-left).
+ * Collapsed: circular progress ring only.
+ * Expanded / hover: task detail list (no summary toast chip).
+ * Ring center cycles: progress % ↔ task icon.
  */
 import {
+	BookOpen,
 	CheckCircle2,
-	ChevronDown,
-	ChevronUp,
 	CircleX,
+	Download,
+	FileUp,
+	LayoutGrid,
 	ListOrdered,
 	Loader2,
+	Package,
+	Plug,
+	Search,
 	X,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -25,6 +31,7 @@ import {
 import { useBackgroundTasks } from "@/hooks/use-background-tasks";
 import {
 	type BackgroundTask,
+	type BackgroundTaskKind,
 	cancelBackgroundTask,
 	clearFinishedBackgroundTasks,
 	getActiveBackgroundTasks,
@@ -32,6 +39,33 @@ import {
 	setBackgroundTasksExpanded,
 } from "@/lib/core/background-tasks";
 import { cn } from "@/lib/core/utils";
+
+/** Dwell before expanding detail from the ring (avoids flicker on pass-over). */
+const HOVER_EXPAND_MS = 400;
+
+/** Center icon for the primary active task kind. */
+function kindIcon(kind: BackgroundTaskKind | undefined) {
+	const cls = "relative size-3.5 text-primary";
+	switch (kind) {
+		case "download":
+		case "downloadAll":
+			return <Download className={cls} aria-hidden />;
+		case "lookup":
+			return <Search className={cls} aria-hidden />;
+		case "import":
+			return <FileUp className={cls} aria-hidden />;
+		case "export":
+			return <Package className={cls} aria-hidden />;
+		case "parse":
+			return <LayoutGrid className={cls} aria-hidden />;
+		case "paperRead":
+			return <BookOpen className={cls} aria-hidden />;
+		case "connector":
+			return <Plug className={cls} aria-hidden />;
+		default:
+			return <ListOrdered className={cls} aria-hidden />;
+	}
+}
 
 function statusIcon(task: BackgroundTask) {
 	switch (task.status) {
@@ -128,13 +162,178 @@ function TaskRow({ task }: { task: BackgroundTask }) {
 	);
 }
 
+type RingCenterPhase = "progress" | "icon";
+
+const RING_CENTER_MS = 2400;
+
+/** Circular progress control — center cycles progress / kind icon. */
+function ProgressRing({
+	activeCount,
+	failed,
+	label,
+	progress,
+	taskKind,
+	onActivate,
+}: {
+	activeCount: number;
+	failed: boolean;
+	label: string;
+	progress: number | null;
+	taskKind?: BackgroundTaskKind;
+	onActivate: () => void;
+}) {
+	const radius = 16;
+	const circumference = 2 * Math.PI * radius;
+	const normalizedProgress =
+		progress == null ? null : Math.max(0, Math.min(100, progress));
+	const offset =
+		normalizedProgress == null
+			? 0
+			: circumference - (normalizedProgress / 100) * circumference;
+
+	const [phase, setPhase] = useState<RingCenterPhase>("progress");
+	const active = activeCount > 0 && !failed;
+
+	useEffect(() => {
+		if (!active) {
+			setPhase("progress");
+			return;
+		}
+		const order: RingCenterPhase[] = ["progress", "icon"];
+		const id = window.setInterval(() => {
+			setPhase((prev) => {
+				const i = order.indexOf(prev);
+				return order[(i + 1) % order.length] ?? "progress";
+			});
+		}, RING_CENTER_MS);
+		return () => window.clearInterval(id);
+	}, [active]);
+
+	const center = (() => {
+		if (failed) {
+			return <CircleX className="relative size-3.5 text-destructive" />;
+		}
+		if (activeCount === 0) {
+			return (
+				<CheckCircle2 className="relative size-3.5 text-emerald-600 dark:text-emerald-400" />
+			);
+		}
+		// Active work: cycle progress ↔ kind icon.
+		if (phase === "icon") {
+			return kindIcon(taskKind);
+		}
+		// progress phase
+		if (activeCount > 1) {
+			return (
+				<span className="relative font-mono font-medium text-[11px] tabular-nums">
+					{activeCount}
+				</span>
+			);
+		}
+		if (normalizedProgress != null) {
+			return (
+				<span className="relative font-mono font-medium text-[9px] tabular-nums leading-none text-foreground">
+					{Math.round(normalizedProgress)}%
+				</span>
+			);
+		}
+		// No numeric progress yet — show task icon.
+		return kindIcon(taskKind);
+	})();
+
+	return (
+		<button
+			type="button"
+			className="relative flex size-9 items-center justify-center bg-transparent text-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+			aria-label={label}
+			aria-expanded={false}
+			onClick={onActivate}
+			onFocus={onActivate}
+		>
+			{/* Progress ring is the outermost visual — no chip background. */}
+			<svg
+				className="pointer-events-none absolute inset-0 size-9 -rotate-90"
+				viewBox="0 0 40 40"
+				aria-hidden="true"
+			>
+				<circle
+					cx="20"
+					cy="20"
+					r={radius}
+					fill="none"
+					stroke="currentColor"
+					strokeWidth="3"
+					className="text-muted"
+				/>
+				<circle
+					cx="20"
+					cy="20"
+					r={radius}
+					fill="none"
+					stroke="currentColor"
+					strokeLinecap="round"
+					strokeWidth="3"
+					strokeDasharray={
+						normalizedProgress == null
+							? `${circumference * 0.28} ${circumference}`
+							: circumference
+					}
+					strokeDashoffset={offset}
+					className={cn(
+						"text-primary transition-[stroke-dashoffset]",
+						failed && "text-destructive",
+						activeCount === 0 &&
+							!failed &&
+							"text-emerald-600 dark:text-emerald-400",
+					)}
+				/>
+			</svg>
+			{/* Center content — same midpoint as the ring */}
+			<span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+				{center}
+			</span>
+		</button>
+	);
+}
+
 export function BackgroundTasksPanel({ className }: { className?: string }) {
 	const { t } = useTranslation("app");
 	const { tasks, expanded } = useBackgroundTasks();
+	const hoverExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+
+	const clearHoverExpandTimer = () => {
+		if (hoverExpandTimerRef.current) {
+			clearTimeout(hoverExpandTimerRef.current);
+			hoverExpandTimerRef.current = null;
+		}
+	};
+
+	const scheduleHoverExpand = () => {
+		clearHoverExpandTimer();
+		hoverExpandTimerRef.current = setTimeout(() => {
+			hoverExpandTimerRef.current = null;
+			setBackgroundTasksExpanded(true);
+		}, HOVER_EXPAND_MS);
+	};
+
+	const collapseOnLeave = () => {
+		clearHoverExpandTimer();
+		setBackgroundTasksExpanded(false);
+	};
+
+	useEffect(() => {
+		return () => {
+			if (hoverExpandTimerRef.current) {
+				clearTimeout(hoverExpandTimerRef.current);
+				hoverExpandTimerRef.current = null;
+			}
+		};
+	}, []);
 
 	const active = useMemo(() => getActiveBackgroundTasks(tasks), [tasks]);
 	const visible = useMemo(() => {
-		// Active first (by queue), then recent finished (newest last → reverse for display)
 		const act = [...active].sort((a, b) => a.queueIndex - b.queueIndex);
 		const done = tasks
 			.filter(isFinishedBackgroundTask)
@@ -143,19 +342,12 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 		return [...act, ...done];
 	}, [tasks, active]);
 
-	const running = active.find((t) => t.status === "running") ?? active[0];
 	const hasFinished = tasks.some(isFinishedBackgroundTask);
+	const hasFailed = visible.some((task) => task.status === "failed");
 
 	if (tasks.length === 0) return null;
 
-	const chipLabel =
-		active.length === 0
-			? t("tasks.idle")
-			: active.length === 1 && running
-				? running.title
-				: t("tasks.activeCount", { count: active.length });
-
-	const chipProgress =
+	const ringProgress =
 		active.length > 0 && active.some((task) => task.progress != null)
 			? Math.round(
 					active
@@ -165,17 +357,27 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 				)
 			: null;
 
+	const ringLabel =
+		active.length === 0
+			? t("tasks.idle")
+			: active.length === 1
+				? (active[0]?.title ?? t("tasks.title"))
+				: t("tasks.activeCount", { count: active.length });
+
 	return (
 		<TooltipProvider delayDuration={300}>
-			<div
+			<section
 				className={cn(
-					"pointer-events-auto fixed bottom-3 left-3 z-50 flex w-[min(20rem,calc(100vw-1.5rem))] flex-col items-stretch gap-1",
+					"pointer-events-auto fixed bottom-3 left-3 z-50 flex flex-col items-start gap-1",
+					expanded ? "w-[min(20rem,calc(100vw-1.5rem))]" : "w-9",
 					className,
 				)}
+				aria-label={t("tasks.title")}
+				onMouseEnter={scheduleHoverExpand}
+				onMouseLeave={collapseOnLeave}
 			>
-				{/* Expanded list — IDE style popover above the chip */}
 				{expanded ? (
-					<div className="overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
+					<div className="w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
 						<div className="flex h-8 items-center gap-1 border-b bg-muted/40 px-2">
 							<span className="min-w-0 flex-1 truncate px-1 font-medium text-xs">
 								{t("tasks.title")}
@@ -204,23 +406,6 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 									</TooltipContent>
 								</Tooltip>
 							) : null}
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-xs"
-										className="size-6"
-										aria-label={t("tasks.collapse")}
-										onClick={() => setBackgroundTasksExpanded(false)}
-									>
-										<ChevronDown className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="top">
-									{t("tasks.collapse")}
-								</TooltipContent>
-							</Tooltip>
 						</div>
 						<div className="agentero-scroll max-h-56 overflow-y-auto">
 							{visible.length === 0 ? (
@@ -232,49 +417,17 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 							)}
 						</div>
 					</div>
-				) : null}
-
-				{/* Collapsed status chip — always when tasks exist */}
-				<button
-					type="button"
-					className={cn(
-						"flex w-full items-center gap-2 rounded-md border bg-popover px-2.5 py-1.5 text-left shadow-md",
-						// Solid hover — avoid /opacity so content under the floater does not show through
-						"hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-					)}
-					aria-expanded={expanded}
-					aria-label={t("tasks.toggle")}
-					onClick={() => setBackgroundTasksExpanded(!expanded)}
-				>
-					{active.length > 0 ? (
-						<Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
-					) : (
-						<CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-					)}
-					<div className="min-w-0 flex-1">
-						<p className="truncate font-medium text-xs leading-tight">
-							{chipLabel}
-						</p>
-						{chipProgress != null ? (
-							<div className="mt-1 flex items-center gap-1.5">
-								<Progress value={chipProgress} className="h-0.5 flex-1" />
-								<span className="shrink-0 font-mono text-[10px] text-muted-foreground tabular-nums">
-									{chipProgress}%
-								</span>
-							</div>
-						) : active.length > 0 ? (
-							<div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-muted">
-								<div className="h-full w-1/3 animate-pulse rounded-full bg-primary/70" />
-							</div>
-						) : null}
-					</div>
-					{expanded ? (
-						<ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-					) : (
-						<ChevronUp className="size-3.5 shrink-0 text-muted-foreground" />
-					)}
-				</button>
-			</div>
+				) : (
+					<ProgressRing
+						activeCount={active.length}
+						failed={hasFailed}
+						label={ringLabel}
+						progress={ringProgress}
+						taskKind={active[0]?.kind}
+						onActivate={() => setBackgroundTasksExpanded(true)}
+					/>
+				)}
+			</section>
 		</TooltipProvider>
 	);
 }

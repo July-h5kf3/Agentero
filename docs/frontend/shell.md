@@ -30,10 +30,11 @@
 
 ## 后台任务条
 
-- 左下角：下载、入库、导入导出、paper-reader 等。
-- Hover 实色不透明；任务可取消。
+- 左下角：下载、入库、导入导出、paper-reader、版面解析等。
+- **折叠 = 进度圆环**（无总结 Toast / 无展开图标）；**悬停约 400ms 或点击圆环 → 详情列表**；移出收起。
+- 详情内可取消进行中任务、清除已完成。
 - 论文资源下载的总体进度按顺序聚合 PDF 与 TeX：PDF 占前 50%，TeX 占后 50%，避免切换阶段时进度回退。
-- 实现：`src/lib/core/background-tasks.ts`。
+- 实现：`src/lib/core/background-tasks.ts` + `background-tasks-panel.tsx`。
 
 ## 弹层栈
 
