@@ -79,9 +79,23 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 - 若 `current_value` 不在 selector 选项中（第三方网关 / cc-switch 等只改默认 model、目录仍是官方列表），Host **注入**该 current id，避免 UI 丢失。
 - `preferred_model_id`（warm / run_once）在与 current 不同时 **始终尝试** `session/set_config_option`，不要求 id 已在上报列表中；失败仅 debug 日志，不阻断会话。
 
+## User-Agent（中转站亲和）
+
+部分中转站（如 new-api 的 Codex 通道）用 `User-Agent` 做客户端亲和，期望 `codex-cli/<version>` 一类串。
+
+- 设置 → Agent → **User-Agent**（可选）+ **Provider id**（可选，逗号分隔）。
+- Host 在 registry snapshot 时注入子进程 env：
+  - `AGENTERO_USER_AGENT=<value>`
+  - 对 `codex-acp` / `custom`：合并 `CODEX_CONFIG.model_providers.<id>.http_headers.User-Agent`（codex-acp 将 `CODEX_CONFIG` 并入 session config）
+- Provider 目标：显式列表；否则 `CODEX_CONFIG` 已有 keys、`MODEL_PROVIDER`、或回退 `openai`。
+- 远程 SSH spawn 会转发 `AGENTERO_USER_AGENT` / `CODEX_CONFIG` / `MODEL_PROVIDER`（与 proxy 同源）。
+- 命令：`agent_set_user_agent`；`agent_scan_catalog` 回传当前值。
+
+说明：最终是否生效取决于底层 Agent 是否把 `http_headers` 带到出站 HTTP；配置了自定义 `model_providers` 的中转最有效。
+
 ## 注册表（非模型 BYOK）
 
-配置「如何启动本机 Agent」：id、name、template、command、args、env、默认 id。  
+配置「如何启动本机 Agent」：id、name、template、command、args、env、默认 id、可选 User-Agent。  
 持久化在应用配置目录；**不**要求填写模型 API Key。
 
 ## 远程

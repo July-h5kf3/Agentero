@@ -1497,6 +1497,15 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - `canInstall`：本机支持静默安装
   - `offerInstall`：Agent 已装但 ACP 缺失 → 设置页「安装 ACP」
   - Agent 未装且 `canInstall` → 设置页「安装」
+  - 另回传 `userAgent` / `userAgentProviderIds`（见下）
+
+#### `agent_set_user_agent`（已实现）
+
+可选 HTTP User-Agent，注入 Codex ACP 出站请求（中转站 Codex 亲和）。
+
+- **参数**：`{ userAgent: string; userAgentProviderIds: string }`（`userAgent` 空 = 关闭；`userAgentProviderIds` 为逗号分隔 provider id，空 = 自动）
+- **返回**：`{ userAgent, userAgentProviderIds }`
+- **行为**：见 [agent.md § User-Agent](agent.md)
 
 #### `agent_tool_lifecycle_supported`（已实现）
 
