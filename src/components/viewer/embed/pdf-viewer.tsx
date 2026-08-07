@@ -76,7 +76,6 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import {
 	ChevronDown,
 	ChevronLeft,
-	ChevronRight,
 	ChevronUp,
 	Languages,
 	List,
@@ -4252,38 +4251,6 @@ function PdfViewerInner({
 								<Button
 									type="button"
 									size="icon-xs"
-									variant="ghost"
-									className="shrink-0 self-center"
-									aria-label={t("pdf.zoomFit")}
-									onClick={() => zoom?.requestZoom(ZoomMode.FitWidth)}
-								>
-									<RotateCcw className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">{t("pdf.zoomFit")}</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant="ghost"
-									className="shrink-0 self-center"
-									aria-label={t("pdf.zoomFitPage")}
-									onClick={() => zoom?.requestZoom(ZoomMode.FitPage)}
-								>
-									<MoveVertical className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">
-								{t("pdf.zoomFitPage")}
-							</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
 									variant={regionSelecting ? "secondary" : "ghost"}
 									className="shrink-0 self-center"
 									aria-label={t("pdfExplain.selectRegion")}
@@ -4565,21 +4532,6 @@ function PdfViewerInner({
 							<span className="px-0.5 text-muted-foreground text-xs tabular-nums">
 								/ {totalPages}
 							</span>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										size="icon-xs"
-										variant="ghost"
-										aria-label={t("pdf.nextPage")}
-										disabled={currentPage >= totalPages}
-										onClick={() => goToPage(currentPage + 1)}
-									>
-										<ChevronRight className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="top">{t("pdf.nextPage")}</TooltipContent>
-							</Tooltip>
 							<span
 								aria-hidden
 								className="mx-0.5 h-3.5 w-px shrink-0 bg-border"
@@ -4603,6 +4555,36 @@ function PdfViewerInner({
 								</TooltipTrigger>
 								<TooltipContent side="top">
 									{pdfColorSchemeLabel}
+								</TooltipContent>
+							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										size="icon-xs"
+										variant="ghost"
+										aria-label={t("pdf.zoomFit")}
+										onClick={() => zoom?.requestZoom(ZoomMode.FitWidth)}
+									>
+										<RotateCcw className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">{t("pdf.zoomFit")}</TooltipContent>
+							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										size="icon-xs"
+										variant="ghost"
+										aria-label={t("pdf.zoomFitPage")}
+										onClick={() => zoom?.requestZoom(ZoomMode.FitPage)}
+									>
+										<MoveVertical className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">
+									{t("pdf.zoomFitPage")}
 								</TooltipContent>
 							</Tooltip>
 							{onToggleZen ? (
