@@ -84,7 +84,7 @@
 		"annotationSave": "保存批注",
 		"annotationSendNow": "问 Agent",
 		"annotationCancel": "取消",
-		"annotationShortcuts": "Enter 保存批注 · ⌘↵ 问 Agent",
+		"annotationShortcuts": "Enter 保存批注 · ⌘/Ctrl+Enter 问 Agent",
 		"annotationPage": "第 {{page}} 页",
 		"annotationPreviewAlt": "第 {{page}} 页裁剪区域",
 		"visualAnnotation": "视觉批注",

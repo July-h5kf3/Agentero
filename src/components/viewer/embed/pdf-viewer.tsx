@@ -2385,11 +2385,52 @@ function PdfViewerInner({
 						providerSessionId:
 							providerSessionId ?? latest.agent?.providerSessionId,
 					};
+					// Note-only (or provisional) mark → first Agent turn must send the
+					// crop as visualDrafts so the multimodal prompt includes the image.
+					// Reuse the same mark id so createRunningTraces overwrites in place.
+					const firstAgentAttach =
+						!bound &&
+						(!latest.agent ||
+							latest.agent.agentId === "pending" ||
+							latest.agent.runtimeSessionId === "pending");
+					let visualDrafts:
+						| import("@/lib/agent/visual-context-store").PdfVisualDraft[]
+						| undefined;
+					if (firstAgentAttach) {
+						const image =
+							(await loadPdfVisualTraceImage(
+								paperAbsPath ?? "",
+								latest.image,
+							)) ??
+							(latest.image?.data
+								? {
+										data: latest.image.data,
+										mimeType: latest.image.mimeType || "image/png",
+									}
+								: null);
+						if (image?.data) {
+							visualDrafts = [
+								{
+									id: latest.id,
+									paperPath: latest.paperPath,
+									paperAbsPath: paperAbsPath ?? undefined,
+									page: latest.page,
+									rects: latest.rects,
+									comment: latest.comment,
+									image: {
+										data: image.data,
+										mimeType: image.mimeType || "image/png",
+									},
+								},
+							];
+						}
+					}
 					requestVisualAgentTurn({
 						trace: { ...latest, agent },
 						text: question,
 						agentId,
 						modelId,
+						visualDrafts,
 					});
 				} catch (e) {
 					const message = e instanceof Error ? e.message : String(e);
@@ -2398,7 +2439,7 @@ function PdfViewerInner({
 				}
 			})();
 		},
-		[resolvePdfAskAgent, requestVisualAgentTurn],
+		[resolvePdfAskAgent, requestVisualAgentTurn, paperAbsPath],
 	);
 
 	const handleSend = useCallback(

@@ -116,21 +116,16 @@ export function parsePdfVisualSessionTrace(
 	if (typeof raw.comment !== "string") return null;
 
 	// Agent: nested v2 first, then flat v1 top-level fields.
+	// Incomplete agent blocks are dropped (keep note-only when comment exists).
 	let agent: PdfVisualAgent | undefined;
 	if (isRecord(raw.agent)) {
-		const nested = parseAgentBlock(raw.agent);
-		if (!nested) return null;
-		agent = nested;
+		agent = parseAgentBlock(raw.agent) ?? undefined;
 	} else if (
 		raw.kind === LEGACY_VISUAL_MARK_KIND ||
 		typeof raw.agentId === "string"
 	) {
-		// v1 required agent fields; incomplete → reject (same as before).
 		const flat = parseAgentBlock(raw);
-		if (!flat) {
-			// Note-only v1 never existed; if kind is agent-trace without agent → fail.
-			if (raw.kind === LEGACY_VISUAL_MARK_KIND) return null;
-		} else {
+		if (flat) {
 			// Promote top-level index into agent for v1.
 			if (
 				flat.index === undefined &&
@@ -140,6 +135,12 @@ export function parsePdfVisualSessionTrace(
 				flat.index = Math.max(1, Math.floor(raw.index));
 			}
 			agent = flat;
+		} else if (
+			raw.kind === LEGACY_VISUAL_MARK_KIND &&
+			!raw.comment?.toString().trim()
+		) {
+			// Legacy agent-trace without agent or comment cannot be salvaged.
+			return null;
 		}
 	}
 
