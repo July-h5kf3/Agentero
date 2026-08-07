@@ -38,9 +38,10 @@ pub enum MarkCmd {
         /// Optional user question for kind=ask.
         #[arg(long = "question", value_name = "TEXT")]
         question: Option<String>,
-        /// Highlight color key (yellow, green, …). Avoids clashing with global `--color`.
-        #[arg(long = "mark-color", value_name = "NAME")]
-        mark_color: Option<String>,
+        /// Highlight color (yellow|green|blue|pink|purple). Default yellow (desktop palette).
+        /// Named `--mark-color` to avoid clashing with global `--color` (ANSI TTY paint).
+        #[arg(long = "mark-color", value_name = "NAME", default_value = "yellow")]
+        mark_color: String,
         /// Optional quote override (default: region title).
         #[arg(long = "quote", value_name = "TEXT")]
         quote: Option<String>,
@@ -82,7 +83,7 @@ pub async fn run(cmd: MarkCmd, globals: &GlobalOpts) -> Result<Value, CliError> 
             kind.as_deref(),
             comment.as_deref(),
             question.as_deref(),
-            mark_color.as_deref(),
+            &mark_color,
             quote.as_deref(),
         ),
         MarkCmd::Delete { r#ref, id } => delete(globals, &r#ref, &id),
@@ -207,7 +208,7 @@ fn add(
     kind: Option<&str>,
     comment: Option<&str>,
     question: Option<&str>,
-    color: Option<&str>,
+    mark_color: &str,
     quote: Option<&str>,
 ) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
@@ -222,6 +223,7 @@ fn add(
 
     let region_item = layout_cmd::load_region(&vault, &paper.path, region_id)?;
     let kind = resolve_kind(kind, question)?;
+    let color = normalize_mark_color(mark_color)?;
     let id = new_mark_id();
     let now = iso_now();
     let quote_text = quote
@@ -239,7 +241,7 @@ fn add(
             &region_item,
             &quote_text,
             comment,
-            color,
+            &color,
         ),
         "ask" => build_ask_mark(
             &id,
@@ -327,6 +329,17 @@ fn resolve_kind(kind: Option<&str>, question: Option<&str>) -> Result<String, Cl
     Ok("highlight".into())
 }
 
+/// Same palette as desktop `DEFAULT_HIGHLIGHT_COLOR` / `HIGHLIGHT_COLORS`.
+fn normalize_mark_color(raw: &str) -> Result<String, CliError> {
+    let t = raw.trim().to_ascii_lowercase();
+    match t.as_str() {
+        "yellow" | "green" | "blue" | "pink" | "purple" => Ok(t),
+        other => Err(CliError::usage(format!(
+            "unknown --mark-color '{other}' (use yellow|green|blue|pink|purple; default yellow)"
+        ))),
+    }
+}
+
 fn build_highlight_mark(
     id: &str,
     paper_path: &str,
@@ -334,7 +347,7 @@ fn build_highlight_mark(
     region: &LayoutIndexItem,
     quote: &str,
     comment: Option<&str>,
-    color: Option<&str>,
+    color: &str,
 ) -> Value {
     let mut mark = json!({
         "version": 1,
@@ -351,6 +364,7 @@ fn build_highlight_mark(
             "h": region.bbox.h,
         }],
         "quote": quote,
+        "color": color,
         "geometry": "resolved",
         "layoutRef": {
             "regionId": region.id,
@@ -363,9 +377,6 @@ fn build_highlight_mark(
     });
     if let Some(c) = comment.map(str::trim).filter(|s| !s.is_empty()) {
         mark["comment"] = json!(c);
-    }
-    if let Some(c) = color.map(str::trim).filter(|s| !s.is_empty()) {
-        mark["color"] = json!(c);
     }
     mark
 }

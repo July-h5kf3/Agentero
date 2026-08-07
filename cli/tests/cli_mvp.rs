@@ -1157,6 +1157,7 @@ fn layout_list_and_mark_add_region() {
     assert_eq!(added["data"]["mark"]["kind"], "highlight");
     assert_eq!(added["data"]["mark"]["geometry"], "resolved");
     assert_eq!(added["data"]["mark"]["page"], 2);
+    assert_eq!(added["data"]["mark"]["color"], "yellow"); // default --mark-color
     assert_eq!(added["data"]["mark"]["layoutRef"]["regionId"], "figure-3");
     assert_eq!(added["data"]["mark"]["comment"], "核心图");
     let mark_id = added["data"]["mark"]["id"].as_str().unwrap();
