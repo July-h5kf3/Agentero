@@ -45,6 +45,13 @@ PP-DocLayoutV3  每页: render → detect → map to PDF points
         │  插图 / 表 / 算法 / 有编号公式；打开 VisualAnnotationEditor（不自动发送）
         │  移开源区 / 草稿卡后 hide（默认 1000ms，`LAYOUT_HOVER_HIDE_MS`）
         │  实现：`hit-test.ts` + `pdf-viewer` layout hit + `LAYOUT_HOVER_DWELL_MS` / `LAYOUT_HOVER_HIDE_MS`
+        │
+⑤ 正文 / 摘要 / 标题文字抽取（PDF text layer → region.text）
+        │  分析或 sidecar 回填时 enrich；供调试与 bulk 翻译
+        │
+⑥ 工具栏「翻译」icon（视觉批注旁）：按阅读顺序批量翻译文字类区域
+        │  并发 2；每完成一块立刻盖译文图层（`LayoutTranslateOverlay`）
+        │  再次点击：运行中=停止；已有译文=清除
 ```
 
 注册（`pdf-viewer.tsx`）：
