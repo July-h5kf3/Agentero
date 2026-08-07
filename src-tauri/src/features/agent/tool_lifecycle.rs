@@ -25,8 +25,12 @@ pub const LIFECYCLE_TEMPLATES: &[&str] = &[
 
 /// Official shell installers download to a temp file then exec (never `curl | bash`),
 /// so curl failures propagate under WSL/subshells without relying on pipefail.
+/// Windows builds use npm / PowerShell installers instead — keep these out of that target.
+#[cfg(not(target_os = "windows"))]
 const CLAUDE_INSTALL_UNIX: &str = "bash -c 'tmp=$(mktemp) && curl -fsSL https://claude.ai/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
+#[cfg(not(target_os = "windows"))]
 const OPENCODE_INSTALL_UNIX: &str = "bash -c 'tmp=$(mktemp) && curl -fsSL https://opencode.ai/install -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
+#[cfg(not(target_os = "windows"))]
 const GROK_INSTALL_UNIX: &str = "bash -c 'tmp=$(mktemp) && curl -fsSL https://x.ai/cli/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
 
 #[cfg(target_os = "windows")]
