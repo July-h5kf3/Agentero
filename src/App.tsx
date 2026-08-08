@@ -380,7 +380,7 @@ export default function App() {
 							panelRef={sidebarPanelRef}
 							defaultSize={SIDEBAR_DEFAULT_PX}
 							minSize={160}
-							maxSize={420}
+							maxSize="30%"
 							collapsible
 							collapsedSize={0}
 							// Keep pixel width when the right rail or Notes column toggles.
@@ -408,7 +408,6 @@ export default function App() {
 						<ResizablePanel
 							id="source"
 							panelRef={sourcePanelRef}
-							defaultSize="40"
 							minSize={200}
 							collapsible
 							collapsedSize={0}
@@ -436,7 +435,7 @@ export default function App() {
 							panelRef={rightSidebarPanelRef}
 							defaultSize={0}
 							minSize={pdfZenMode ? 0 : 260}
-							maxSize={520}
+							maxSize="50%"
 							collapsible
 							collapsedSize={0}
 							groupResizeBehavior="preserve-pixel-size"
