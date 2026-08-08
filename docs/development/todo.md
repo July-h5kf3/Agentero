@@ -28,6 +28,7 @@
 
 ## 0.4 — Vault 采纳与导入加深
 
+- [x] Zotero 双向同步（映射层）：拉取元数据/笔记/批注 + NOTES.md 标记块推送回 Zotero（离线直写 + 备份 + 事务；`zotero_sync`，见 [../backend/identifier-lookup.md](../backend/identifier-lookup.md) §17）
 - [ ] Vault 采纳：`vault_inspect` + 安全补脚手架/catalog（不覆盖用户文件）
 - [ ] 确认后：散落 PDF → paper 单元 + catalog
 - [ ] catalog ↔ 磁盘漂移报告与可选清理

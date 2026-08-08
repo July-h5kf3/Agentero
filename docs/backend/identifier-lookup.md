@@ -802,3 +802,35 @@ arXiv URL 推导：
 - 批注：对话框「迁移 PDF 高亮批注」勾选项（默认开）→ 读 `itemAnnotations`（高亮 text + comment + 页码）转 Markdown 引用块追加进 `NOTES.md`（与笔记共用幂等追加）。**注**：阅读器运行时批注为 `marks/*.json`；Zotero 导入侧暂只把文本迁入 `NOTES.md`，不做原位 PDF 高亮还原。
 - 非目标（v1）：Zotero 批注的**原位高亮渲染**（现仅迁移文本入 NOTES.md）、独立笔记（无父条目）、群组库。
 | 2026-07-16 | 精读：入库/单篇 Download 后自动 paper-reader + Zap 手动；任务条 lookup/download → paperRead 衔接 |
+
+---
+
+## 17. Zotero 双向同步（映射层）
+
+> 状态：**已落地**。`zotero_sync` 命令（魔棒弹层「与 Zotero 同步」按钮）：拉取 Zotero 变更 + 把 NOTES.md 推送回 Zotero。两边数据模型都不改：Vault 保持 Markdown-first、catalog 权威；Zotero 保持自己的 sqlite。
+
+### 关联与水位（catalog schema v4）
+
+- `papers.zotero_item_id`：Zotero itemID。迁移落库时写入；旧行在同步/重迁移时按 DOI → arXiv → 归一化标题回退匹配后回填。
+- `papers.zotero_last_synced`：ISO 8601 同步水位。拉取处理完一篇即推进；推送候选用**拉取前**的水位快照选择（否则同轮拉取推进水位会掩盖所有笔记变更）。
+
+### 拉取（只读，Zotero 运行时也安全）
+
+- 沿用「拷 `zotero.sqlite`+WAL/SHM 到临时目录」方案（`copy_zotero_sqlite`）。
+- **元数据**：仅填补空字段（year/doi/arxiv/abstract/publication/creators 等），永不覆盖已有值。
+- **笔记**：只拉取**非 Agentero 标记**的子笔记（用户手写的），`htmd` 转 MD 后幂等追加进 NOTES.md。
+- **批注**：`itemAnnotations` 转 MD 块幂等追加（与迁移同格式，内容级去重）。
+- **冲突**：水位之后两侧都变更（Zotero 笔记 dateModified 与 NOTES.md mtime 都新于水位）→ 跳过该篇笔记拉取并计入 conflicts 列表报告，不自动合并。
+- **不做**：不自动导入 Zotero 新增条目（那是迁移的职责）；Zotero 侧删除不联动删 paper。
+
+### 推送（离线直写，Zotero 必须关闭）
+
+- **预检**：`BEGIN IMMEDIATE` 写锁探测，SQLITE_BUSY → 报错「请先关闭 Zotero」。
+- **备份**：每次推送前复制 `zotero.sqlite`（+wal/shm）到 `<zoteroDir>/agentero-backups/zotero-<时间戳>.sqlite`，保留最近 5 份。
+- **标记块协议**：NOTES.md → `pulldown-cmark` 转 HTML，包裹 `<!-- agentero:sync paper=<id> -->…<!-- /agentero:sync -->`；按标记精确匹配该父条目下的已有标记笔记 → 整块替换，无则新建子笔记（`items` note 行：同 libraryID + 8 位 base32 key + `itemNotes` 行）。**永不触碰无标记的用户笔记**。
+- **事务**：整轮单事务，任一条失败整体回滚（备份可恢复）。
+- **已知边界**（已对真实 Zotero 7 库验证触发器）：`items`/`itemNotes` 无写入 `syncQueue` 的触发器 → 推送的笔记**本地 Zotero 可见**，但需在 Zotero 内编辑过才会被其云同步上传。UI 推送警示中明示。彻底方案（伴生 Zotero 插件经官方 JS API 读写）为后续升级路径。
+
+### 命令 / 事件
+
+- `zotero_sync`（Channel 进度 `{current,total,phase}`，phase = read/pull/push）；前端 `src/lib/paper/import/zotero-sync.ts`，对话框 `zotero-sync-dialog.tsx`（选项与目录记 localStorage，`zoteroSyncDir` 设置可预设目录）。

@@ -45,6 +45,7 @@
 
 | 主题 | 交付 |
 |---|---|
+| Zotero 双向同步 | 已落地：映射层 `zotero_sync`（拉取元数据/笔记/批注 + NOTES.md 标记块推送回 Zotero，离线直写 + 备份 + 事务；见 [../backend/identifier-lookup.md](../backend/identifier-lookup.md) §17） |
 | 发现 | `vault_inspect` 只读报告（结构、catalog、散落 PDF、漂移） |
 | 安全整理 | 补缺脚手架与 catalog；种子模板**不覆盖**已有文件 |
 | 确认迁移 | 散落 PDF → paper 单元 + catalog；漂移修复可选 |
