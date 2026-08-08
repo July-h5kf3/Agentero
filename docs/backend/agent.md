@@ -75,18 +75,20 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 
 ## 结构化提问（多 harness）
 
-ACP 无标准 tool 名；client 用 `parseAskUserQuestions` / elicitation / Grok ext 三条通路：
+ACP **没有**统一的 ask-user tool 规范：各 harness 的字段名、挂载点（tool / elicitation / ext method）都不一样。Agentero 作为 ACP Client 做三件事：
+
+1. **打开交互能力**：`initialize` 声明 `elicitation.form`（依赖 crate feature `unstable_elicitation`）；否则 Codex 等对 `request_user_input` 会直接空答。
+2. **Client adapter 归一**：把不同 rawInput / 事件解析成同一套 `AskUserQuestion` 页（`parseAskUserQuestions` 等），前端只渲染一张表。
+3. **Harness 特例**：OpenCode spawn 时注入 `OPENCODE_ENABLE_QUESTION_TOOL=1`；Grok 的 `_x.ai/ask_user_question` 由 Host JSON-RPC 处理（`ask_user.rs`），再经 `agent:ask-user-request` / `agent_respond_ask_user` 与前端对齐；tool 镜像与 ext 去重。
 
 | Harness | 形态 | 回答通路 |
 |---|---|---|
-| Codex | tool `variant: AskUserQuestion` 或 elicitation form | tool → 提升到 Composer → 下一用户轮；elicitation → `agent_respond_elicitation` |
-| Claude | tool `questions[]` | 同 tool 提升 → 下一用户轮 |
-| OpenCode | tool `question` → `questions[]` | 同 tool 提升；**默认 env** `OPENCODE_ENABLE_QUESTION_TOOL=1` |
+| Codex | tool `variant: AskUserQuestion` 或 elicitation form | tool → 提升到 **底部问卷** → 下一用户轮；elicitation → `agent_respond_elicitation` |
+| Claude | tool `questions[]`（含 Other 伴生页合并） | 同 tool 提升 → 下一用户轮 |
+| OpenCode | tool `question` → `questions[]` | 同 tool 提升；spawn **默认 env** `OPENCODE_ENABLE_QUESTION_TOOL=1`；turn 阻塞时 cancel+drain 立刻送出答案 |
 | Grok | ext method `_x.ai/ask_user_question` | Host → `agent:ask-user-request` → `agent_respond_ask_user`；与 tool 镜像去重 |
 
-**UI 约定**：可交互表单只在 Composer；transcript tool 卡不嵌选项。优先级 elicitation > Grok ext > tool 提升。
-
-Grok 实现：`src-tauri/src/features/agent/ask_user.rs`。
+**UI 约定**：可交互表单只在 **`AgentAskUserSurface`（底部问卷）**；与 free-text composer **互斥**；transcript tool 卡不嵌选项。优先级 elicitation > Grok ext > tool 提升。
 
 详见 [frontend/agent.md](../frontend/agent.md)。
 

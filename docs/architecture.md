@@ -67,6 +67,7 @@ BYOA，连接本机 ACP Agent。详见 [frontend/agent.md](frontend/agent.md) / 
 - **选区上下文**：Markdown/PDF 选中文字 → 瞬时选区 chip（虚线）；`⌘L` 或「加入对话」固定为 chip。发送时以引用块消费；PDF 带几何的选区在发送后插入 `kind: ask` 对话卡片页边针（非视觉批注）。
 - **运行中继续输入**：后续消息进 Queue waitlist，当前回复结束后自动发送。
 - **权限**：全局模式 `restricted`（默认）/ `ask` / `auto`。`ask` 时弹权限对话框。
+- **结构化提问**：各 harness 的 ask-user / elicitation / Grok ext 归一为底部问卷（与 free-text composer 互斥）。详见 [frontend/agent.md](frontend/agent.md) / [backend/agent.md](backend/agent.md)。
 - **个人偏好**：`agentPersonalPrompt` 非空时经 Host `build_prompt` 注入 envelope。
 
 ### PDF 阅读

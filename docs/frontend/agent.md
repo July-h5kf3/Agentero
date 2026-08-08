@@ -37,7 +37,11 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 
 ## 表单 Elicitation / AskUserQuestion（同一 UI）
 
-「Agent 向用户结构化提问」**共用** `AskUserQuestionForm`（AI Elements `Suggestion` 选项芯片）。ACP **没有**标准 tool 名 `AskUserQuestion`——各 harness 私货经 client adapter 落到同一表单：
+「Agent 向用户结构化提问」**共用** `AskUserQuestionForm`（AI Elements `Suggestion` 选项芯片）。
+
+**背景**：ACP 无统一 ask-user tool 格式。Client 先声明交互能力（`elicitation.form`），再用 adapter 解析各 harness 的 tool / elicitation / ext；个别 provider 还需 Host 侧 RPC（Grok）或 spawn env（OpenCode `OPENCODE_ENABLE_QUESTION_TOOL`）。详见 [backend/agent.md](../backend/agent.md)「结构化提问」。
+
+各 harness 经 client adapter 落到同一表单：
 
 | 来源 | 协议 / rawInput | UI 位置 | 备注 |
 |---|---|---|---|
