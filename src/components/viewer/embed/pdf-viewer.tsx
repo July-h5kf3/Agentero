@@ -332,6 +332,18 @@ function writePdfColorScheme(next: PdfColorScheme): void {
 	}
 }
 
+function isPdfDocumentCloseRaceError(error: unknown): boolean {
+	const message =
+		error instanceof Error
+			? error.message
+			: typeof error === "string"
+				? error
+				: error && typeof error === "object" && "message" in error
+					? String((error as { message?: unknown }).message)
+					: "";
+	return /document does not open/i.test(message);
+}
+
 export type PdfViewerHandle = {
 	getHighlights: () => PdfHighlight[];
 	scrollToHighlight: (id: string) => void;
@@ -2152,6 +2164,7 @@ function PdfViewerInner({
 			opts?: { seq?: number; ephemeral?: boolean },
 		) => {
 			if (!engine || !docCap || visualCropPendingRef.current) return;
+			if (!docCap.isDocumentOpen(docId)) return;
 			const document = docCap.getDocument(docId);
 			if (!document) {
 				notifyError(t("pdfExplain.cropFailed"));
@@ -2168,6 +2181,7 @@ function PdfViewerInner({
 					pageIndex: page - 1,
 					region,
 				});
+				if (!docCap.isDocumentOpen(docId)) return;
 				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
 					return;
 				}
@@ -2189,6 +2203,12 @@ function PdfViewerInner({
 				layoutHoverRegionIdRef.current = null;
 			} catch (error) {
 				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
+					return;
+				}
+				if (
+					!docCap.isDocumentOpen(docId) ||
+					isPdfDocumentCloseRaceError(error)
+				) {
 					return;
 				}
 				const message =
@@ -3961,16 +3981,19 @@ function PdfViewerInner({
 				const eng = engineRef.current;
 				const docs = docCapRef.current;
 				if (!eng || !docs) return null;
+				if (!docs.isDocumentOpen(docId)) return null;
 				const document = docs.getDocument(docId);
 				if (!document) return null;
 				try {
-					return await renderPdfRegionPromptImage({
+					const image = await renderPdfRegionPromptImage({
 						engine: eng,
 						document,
 						pageIndex,
 						region: bbox,
 						maxEdgePx: maxEdgePx ?? 360,
 					});
+					if (!docs.isDocumentOpen(docId)) return null;
+					return image;
 				} catch {
 					return null;
 				}
