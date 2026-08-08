@@ -75,6 +75,7 @@ pub fn run() {
         .manage(AgentRunController::new())
         .manage(crate::features::agent::AgentWarmGate::new())
         .manage(crate::features::agent::PermissionGate::new())
+        .manage(crate::features::agent::ElicitationGate::new())
         .manage(crate::features::bridge::BridgeController::new())
         .manage(crate::features::bridge::BridgeClientController::new())
         .manage(WikiIndexState::new())

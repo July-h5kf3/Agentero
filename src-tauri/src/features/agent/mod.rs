@@ -5,6 +5,7 @@ pub mod background_commands;
 pub mod background_tasks;
 pub mod commands;
 pub mod discover;
+pub mod elicitation;
 mod events;
 pub mod models;
 pub mod permission;
@@ -19,6 +20,7 @@ pub use acp::{
     list_acp_sessions, load_acp_session, new_ids, probe_agent, run_once, warm_agent,
     PermissionPolicy,
 };
+pub use elicitation::ElicitationGate;
 pub use events::AgentEventEmitter;
 pub use permission::PermissionGate;
 pub use registry::AgentRegistry;

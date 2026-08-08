@@ -1,11 +1,13 @@
 use crate::core::error::{map_err, ApiResult, AppError};
+use crate::features::agent::elicitation::ElicitationAnswer;
 use crate::features::agent::models::{
     AgentDescriptor, AgentListResponse, AgentSkill, CatalogScanResponse, ProbeResult,
     RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
 };
 use crate::features::agent::{
     list_agent_skills, new_ids, probe_agent, run_once, warm_agent, AgentEventEmitter,
-    AgentRegistry, AgentRunController, AgentWarmGate, PermissionGate, PermissionPolicy,
+    AgentRegistry, AgentRunController, AgentWarmGate, ElicitationGate, PermissionGate,
+    PermissionPolicy,
 };
 use crate::features::remote::{materialize_skills_to_work, resolve_remote_target, RemoteRegistry};
 use serde::Serialize;
@@ -294,6 +296,7 @@ pub async fn agent_run_once(
     registry: State<'_, AgentRegistry>,
     runs: State<'_, AgentRunController>,
     gate: State<'_, PermissionGate>,
+    elicitation_gate: State<'_, ElicitationGate>,
     remote_registry: State<'_, Arc<RemoteRegistry>>,
     request: RunOnceRequest,
 ) -> Result<ApiResult<RunOnceAccepted>, String> {
@@ -348,6 +351,7 @@ pub async fn agent_run_once(
     let app_handle = window.app_handle().clone();
     let events = AgentEventEmitter::new(app_handle.clone(), window.label());
     let permission_gate = gate.inner().clone();
+    let elicitation_gate = elicitation_gate.inner().clone();
     let permission_policy = match request.permission_mode.as_deref() {
         Some("auto") => PermissionPolicy::Auto,
         Some("ask") => PermissionPolicy::Ask,
@@ -372,11 +376,14 @@ pub async fn agent_run_once(
             request.target.clone(),
             request.vault_path,
             request.model_id,
+            request.mode_id,
+            request.collaboration_mode_id,
             request.reasoning_effort,
             request.fast_mode,
             request.skill_ids,
             permission_policy,
             permission_gate.clone(),
+            elicitation_gate.clone(),
             request.response_language,
             request.personal_prompt,
             cancellation,
@@ -519,6 +526,32 @@ pub fn agent_respond_permission(
     ApiResult::ok(PermissionResponded { resolved })
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElicitationResponseRequest {
+    pub request_id: String,
+    /// accept | decline | cancel
+    pub action: String,
+    /// Field id → string value (accept only).
+    #[serde(default)]
+    pub content: Option<std::collections::BTreeMap<String, String>>,
+}
+
+/// Answer a pending ACP form elicitation (`elicitation/create`).
+#[tauri::command]
+pub fn agent_respond_elicitation(
+    gate: State<'_, ElicitationGate>,
+    request: ElicitationResponseRequest,
+) -> ApiResult<PermissionResponded> {
+    let answer = match request.action.as_str() {
+        "accept" => ElicitationAnswer::Accept(request.content.unwrap_or_default()),
+        "decline" => ElicitationAnswer::Decline,
+        _ => ElicitationAnswer::Cancel,
+    };
+    let resolved = gate.resolve(&request.request_id, answer);
+    ApiResult::ok(PermissionResponded { resolved })
+}
+
 /// Background ACP start when Chat opens — loads models/context without a user prompt.
 #[tauri::command]
 pub async fn agent_warm(
@@ -570,7 +603,16 @@ pub async fn agent_warm(
 
     let events = AgentEventEmitter::new(window.app_handle().clone(), window.label());
     let agent_id = desc.id.clone();
-    let result = warm_agent(events, desc, request.vault_path, request.model_id, remote).await;
+    let result = warm_agent(
+        events,
+        desc,
+        request.vault_path,
+        request.model_id,
+        request.mode_id,
+        request.collaboration_mode_id,
+        remote,
+    )
+    .await;
     if result.ok {
         warm_gate.clear(&agent_id);
     } else {
