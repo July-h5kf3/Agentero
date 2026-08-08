@@ -28,10 +28,7 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 - **新建对话 / 历史恢复**：新建草稿不会清空刚离开的本地 transcript；历史项同时存在 Agentero runtime id 与 ACP provider id 时，`session/load` / 后续续聊只使用 `providerSessionId`；连续续聊产生的新 runtime 行会按 provider id 合并回同一个历史项；加载结果通过一次原子 store 更新写入并激活，避免列表刷新后出现空白会话。详见 [Codex 历史恢复误用 runtime id](../bug_fix/codex-history-runtime-session-id.md)。
 - Slash 命令完全来自当前 ACP session 的 `available_commands_update`；Agentero 不再注册本地 action/template。映射时剥离名称前导 `/` 与 `$`（部分 Agent 把 skill 以 `$name` 形式广播），再以 `/name` 填入 Composer，并在当前 provider session 中原样发送。
 - **模型选择（含第三方）**：列表来自 ACP `agent:models`；若 Agent 当前模型或用户偏好不在固定目录中（如 Codex + 中转 / cc-switch DeepSeek），仍会并入可选列表，并支持在搜索框输入任意 model id 作为自定义模型（`warm` / `run_once` 会尝试 `SetSessionConfigOption`，即使 id 未出现在上报目录中）。偏好按 agent 持久化。
-- **协作模式 vs 权限模式（capability-driven）**：两套独立 config，不可混用。
-  - **协作**（Codex `collaboration_mode`）：Default / Plan；Plan 下才开放 `request_user_input`。事件 `agent:collaboration`；`warm` / `run_once` 携带 `collaborationModeId`。
-  - **权限**（ACP `category: mode`）：Read-only / Agent 等沙箱档。事件 `agent:modes`；携带 `modeId`。
-  - Composer 有上报时分别显示「协作」「权限」下拉；偏好各自按 agent 持久化。
+- **会话模式（capability-driven）**：Codex `collaboration_mode`（Default / Plan 等）。Plan 下才开放 `request_user_input`。事件 `agent:collaboration`；`warm` / `run_once` 携带 `collaborationModeId`。Composer 有上报时显示「模式」下拉（仅模式名，不展示 description）；偏好按 agent 持久化。不暴露 ACP `category: mode` 沙箱档（Read-only / Agent 等）。
 
 ## 权限 UI
 
@@ -44,11 +41,11 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 
 | 来源 | 协议 / rawInput | UI 位置 | 备注 |
 |---|---|---|---|
-| Codex tool / Claude / OpenCode `question` | `agent:tool` + 可解析 questions | **Composer 输入框上方**（从 tool 提升） | Transcript 只留 tool 行 +「请在下方输入区作答」；不嵌表单 |
-| Codex `request_user_input` | `elicitation/create` → `agent:elicitation-request` | **Composer 输入框上方** | Client 须声明 `elicitation.form` |
-| Grok `_x.ai/ask_user_question` | ACP **ext method** → `agent:ask-user-request` | **Composer 输入框上方** | 提交 → `agent_respond_ask_user`；若同时有 tool 镜像则**抑制** tool 表单 |
+| Codex tool / Claude / OpenCode `question` | `agent:tool` + 可解析 questions | **底部问卷**（从 tool 提升） | Transcript 只留 tool 行 +「请在下方问卷中作答」；不嵌表单 |
+| Codex `request_user_input` | `elicitation/create` → `agent:elicitation-request` | **底部问卷** | Client 须声明 `elicitation.form` |
+| Grok `_x.ai/ask_user_question` | ACP **ext method** → `agent:ask-user-request` | **底部问卷** | 提交 → `agent_respond_ask_user`；若同时有 tool 镜像则**抑制** tool 表单 |
 
-**单一交互面**：优先级 `elicitation` > Grok ext > tool 提升；任意时刻只显示一张表单。表单在 **`AgentAskUserSurface`**，位于 **transcript 与 resize 手柄之间**——拖拽只改变下方输入壳高度，不包含问卷。解析：`parseAskUserQuestions` / `questionsFromElicitationFields` / `questionsFromAskUserDtos`。
+**单一交互面**：优先级 `elicitation` > Grok ext > tool 提升；任意时刻只显示一张表单。表单在 **`AgentAskUserSurface`**（transcript 下方）。问卷与 free-text **composer 互斥**：有可渲染问卷时隐藏 resize 手柄与 `AgentComposer`（草稿状态仍由 session composer state 保留），提交或取消后恢复输入壳。解析：`parseAskUserQuestions` / `questionsFromElicitationFields` / `questionsFromAskUserDtos`。
 
 多题为 **翻页**：一页一题，上一题 / 下一题，末题显示「提交」；单选且无 Other 时选项点击后自动进下一题。多选（`multiSelect` / `multiple`）可点多个芯片，答案以 `, ` 拼接。单题仅「提交」。底部「取消」右对齐。
 
