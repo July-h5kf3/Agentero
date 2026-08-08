@@ -4,8 +4,8 @@ Host 在 **`127.0.0.1:23119`** 模拟 Zotero 桌面 Connector HTTP，官方浏�
 
 ## 行为
 
-- 设置 → 通用：**兼容 Zotero Connector**（**默认关**）。
-- 与 Zotero 桌面端端口互斥。
+- 设置 → 通用：**兼容 Zotero Connector**（`connectorEnabled`，**默认关**）。
+- 与 Zotero 桌面端端口互斥；端口可在设置中修改（默认 `23119`）。
 - 支持 `saveItems`、目标文件夹选择、**`saveAttachment`**（浏览器上传 PDF）。
 - 支持 **`saveStandaloneAttachment`**（在 PDF 标签页直接保存，无父书目条目）。
 - 支持 **`hasAttachmentResolvers`** / **`saveAttachmentFromResolver`**：浏览器直连 PDF
@@ -35,7 +35,11 @@ Host 在 **`127.0.0.1:23119`** 模拟 Zotero 桌面 Connector HTTP，官方浏�
 
 ## 命令 / 事件
 
-- `connector_start` / `connector_stop` / `connector_status` / `connector_set_vault`
+- `connector_get_status`：获取监听状态、端口、绑定地址、当前 Vault。
+- `connector_set_enabled`：开启或关闭 Connector HTTP 服务。
+- `connector_set_vault`：绑定当前目标 Vault。
+- `connector_set_parent_dir`：设置默认保存父目录（如 `papers` 或 `papers/子目录`）。
+- `connector_set_port`：修改监听端口（默认 `23119`）。
 - 前端事件 `connector:*`（`src/lib/paper/import/connector.ts`）
 
 ## 代码

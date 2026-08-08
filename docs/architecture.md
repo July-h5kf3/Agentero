@@ -28,7 +28,7 @@ Agentero 基于 Tauri 2 + React 19，本地优先，Vault 文件与 Catalog SQLi
 |---|---|---|
 | 左侧栏 | 文件树 + Paper Info | 常驻 collapsible，`preserve-pixel-size` |
 | 中间 | Dockview 工作区 | Library / PDF / HTML / 图片 / Markdown / Trash |
-| 右侧栏 | Agent / Backlinks | 可选，同样 collapsible |
+| 右侧栏 | Agent / Backlinks / 批注 / References / Figures | 可选，同样 collapsible |
 
 - **文件树**：顶部虚拟 Library + Recycle Bin、魔棒按钮。右键新建/删除/在 Finder 中显示/终端打开。多选（⌘/Shift）+ 拖拽移动。详见 [vault-tree.md](frontend/vault-tree.md)。
 - **Dockview**：每个打开文档一个 panel，支持 tab、上下左右分屏、多格网格。布局 `toJSON()` 持久化，path/mode 在 panel params。详见 [workspace.md](frontend/workspace.md)。
@@ -48,7 +48,7 @@ Agentero 基于 Tauri 2 + React 19，本地优先，Vault 文件与 Catalog SQLi
 
 ### 论文库
 
-`paper_list` 读 catalog 一次进内存。表头排序/右键选列/拖拽排序（持久化到 `settings.json` 的 `libraryColumns`，标题列不可隐藏）。tags 列展示，搜索框可匹配标签子串。文件夹作用域仅对 `papers/` 下目录按 `paper.path` 前缀过滤（不扫盘）；`notes/` / `.agents/` 等非 papers 目录显示全库。详见 [frontend/library.md](frontend/library.md) / [backend/catalog.md](backend/catalog.md)。
+`paper_list` 读 catalog 一次进内存。表头排序/右键选列/拖拽排序（持久化到 `settings.json` 的 `libraryColumns`，标题列不可隐藏）。tags 列展示，搜索框可匹配标签子串；标题列左侧显示阅读进度热力条。文件夹作用域仅对 `papers/` 下目录按 `paper.path` 前缀过滤（不扫盘）；`notes/` / `.agents/` 等非 papers 目录显示全库。详见 [frontend/library.md](frontend/library.md) / [backend/catalog.md](backend/catalog.md)。
 
 ### 标签
 
@@ -71,7 +71,7 @@ BYOA，连接本机 ACP Agent。详见 [frontend/agent.md](frontend/agent.md) / 
 
 ### PDF 阅读
 
-Vault 任意路径 `.pdf` → `blob:` 预览。页码导航/适应宽·整页/大纲/⌘F 查找。真实 scale 渲染 + 平滑划词覆盖层。划词菜单：高亮/批注/提问/翻译。详见 [frontend/pdf.md](frontend/pdf.md)。
+Vault 任意路径 `.pdf` → `blob:` 预览。页码导航/适应宽·整页/大纲/⌘F 查找。真实 scale 渲染 + 平滑划词覆盖层。划词菜单：高亮/批注/提问/翻译。支持视觉区域批注（框选插图/表/算法/公式，可写备注或向 Agent 提问）、版面分析（Figures 侧栏列出检测到的图/表/算法/公式）、有编号公式 hover 符号解析卡。详见 [frontend/pdf.md](frontend/pdf.md) / [frontend/pdf-layout-analysis.md](frontend/pdf-layout-analysis.md)。
 
 ### Markdown 编辑
 
@@ -87,6 +87,9 @@ Plate + `@platejs/markdown`。普通文本粘贴默认按 Markdown 解析。右�
 |---|---|---|
 | 文件 | NOTES、PDF、TeX、Markdown、assets | Vault 内 |
 | Catalog | 论文集合 + metadata | `.agentero/catalog.sqlite` |
+| 阅读标注 | 高亮、划词问答、翻译、视觉批注 | `{paper}/marks/` |
+| 版面分析 | 原始 layout regions / 侧栏索引 | `{paper}/source/layout.json` / `layout-index.json` |
+| 引用解析 | 参考文献元数据 | `{paper}/source/agentero-cite.json` |
 | 设置 | UI/Agent 偏好 | XDG `~/.config/agentero/settings.json` |
 | 索引 | 双链图 | 内存，可重建 |
 
@@ -94,7 +97,7 @@ Plate + `@platejs/markdown`。普通文本粘贴默认按 Markdown 解析。右�
 
 ### 国际化
 
-所有面向用户文案经 `t()` 走 `react-i18next`。en 源语言 → 同步 `zh-CN`（`src/i18n/locales/`）。详见 [frontend/shell.md](frontend/shell.md#i18n)。
+所有面向用户文案经 `t()` 走 `react-i18next`。en 源语言 → 同步 `zh-CN`（`src/i18n/locales/`）。详见 [frontend/settings.md](frontend/settings.md#i18n)。
 
 ### 外部改动自动重载
 

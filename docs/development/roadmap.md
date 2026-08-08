@@ -1,6 +1,6 @@
 # Agentero 路线图
 
-**当前发布版本：`0.2.1`**
+**当前发布版本：`0.5.0`**
 
 已实现能力见功能文档（[`../frontend/`](../frontend/index.md) · [`../backend/`](../backend/index.md)），不在此重复勾选。  
 可执行 backlog 见 [`todo.md`](todo.md)。
@@ -12,15 +12,15 @@
 - 先做好精确入库与阅读闭环，再扩展发现流与文献引用图。
 - 不静默覆盖用户手写 Vault 文件。
 
-## 0.2.1 基线（已发布，摘要）
+## 0.5.0 基线（已发布，摘要）
 
-工作台 + Dockview 分屏、Catalog/Library/标签、魔棒与本地 PDF 入库、Zotero Connector/迁移、PDF 划词与翻译、BYOA Agent（精读/权限）、双链与 Graph、CLI MVP、远程 Vault MVP、Release CI。细节以功能文档为准。
+工作台 + Dockview 分屏、Catalog/Library/标签（含阅读热力条）、魔棒与本地 PDF 入库、Zotero Connector/迁移（含 collection tree 物化与条目重定位）、PDF 划词与翻译、PDF 版面分析（Figures/Tables/Algorithms/Formulas）、公式 hover 符号对照卡、视觉批注 v2（与 Agent 会话解耦）、BYOA Agent（精读/权限/自动安装升级/自由模型选择）、双链与 Graph、CLI（含 `layout`/`mark`）、远程 Vault MVP、Bridge + iOS 远程客户端 M2（TestFlight 已提交）、Release CI。细节以功能文档为准。
 
 ---
 
 ## 0.3 — 入库与 Agent 补强
 
-在 0.2.1 上补齐仍缺口的「输入 → 资产 → Agent」路径。
+在 0.5.0 基线上补齐仍缺口的「输入 → 资产 → Agent」路径。
 
 | 主题 | 交付 |
 |---|---|
@@ -103,7 +103,7 @@
 | Word 引用 | 优先兼容用户已安装的官方 Zotero Word 插件：macOS `:23119` provider + Word Automation，后续 Windows `WM_COPYDATA` + OLE；本机 Library 检索、CSL 引文/参考文献刷新与文档副本迁移。单 provider、AGPL/GPL/商标审核为发布门槛（设计：[zotero-word-integration.md](zotero-word-integration.md)） |
 | Skills | 多篇对比、Idea 评估、实验复现清单 |
 | 发布 | 自动 changelog；多 arch artifact 命名 |
-| 平台 | **iOS/iPad 纯远程客户端 M2 已实现**（见 [移动端前端与远程架构](../frontend/mobile.md)），待 TestFlight 内测和 M3 打磨；**Android 端已初始化**（`gen/android`，复用同一移动壳，待发布流水线）；自托管 [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay) 远程中继、Git 集成、可选云同步 |
+| 平台 | **iOS/iPad 纯远程客户端 M2 已提交 TestFlight**（见 [移动端前端与远程架构](../frontend/mobile.md)），M3 打磨中；**Android 端已初始化**（`gen/android`，复用同一移动壳，待发布流水线）；自托管 [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay) 远程中继、Git 集成、可选云同步 |
 | 引用图 deeper | 聚类、作者/机构图 |
 | 工程 | CLI domain 抽离独立 crate（仅当边界成为问题时） |
 
@@ -111,8 +111,8 @@
 
 ## 版本号约定
 
-- 应用 / Tauri / CLI manifest 与 git tag `vX.Y.Z` **一致**（见 [release.md](release.md)）。
-- **当前线：`0.2.1`**。下一功能版本从 **`0.3.0`** 起；`0.2.x` 仅用于 0.2 基线的补丁与热修。
+- 应用 / Tauri / CLI manifest 与 git tag `vX.Y.Z` **一致**（见 [release.md](../test/release.md)）。
+- **当前线：`0.5.0`**。下一功能版本从 **`0.6.0`** 起；`0.5.x` 仅用于 0.5 基线的补丁与热修。
 - 路线图版本（0.3 / 0.4…）是**产品切片**，落地时再写入 manifest 并打 tag。
 
 ## 相关文档

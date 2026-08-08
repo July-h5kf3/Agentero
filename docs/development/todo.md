@@ -1,6 +1,6 @@
 # Agentero TODO
 
-仅列**未完成**项。当前发布 **`0.2.1`**。版本切片见 [`roadmap.md`](roadmap.md)；已实现能力见 [`../frontend/`](../frontend/index.md) · [`../backend/`](../backend/index.md)。
+仅列**未完成**项。当前发布 **`0.5.0`**。版本切片见 [`roadmap.md`](roadmap.md)；已实现能力见 [`../frontend/`](../frontend/index.md) · [`../backend/`](../backend/index.md)。
 
 ## 0.3 — 入库与 Agent 补强
 
@@ -13,7 +13,7 @@
 - [ ] 本机 Translator sidecar 捆绑（可选）
 - [ ] 前端 `afterPaperImport` 策略表统一各入口后置
 - [ ] Zotero 迁移走 `paper_commit`；remote 镜像层收敛；统一 `paper:imported` 事件
-- [ ] workflow prompt 自动注入 Vault 内 `AGENTS.md`
+- [x] workflow prompt 自动注入 Vault 内 `AGENTS.md`（Host `build_prompt` 已将 `AGENTS.md` 作为 progressive disclosure 系统上下文注入）
 - [ ] 最近 Vault / UI 偏好与 XDG settings 完全对齐
 - [ ] 设置「打开/导出日志文件夹」
 - [ ] `catalog:export_papers_md`（Markdown 表）
@@ -66,7 +66,7 @@
 - [ ] 更多 Skills（多篇对比、Idea 评估、实验复现清单等）
 - [ ] 自动 changelog；多 arch artifact 命名
 - [x] iOS/iPad 纯远程客户端 M2：Bridge + 二维码/链接配对 + relay E2EE + Library/阅读/NOTES + 远程 Agent（见 [移动端前端与远程架构](../frontend/mobile.md)）
-- [ ] iOS/iPad M3：TestFlight 内测、多主机切换、iPad 双栏、wiki backlinks、离线体验打磨
+- [ ] iOS/iPad M3：TestFlight 内测推进、多主机切换、iPad 双栏、wiki backlinks、离线体验打磨（M2 已提交 TestFlight）
 - [ ] Git 集成 / 可选云同步
 - [ ] 引用图 deeper（聚类、作者机构图）
 - [ ] CLI domain 抽离独立 crate（仅当边界成为问题时）

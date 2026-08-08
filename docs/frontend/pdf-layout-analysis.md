@@ -1,6 +1,8 @@
 # PDF 版面分析（Figures / Tables / Algorithms / Formulas）
 
-实验能力：浏览器内 ONNX（PP-DocLayoutV3）检测 PDF 版面 → 应用层 **文字角色 + 联图聚合 + 公式按编号框几何聚合（不解析编号文本）+ 置信度去重** → 右栏 **Figures**。
+浏览器内 ONNX（PP-DocLayoutV3）检测 PDF 版面 → 应用层 **文字角色 + 联图聚合 + 公式按编号框几何聚合（不解析编号文本）+ 置信度去重** → 右栏 **Figures**。
+
+> 该能力已落地并可随论文打开自动运行；大模型推理在低端设备上可能卡顿，分析结果仅写入可重建 sidecar，不改 PDF 二进制。
 
 | | |
 |---|---|

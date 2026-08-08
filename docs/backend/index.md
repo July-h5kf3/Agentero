@@ -26,6 +26,7 @@ src-tauri/src/
     vault/ catalog/ import/ wiki/ doctor/ agent/
     connector/ remote/ search/ settings/
     translate/ trash/ watcher/ terminal/ window/ telemetry/
+    bridge/ layout_model/ refs/ arxiv_proxy/
   lib.rs
   main.rs
 ```
