@@ -3,6 +3,7 @@
 //! Vault / Catalog machine interface — no BYOA, no paper-reader.
 //! See `docs/development/cli.md`.
 
+mod args_rewrite;
 mod commands;
 mod config;
 mod error;
@@ -114,7 +115,8 @@ fn color_choice(when: ColorWhen) -> ColorChoice {
     about = "Agentero headless CLI — Vault / Catalog machine interface (no BYOA)",
     long_about = "Discover, manage, and expose a local Agentero research vault and catalog.\n\
                   Does not run agents or paper-reader. Prefer --json for scripts and external agents.\n\
-                  Design: docs/development/cli.md",
+                  Open a vault in the desktop app: `agentero open <PATH>` or `agentero <PATH>`.\n\
+                  Design: docs/backend/cli.md",
     styles = clap_styles(),
     propagate_version = true
 )]
@@ -212,6 +214,14 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::mark::MarkCmd,
     },
+    /// Open a local directory as a Vault in the desktop App.
+    ///
+    /// Shorthand: bare `agentero <PATH>` rewrites to this when `<PATH>` looks like
+    /// a directory path and is not a known subcommand.
+    Open {
+        /// Local directory to open (absolute, relative, or `~`).
+        path: PathBuf,
+    },
 }
 
 fn init_logging() {
@@ -229,11 +239,14 @@ fn main() -> StdExitCode {
     }
     init_logging();
 
+    // `agentero <dir>` → `agentero open <dir>` before clap (subcommand names win).
+    let argv = args_rewrite::rewrite_path_shorthand(std::env::args_os().collect());
+
     // Apply color choice before parse so `--help` / usage errors use the same styles.
     let mut cmd = Cli::command()
         .styles(clap_styles())
         .color(color_choice(peek_color_when()));
-    let matches = match cmd.try_get_matches_from_mut(std::env::args_os()) {
+    let matches = match cmd.try_get_matches_from_mut(argv) {
         Ok(m) => m,
         Err(err) => {
             // clap prints help / usage itself (styled).
@@ -331,6 +344,7 @@ fn command_label(cmd: &Commands) -> &'static str {
         Commands::Doctor { .. } => "cli.doctor",
         Commands::Layout { .. } => "cli.layout",
         Commands::Mark { .. } => "cli.mark",
+        Commands::Open { .. } => "cli.open",
     }
 }
 
@@ -364,5 +378,6 @@ async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Valu
         Commands::Doctor { cmd } => commands::doctor::run(cmd, globals),
         Commands::Layout { cmd } => commands::layout::run(cmd, globals),
         Commands::Mark { cmd } => commands::mark::run(cmd, globals).await,
+        Commands::Open { path } => commands::open::run(&path, globals),
     }
 }

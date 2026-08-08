@@ -636,6 +636,122 @@ fn paper_move_updates_filesystem_and_catalog() {
     assert_eq!(listed["data"][0]["path"], "papers/archive/demo");
 }
 
+/// #166: create missing destination parent, reject conflict and path escape.
+#[test]
+fn paper_move_creates_parent_rejects_conflict_and_escape() {
+    let tmp = tempdir().unwrap();
+    let vault = tmp.path().join("v");
+    create_vault(&vault);
+    fs::create_dir_all(vault.join("papers/inbox/demo")).unwrap();
+    seed_paper(&vault, "papers/inbox/demo", "demo", "Demo");
+
+    // Missing dest parent is created.
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "move",
+            "papers/inbox/demo",
+            "papers/new-shelf",
+            "--json",
+        ])
+        .assert()
+        .success();
+    assert!(vault.join("papers/new-shelf/demo").is_dir());
+    assert!(vault.join("papers/new-shelf").is_dir());
+    let listed = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let listed: Value = serde_json::from_slice(&listed).unwrap();
+    assert_eq!(listed["data"][0]["path"], "papers/new-shelf/demo");
+
+    // Conflict: destination already occupied.
+    fs::create_dir_all(vault.join("papers/other/demo")).unwrap();
+    seed_paper(&vault, "papers/other/demo", "other", "Other");
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "move",
+            "papers/other/demo",
+            "papers/new-shelf",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("already exists"));
+
+    // Escape: destination must stay under papers/.
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "move",
+            "papers/new-shelf/demo",
+            "notes",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("papers/"));
+}
+
+#[test]
+fn open_path_shorthand_and_explicit_dry_run() {
+    let tmp = tempdir().unwrap();
+    let dir = tmp.path().join("research");
+    fs::create_dir_all(&dir).unwrap();
+
+    let out = agentero()
+        .env("AGENTERO_OPEN_DRY_RUN", "1")
+        .args(["open", dir.to_str().unwrap(), "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v: Value = serde_json::from_slice(&out).unwrap();
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["data"]["dryRun"], true);
+    assert!(v["data"]["url"]
+        .as_str()
+        .unwrap()
+        .starts_with("agentero://open?path="));
+
+    // Shorthand rewrite: bare directory path → open
+    let out2 = agentero()
+        .env("AGENTERO_OPEN_DRY_RUN", "1")
+        .args([dir.to_str().unwrap(), "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v2: Value = serde_json::from_slice(&out2).unwrap();
+    assert_eq!(v2["ok"], true);
+    assert_eq!(v2["data"]["dryRun"], true);
+
+    agentero()
+        .env("AGENTERO_OPEN_DRY_RUN", "1")
+        .args(["open", "/no/such/agentero/path", "--json"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("does not exist"));
+}
+
 #[test]
 fn wiki_check_reports_semantic_issues_and_honors_file_scope() {
     let tmp = tempdir().unwrap();
