@@ -9,10 +9,10 @@ pub mod pdf_parse;
 pub mod zotero_commands;
 
 mod assets;
-mod map;
+pub(crate) mod map;
 pub(crate) mod parse;
 mod skill_import;
-mod zotero_db;
+pub(crate) mod zotero_db;
 pub(crate) mod zotero_io;
 
 pub use assets::{

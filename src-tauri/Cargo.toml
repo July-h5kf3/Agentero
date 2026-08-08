@@ -40,6 +40,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 flate2 = "1.1.9"
 tar = "0.4.46"
 htmd = "0.5.4"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 notify-debouncer-full = "0.3"
 log = "0.4"
 tauri-plugin-log = "2.9.0"

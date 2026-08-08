@@ -24,3 +24,4 @@ pub mod vault;
 pub mod watcher;
 pub mod wiki;
 pub mod window;
+pub mod zotero_sync;

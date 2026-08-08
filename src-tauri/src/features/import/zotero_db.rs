@@ -506,7 +506,7 @@ fn relocate_paper(vault: &Path, existing: &str, new_rel: &str) -> Result<(), App
 
 /// Append Markdown blocks not already present in NOTES.md (idempotent by content).
 /// Returns true when it added something.
-fn append_markdown_blocks(notes_md: &Path, blocks: &[String]) -> bool {
+pub(crate) fn append_markdown_blocks(notes_md: &Path, blocks: &[String]) -> bool {
     let existing = fs::read_to_string(notes_md).unwrap_or_default();
     let to_add: Vec<&str> = blocks
         .iter()
@@ -619,7 +619,7 @@ impl Dedup {
     }
 }
 
-fn normalize_title(title: &str) -> String {
+pub(crate) fn normalize_title(title: &str) -> String {
     title
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -648,13 +648,22 @@ fn pdf_dest_name(id: &str) -> String {
 fn read_all_items(
     zotero_dir: &Path,
 ) -> Result<(Vec<ReadItem>, Vec<ZoteroCollectionInfo>), AppError> {
+    let (conn, tmp_dir) = copy_zotero_sqlite(zotero_dir)?;
+    let result = read_items_conn(&conn, zotero_dir);
+    let _ = fs::remove_dir_all(&tmp_dir);
+    result
+}
+
+/// Copy `zotero.sqlite` (+WAL/SHM) into a private temp dir and open it, so
+/// reads never fight Zotero's own lock. Returns the connection and the temp
+/// dir; the caller must remove the dir when done.
+pub(crate) fn copy_zotero_sqlite(zotero_dir: &Path) -> Result<(Connection, PathBuf), AppError> {
     let db = zotero_dir.join("zotero.sqlite");
     if !db.is_file() {
         return Err(AppError::message(
             "zotero.sqlite not found in the selected folder",
         ));
     }
-    // Zotero may hold a write lock while running; read a private copy (incl. WAL).
     let tmp_dir = std::env::temp_dir().join(format!(
         "motif-zotero-{}-{}",
         std::process::id(),
@@ -662,26 +671,105 @@ fn read_all_items(
     ));
     fs::create_dir_all(&tmp_dir)?;
     let tmp_db = tmp_dir.join("zotero.sqlite");
-    let result = copy_and_read(&db, &tmp_db, zotero_dir);
-    let _ = fs::remove_dir_all(&tmp_dir);
-    result
-}
-
-fn copy_and_read(
-    db: &Path,
-    tmp_db: &Path,
-    zotero_dir: &Path,
-) -> Result<(Vec<ReadItem>, Vec<ZoteroCollectionInfo>), AppError> {
-    fs::copy(db, tmp_db)?;
+    if let Err(e) = fs::copy(&db, &tmp_db) {
+        let _ = fs::remove_dir_all(&tmp_dir);
+        return Err(AppError::message(format!("copy zotero.sqlite: {e}")));
+    }
     for ext in ["-wal", "-shm"] {
         let src = PathBuf::from(format!("{}{ext}", db.display()));
         if src.is_file() {
             let _ = fs::copy(&src, PathBuf::from(format!("{}{ext}", tmp_db.display())));
         }
     }
-    let conn = Connection::open(tmp_db)
-        .map_err(|e| AppError::message(format!("open zotero.sqlite: {e}")))?;
-    read_items_conn(&conn, zotero_dir)
+    match Connection::open(&tmp_db) {
+        Ok(conn) => Ok((conn, tmp_dir)),
+        Err(e) => {
+            let _ = fs::remove_dir_all(&tmp_dir);
+            Err(AppError::message(format!("open zotero.sqlite: {e}")))
+        }
+    }
+}
+
+/// One child note with the metadata bidirectional sync needs.
+#[derive(Debug)]
+pub(crate) struct SyncNote {
+    pub html: String,
+    /// Zotero `items.dateModified` of the note row itself.
+    pub date_modified: Option<String>,
+}
+
+/// One regular Zotero item shaped for bidirectional sync (pull direction).
+#[derive(Debug)]
+pub(crate) struct SyncItem {
+    pub item_id: i64,
+    /// Assembled Zotero-API-JSON (feeds `map_zotero_item`, same as migration).
+    pub json: Value,
+    pub notes: Vec<SyncNote>,
+    /// Pre-formatted Markdown blocks for PDF annotations (migration format).
+    pub annotations: Vec<String>,
+}
+
+/// Read regular items with the subset bidirectional sync needs. Reuses the
+/// migration field/creator/tag assembly so mapping stays identical.
+pub(crate) fn read_sync_items(conn: &Connection) -> Result<Vec<SyncItem>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT i.itemID, it.typeName
+         FROM items i
+         JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
+         WHERE it.typeName NOT IN ('attachment', 'note', 'annotation', 'computerProgram')
+           AND i.itemID NOT IN (SELECT itemID FROM deletedItems)",
+    )?;
+    let rows = stmt.query_map(params![], |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+    })?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        let (item_id, type_name) = row?;
+        let fields = read_fields(conn, item_id)?;
+        if !fields.contains_key("title") {
+            continue;
+        }
+        let creators = read_creators(conn, item_id)?;
+        let tags = read_tags(conn, item_id)?;
+        out.push(SyncItem {
+            item_id,
+            json: assemble_json(&type_name, fields, creators, &tags),
+            notes: read_sync_notes(conn, item_id)?,
+            annotations: read_annotations(conn, item_id)?,
+        });
+    }
+    Ok(out)
+}
+
+/// Child notes of an item with their own modification timestamps.
+fn read_sync_notes(conn: &Connection, parent_item_id: i64) -> Result<Vec<SyncNote>, AppError> {
+    let mut stmt = match conn.prepare(
+        "SELECT n.note, i.dateModified
+         FROM itemNotes n
+         JOIN items i ON n.itemID = i.itemID
+         WHERE n.parentItemID = ?1
+           AND n.itemID NOT IN (SELECT itemID FROM deletedItems)
+         ORDER BY n.itemID",
+    ) {
+        Ok(s) => s,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let rows = stmt.query_map(params![parent_item_id], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (html, date_modified) = row?;
+        if html.trim().is_empty() {
+            continue;
+        }
+        out.push(SyncNote {
+            html,
+            date_modified,
+        });
+    }
+    Ok(out)
 }
 
 fn read_items_conn(

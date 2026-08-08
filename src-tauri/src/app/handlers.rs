@@ -129,6 +129,7 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::features::window::commands::doc_window_open,
             crate::features::import::zotero_commands::zotero_scan,
             crate::features::import::zotero_commands::zotero_migrate,
+            crate::features::zotero_sync::commands::zotero_sync,
             crate::features::watcher::commands::fs_watch_start,
             crate::features::watcher::commands::fs_watch_stop,
             crate::features::connector::commands::connector_get_status,
