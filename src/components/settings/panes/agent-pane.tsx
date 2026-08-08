@@ -95,8 +95,10 @@ export function AgentPane({
 	const { t } = useTranslation(["settings", "agent", "common"]);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [loading, setLoading] = useState(false);
-	/** Template id currently running silent install (row-level spinner). */
-	const [installingId, setInstallingId] = useState<string | null>(null);
+	/** Template ids currently running or queued for silent install (row-level spinner). */
+	const [installingIds, setInstallingIds] = useState<Set<string>>(
+		() => new Set(),
+	);
 	const [savingDefaultValue, setSavingDefaultValue] = useState<string | null>(
 		null,
 	);
@@ -348,7 +350,11 @@ export function AgentPane({
 		action: ToolLifecycleAction,
 	) => {
 		if (!isTauri()) return;
-		setInstallingId(entry.templateId);
+		setInstallingIds((prev) => {
+			const next = new Set(prev);
+			next.add(entry.templateId);
+			return next;
+		});
 		try {
 			await runToolLifecycle(entry.templateId, action);
 			notifySuccess(
@@ -362,7 +368,11 @@ export function AgentPane({
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
-			setInstallingId(null);
+			setInstallingIds((prev) => {
+				const next = new Set(prev);
+				next.delete(entry.templateId);
+				return next;
+			});
 		}
 	};
 
@@ -500,7 +510,7 @@ export function AgentPane({
 					const needsInstall = installAgent || installAcp;
 					const hasLifecycleAction = needsInstall || updateAgent;
 					const notInstalled = !entry.binaryAvailable;
-					const rowInstalling = installingId === entry.templateId;
+					const rowInstalling = installingIds.has(entry.templateId);
 					// Mid-probe or host-cleared not-probed while a batch is running.
 					const isProbing =
 						probingKeys.has(catalogProbeKey(entry.templateId)) ||
