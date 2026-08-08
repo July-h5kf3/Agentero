@@ -1,8 +1,13 @@
-//! Open a local directory as a Vault in the desktop App via deep link.
+//! Open a local directory as a Vault in the desktop App.
 //!
-//! Prefer `agentero://open?path=…` (works when the desktop app has registered
-//! the scheme — release installers / macOS bundle). Fall back to launching the
-//! GUI binary with the URL as an argv (dev + second-instance single-instance).
+//! Reliability order (any one success is enough for the Host; we always write
+//! the request file first so a running App with the watcher picks it up even
+//! when deep-link / second-instance fails):
+//!
+//! 1. Write `cli-open-request.json` (Host polls every ~400ms)
+//! 2. Notify single-instance socket if a desktop process is listening
+//! 3. OS deep-link `agentero://open?path=…`
+//! 4. Spawn / activate the GUI binary with the URL on argv
 
 use crate::error::CliError;
 use crate::resolve::GlobalOpts;
@@ -16,7 +21,6 @@ pub fn open_deep_link_url(absolute_path: &Path) -> String {
     format!("agentero://open?path={encoded}")
 }
 
-/// Percent-encode a path for use in a query value (encode `/` too for safety).
 fn urlencoding_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len() * 3);
     for b in s.as_bytes() {
@@ -78,44 +82,127 @@ pub fn run(path: &Path, globals: &GlobalOpts) -> Result<Value, CliError> {
         std::env::var("AGENTERO_OPEN_DRY_RUN").as_deref(),
         Ok("1") | Ok("true") | Ok("TRUE")
     );
-    let mut method = "deep-link";
+
+    let mut methods: Vec<&'static str> = Vec::new();
+    let mut request_file: Option<String> = None;
+    let mut gui_launched: Option<String> = None;
+
     if !dry {
-        match open_system_url(&url) {
-            Ok(()) => {}
-            Err(deep_err) => {
-                // Dev / unregistered scheme: launch the GUI binary with the URL.
-                match launch_gui_with_url(&url) {
-                    Ok(gui) => {
-                        method = "gui-argv";
-                        log::info!(
-                            target: "agentero::op",
-                            "open via GUI binary {} (deep-link failed: {deep_err})",
-                            gui.display()
-                        );
-                    }
-                    Err(gui_err) => {
-                        return Err(CliError::message(format!(
-                            "could not open desktop App.\n\
-                             deep-link: {deep_err}\n\
-                             gui launch: {gui_err}\n\
-                             Tips: install/run the desktop app once, or in dev keep `pnpm tauri dev` running."
-                        )));
-                    }
-                }
+        // 1) Always leave a request file for the running Host watcher.
+        match agentero_lib::features::open_request::write_cli_open_request(&abs) {
+            Ok(p) => {
+                methods.push("request-file");
+                request_file = Some(p.to_string_lossy().into_owned());
+            }
+            Err(e) => {
+                return Err(CliError::message(format!(
+                    "failed to write open request file: {e}"
+                )));
             }
         }
+
+        // 2) Wake single-instance desktop process (same socket as tauri plugin).
+        if notify_single_instance(&url) {
+            methods.push("single-instance");
+        }
+
+        // 3) OS deep-link (works when the installed .app registered agentero://).
+        if open_system_url(&url).is_ok() {
+            methods.push("deep-link");
+        }
+
+        // 4) Spawn/activate GUI so a stopped App starts and the watcher runs.
+        //    If single-instance already owns the lock, this process exits quickly
+        //    after notifying — still useful when nothing is running.
+        if !methods.contains(&"single-instance") {
+            match launch_gui_with_url(&url) {
+                Ok(gui) => {
+                    methods.push("gui-argv");
+                    gui_launched = Some(gui.to_string_lossy().into_owned());
+                }
+                Err(e) => {
+                    log::warn!(target: "agentero::op", "gui launch skipped: {e}");
+                }
+            }
+        } else {
+            // Still try to activate the frontmost Agentero-related process.
+            activate_agentero_frontmost();
+        }
+    } else {
+        methods.push("dry-run");
     }
+
+    let method = methods.first().copied().unwrap_or("none");
     Ok(json!({
         "path": abs.to_string_lossy(),
         "url": url,
         "method": method,
+        "methods": methods,
+        "requestFile": request_file,
+        "guiLaunched": gui_launched,
         "dryRun": dry,
         "lines": [if dry {
             format!("would open {}", globals.style.path(&abs.to_string_lossy()))
         } else {
-            format!("opening {}", globals.style.path(&abs.to_string_lossy()))
+            format!(
+                "opening {} ({})",
+                globals.style.path(&abs.to_string_lossy()),
+                methods.join("+")
+            )
         }],
     }))
+}
+
+/// Speak the same Unix socket protocol as `tauri-plugin-single-instance` (macOS/Linux).
+fn notify_single_instance(url: &str) -> bool {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        use std::io::Write;
+        use std::os::unix::net::UnixStream;
+
+        // Must match tauri-plugin-single-instance socket_path():
+        // identifier "com.poco-ai.agentero" → /tmp/com_poco_ai_agentero_si.sock
+        let socket = PathBuf::from("/tmp/com_poco_ai_agentero_si.sock");
+        let Ok(stream) = UnixStream::connect(&socket) else {
+            return false;
+        };
+        let cwd = std::env::current_dir()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        // Args: fake argv0 + deep-link URL (Host scans argv for agentero://).
+        let args = ["agentero-cli-notify", url].join("\0");
+        let mut payload = Vec::new();
+        payload.extend_from_slice(cwd.as_bytes());
+        payload.extend_from_slice(b"\0\0");
+        payload.extend_from_slice(args.as_bytes());
+        let mut stream = stream;
+        if stream.write_all(&payload).is_err() {
+            return false;
+        }
+        let _ = stream.flush();
+        true
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = url;
+        false
+    }
+}
+
+fn activate_agentero_frontmost() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("osascript")
+            .args([
+                "-e",
+                r#"tell application "System Events" to set frontmost of first process whose name is "agentero" to true"#,
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
 }
 
 fn open_system_url(url: &str) -> Result<(), CliError> {
@@ -134,8 +221,6 @@ fn open_system_url(url: &str) -> Result<(), CliError> {
     }
     #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     {
-        // Suppress OS noise (e.g. macOS kLSApplicationNotFoundErr) — callers
-        // fall back to launching the GUI binary when this fails.
         let status = Command::new(program)
             .args(&args)
             .stdin(std::process::Stdio::null())
@@ -152,7 +237,6 @@ fn open_system_url(url: &str) -> Result<(), CliError> {
     }
 }
 
-/// Spawn (or second-instance) the desktop GUI with a deep-link URL on argv.
 fn launch_gui_with_url(url: &str) -> Result<PathBuf, CliError> {
     let gui = find_gui_binary().ok_or_else(|| {
         CliError::message(
@@ -162,7 +246,6 @@ fn launch_gui_with_url(url: &str) -> Result<PathBuf, CliError> {
 
     #[cfg(target_os = "macos")]
     {
-        // Prefer `open -a` when the path is an .app bundle.
         if gui.extension().is_some_and(|e| e == "app")
             || gui
                 .file_name()
@@ -170,19 +253,24 @@ fn launch_gui_with_url(url: &str) -> Result<PathBuf, CliError> {
         {
             let status = Command::new("open")
                 .args(["-a", &gui.to_string_lossy(), "--args", url])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
                 .status()
                 .map_err(|e| CliError::message(format!("open -a failed: {e}")))?;
             if status.success() {
                 return Ok(gui);
             }
         }
-        // If path is the inner MacOS executable, open its .app parent when possible.
         if let Some(app) = gui
             .ancestors()
             .find(|p| p.extension().is_some_and(|e| e == "app"))
         {
             let status = Command::new("open")
                 .args(["-a", &app.to_string_lossy(), "--args", url])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
                 .status()
                 .map_err(|e| CliError::message(format!("open -a failed: {e}")))?;
             if status.success() {
@@ -191,7 +279,6 @@ fn launch_gui_with_url(url: &str) -> Result<PathBuf, CliError> {
         }
     }
 
-    // Direct spawn (dev binary or when open -a is unavailable). Detached so the CLI exits.
     let child = Command::new(&gui)
         .arg(url)
         .stdin(std::process::Stdio::null())
@@ -204,7 +291,6 @@ fn launch_gui_with_url(url: &str) -> Result<PathBuf, CliError> {
                 gui.display()
             ))
         })?;
-    // Don't wait — single-instance plugin will forward if already running.
     let _ = child.id();
     Ok(gui)
 }
@@ -212,38 +298,30 @@ fn launch_gui_with_url(url: &str) -> Result<PathBuf, CliError> {
 fn find_gui_binary() -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
-    // Same directory as this CLI binary (dev: target/debug/agentero-cli → agentero).
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
+            // Prefer workspace GUI next to this CLI (dev).
             candidates.push(dir.join("agentero"));
             #[cfg(windows)]
             candidates.push(dir.join("agentero.exe"));
-            // Bundled app layout
             candidates.push(dir.join("Agentero"));
-            #[cfg(target_os = "macos")]
-            {
-                // …/Contents/MacOS/agentero-cli is wrong; GUI is sibling agentero
-                // or …/Agentero.app/Contents/MacOS/Agentero
-                if let Some(contents) = dir.parent() {
-                    if contents.file_name().is_some_and(|n| n == "MacOS") {
-                        candidates.push(dir.join("Agentero"));
-                        candidates.push(dir.join("agentero"));
-                    }
-                }
-            }
             for ancestor in dir.ancestors().take(6) {
                 candidates.push(ancestor.join("target/debug/agentero"));
                 candidates.push(ancestor.join("target/release/agentero"));
                 #[cfg(target_os = "macos")]
                 {
+                    candidates.push(
+                        ancestor.join("src-tauri/target/release/bundle/macos/Agentero.app"),
+                    );
                     candidates
-                        .push(ancestor.join("src-tauri/target/release/bundle/macos/Agentero.app"));
-                    candidates.push(ancestor.join("target/release/bundle/macos/Agentero.app"));
+                        .push(ancestor.join("target/release/bundle/macos/Agentero.app"));
                 }
             }
         }
     }
 
+    // Prefer Applications last so dev CLI does not wake an *old* DMG that
+    // lacks open handlers while a new binary is available.
     #[cfg(target_os = "macos")]
     {
         candidates.push(PathBuf::from("/Applications/Agentero.app"));

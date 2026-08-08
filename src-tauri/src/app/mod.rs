@@ -174,6 +174,11 @@ pub fn run() {
             // OS scheme is not registered (common with `tauri dev`).
             let argv: Vec<String> = std::env::args().collect();
             crate::features::open_request::handle_argv_urls(app.handle(), &argv);
+            // Consume a request file left by `agentero open` before we listened.
+            if let Some(path) = crate::features::open_request::take_cli_open_request_file() {
+                let _ = crate::features::open_request::handle_open_path(app.handle(), &path);
+            }
+            crate::features::open_request::spawn_cli_open_request_watcher(app.handle().clone());
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 let list: Vec<String> = event.urls().into_iter().map(|u| u.to_string()).collect();

@@ -199,8 +199,10 @@ export async function openLocalVaultPath(
 			}
 			return;
 		}
-		// Skip no-op switch to the already-active vault.
-		if (getVaultPath() === trimmed) {
+		// Skip no-op switch to the already-active vault (normalize trailing slash).
+		const current = (getVaultPath() ?? "").replace(/[\\/]+$/, "");
+		const next = trimmed.replace(/[\\/]+$/, "");
+		if (current && current === next) {
 			return;
 		}
 		await activateVault(trimmed);

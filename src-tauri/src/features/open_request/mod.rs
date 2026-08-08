@@ -1,19 +1,31 @@
 //! Deep-link / second-instance vault open requests.
 //!
-//! CLI emits `agentero://open?path=…`; the Host validates the directory, extends
-//! fs scope, caches a pending path for startup races, and emits
-//! `vault:open-request` for the renderer.
+//! Paths to open arrive via:
+//! 1. `agentero://open?path=…` deep link / second-instance argv
+//! 2. **CLI request file** (`…/agentero/cli-open-request.json`) — reliable when
+//!    deep-link is unregistered (dev) or a second GUI process would miss the
+//!    window the user is looking at
+//!
+//! Host validates the directory, extends fs scope, caches a pending path for
+//! startup races, and emits `vault:open-request` for the renderer.
 
 use crate::core::error::ApiResult;
 use crate::core::error::AppError;
-use serde::Serialize;
+use crate::core::paths::agentero_config_dir;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_fs::FsExt;
 use url::Url;
 
 pub const EVENT_VAULT_OPEN_REQUEST: &str = "vault:open-request";
+
+/// Written by headless CLI; consumed by the running desktop Host.
+const CLI_OPEN_REQUEST_FILE: &str = "cli-open-request.json";
+/// Ignore stale requests older than this (seconds).
+const CLI_OPEN_REQUEST_MAX_AGE_SECS: u64 = 120;
 
 /// Last validated open path waiting for the frontend to consume.
 #[derive(Default)]
@@ -188,6 +200,19 @@ fn focus_main_window<R: Runtime>(app: &AppHandle<R>) {
         let _ = win.unminimize();
         let _ = win.set_focus();
     }
+    // macOS often ignores set_focus from non-frontmost processes (CLI wake-up).
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("osascript")
+            .args([
+                "-e",
+                r#"tell application "System Events" to set frontmost of first process whose name is "agentero" to true"#,
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
 }
 
 fn trunc(s: &str) -> String {
@@ -197,6 +222,103 @@ fn trunc(s: &str) -> String {
     } else {
         format!("{}…", &s[..MAX])
     }
+}
+
+// --- CLI ↔ Host request file (primary reliability path) --------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CliOpenRequestFile {
+    path: String,
+    /// Unix epoch seconds when the CLI wrote the request.
+    ts: u64,
+}
+
+/// Absolute path of the CLI open-request file.
+pub fn cli_open_request_path() -> PathBuf {
+    agentero_config_dir().join(CLI_OPEN_REQUEST_FILE)
+}
+
+/// CLI (and tests): ask any running desktop Host to open `absolute_path`.
+pub fn write_cli_open_request(absolute_path: &Path) -> Result<PathBuf, AppError> {
+    let canonical = validate_open_dir(absolute_path)?;
+    let dir = agentero_config_dir();
+    std::fs::create_dir_all(&dir)?;
+    let file = cli_open_request_path();
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let body = CliOpenRequestFile {
+        path: canonical.to_string_lossy().into_owned(),
+        ts,
+    };
+    let json = serde_json::to_string_pretty(&body)
+        .map_err(|e| AppError::message(format!("serialize open request: {e}")))?;
+    // Atomic-ish write: temp then rename.
+    let tmp = file.with_extension("json.tmp");
+    std::fs::write(&tmp, json)?;
+    std::fs::rename(&tmp, &file)?;
+    Ok(file)
+}
+
+/// Read + delete a fresh CLI open request, if any.
+pub fn take_cli_open_request_file() -> Option<PathBuf> {
+    let file = cli_open_request_path();
+    let raw = std::fs::read_to_string(&file).ok()?;
+    let _ = std::fs::remove_file(&file);
+    let req: CliOpenRequestFile = serde_json::from_str(&raw).ok()?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if now.saturating_sub(req.ts) > CLI_OPEN_REQUEST_MAX_AGE_SECS {
+        log::info!(
+            target: "agentero::op",
+            "ignore stale cli open request age_s={}",
+            now.saturating_sub(req.ts)
+        );
+        return None;
+    }
+    let path = PathBuf::from(req.path);
+    if path.is_absolute() && path.is_dir() {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+/// Poll the CLI open-request file and forward into the normal open pipeline.
+pub fn spawn_cli_open_request_watcher<R: Runtime>(app: AppHandle<R>) {
+    tauri::async_runtime::spawn(async move {
+        let mut last_handled: Option<String> = None;
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+            let Some(path) = take_cli_open_request_file() else {
+                continue;
+            };
+            let key = path.to_string_lossy().into_owned();
+            if last_handled.as_deref() == Some(key.as_str()) {
+                continue;
+            }
+            match handle_open_path(&app, &path) {
+                Ok(p) => {
+                    last_handled = Some(p);
+                }
+                Err(e) => {
+                    log::warn!(
+                        target: "agentero::op",
+                        "cli open request file failed path={} error={e}",
+                        trunc(&key)
+                    );
+                    let _ = app.emit(
+                        "vault:open-error",
+                        serde_json::json!({ "message": e.to_string() }),
+                    );
+                }
+            }
+        }
+    });
 }
 
 /// Take the pending open path (startup race: frontend ready after Host queued).
