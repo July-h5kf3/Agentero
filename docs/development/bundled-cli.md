@@ -1,4 +1,6 @@
-# 内置桌面 CLI 设计（草案）
+# 内置桌面 CLI 设计
+
+> **状态（2026-08）**：M1–M3 主路径已实现（`open` + deep link、`paper move` 测试、externalBin 打包、设置 → 关于安装 CLI）。平台安装器自动 PATH（NSIS/deb 完整脚本）与 Homebrew Cask link 仍可按渠道加深。实现说明亦见 [../backend/cli.md](../backend/cli.md)。
 
 关联 Issue：[\#165](https://github.com/poco-ai/Agentero/issues/165)（命令行打开 Vault）与 [\#166](https://github.com/poco-ai/Agentero/issues/166)（CLI 论文移动）。
 
