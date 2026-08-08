@@ -7,8 +7,11 @@ authors = ["you"]
 license = "MIT"
 publish = false
 
+# Binary file is `agentero-cli` so it does not collide with the desktop GUI
+# binary (`agentero` from the `agentero` package) in the shared target dir.
+# User-facing PATH install still exposes the command as `agentero` via shim.
 [[bin]]
-name = "agentero"
+name = "agentero-cli"
 path = "src/main.rs"
 
 [dependencies]

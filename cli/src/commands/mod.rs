@@ -4,6 +4,7 @@ pub mod export;
 pub mod import;
 pub mod layout;
 pub mod mark;
+pub mod open;
 pub mod paper;
 pub mod trash;
 pub mod tree;

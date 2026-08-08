@@ -397,6 +397,18 @@
 			"tagInstalling": "Installing…",
 			"toastTitle": "Agentero {{version}} is available",
 			"toastDescription": "Download the verified update and restart Agentero"
+		},
+		"cli": {
+			"label": "Command-line tools",
+			"description": "Headless Vault / Catalog for scripts and external agents",
+			"notBundled": "CLI is not bundled in this build",
+			"install": "Install",
+			"uninstall": "Remove",
+			"installSuccess": "CLI command installed",
+			"uninstallSuccess": "CLI command removed",
+			"installFailed": "Could not install CLI command",
+			"uninstallFailed": "Could not remove CLI command",
+			"statusFailed": "Could not read CLI status"
 		}
 	}
 }

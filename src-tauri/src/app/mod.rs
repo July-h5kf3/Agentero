@@ -27,7 +27,23 @@ pub fn run() {
     // Persist panics for the next-launch diagnostics report (no-op without a
     // compiled-in telemetry endpoint).
     crate::features::telemetry::install_panic_hook();
-    let mut builder = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    // Single-instance must be the first plugin so second-instance argv (deep
+    // links on Windows/Linux) is forwarded before other plugins run.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            crate::features::open_request::handle_argv_urls(app, &argv);
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.show();
+                let _ = win.unminimize();
+                let _ = win.set_focus();
+            }
+        }));
+    }
+
+    builder = builder
         .register_asynchronous_uri_scheme_protocol("agentero-arxiv", |_ctx, request, responder| {
             crate::features::arxiv_proxy::handle(request, responder);
         })
@@ -63,7 +79,8 @@ pub fn run() {
         .manage(crate::features::bridge::BridgeClientController::new())
         .manage(WikiIndexState::new())
         .manage(crate::features::doctor::DoctorDirtyPathsState::default())
-        .manage(ExternalRenameRepairStore::new());
+        .manage(ExternalRenameRepairStore::new())
+        .manage(crate::features::open_request::PendingVaultOpen::new());
 
     #[cfg(not(target_os = "ios"))]
     {
@@ -137,6 +154,38 @@ pub fn run() {
             cfg!(debug_assertions)
         );
         crate::features::telemetry::commands::spawn_startup_report(app.handle().clone());
+
+        // Desktop deep links: cold start + runtime open URLs.
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            use tauri_plugin_deep_link::DeepLinkExt;
+            // Linux / Windows dev: associate schemes with the current executable.
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            {
+                if let Err(e) = app.deep_link().register_all() {
+                    log::warn!(target: "agentero::op", "deep_link register_all failed: {e}");
+                }
+            }
+            if let Ok(Some(urls)) = app.deep_link().get_current() {
+                let list: Vec<String> = urls.into_iter().map(|u| u.to_string()).collect();
+                crate::features::open_request::handle_deep_link_urls(app.handle(), &list);
+            }
+            // Dev / direct spawn: CLI may pass agentero://… as argv when the
+            // OS scheme is not registered (common with `tauri dev`).
+            let argv: Vec<String> = std::env::args().collect();
+            crate::features::open_request::handle_argv_urls(app.handle(), &argv);
+            // Consume a request file left by `agentero open` before we listened.
+            if let Some(path) = crate::features::open_request::take_cli_open_request_file() {
+                let _ = crate::features::open_request::handle_open_path(app.handle(), &path);
+            }
+            crate::features::open_request::spawn_cli_open_request_watcher(app.handle().clone());
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                let list: Vec<String> = event.urls().into_iter().map(|u| u.to_string()).collect();
+                crate::features::open_request::handle_deep_link_urls(&handle, &list);
+            });
+        }
+
         Ok(())
     });
 

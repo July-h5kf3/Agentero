@@ -1,6 +1,6 @@
 import { getVersion } from "@tauri-apps/api/app";
-import { Download, LoaderCircle, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Download, LoaderCircle, RefreshCw, Terminal } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	PageTitle,
@@ -8,7 +8,14 @@ import {
 	SettingsRow,
 } from "@/components/settings/settings-layout";
 import { Button } from "@/components/ui/button";
-import { notifyError } from "@/lib/core/notify";
+import {
+	type CliInstallStatus,
+	fetchCliInstallStatus,
+	installCliCommand,
+	uninstallCliCommand,
+} from "@/lib/cli/api";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
+import { isTauri } from "@/lib/core/tauri";
 import {
 	checkForUpdate,
 	getUpdateSnapshot,
@@ -21,6 +28,22 @@ export function AboutPane() {
 	const { t } = useTranslation("settings");
 	const [version, setVersion] = useState<string>();
 	const [update, setUpdate] = useState<UpdateSnapshot>(getUpdateSnapshot);
+	const [cli, setCli] = useState<CliInstallStatus | null>(null);
+	const [cliBusy, setCliBusy] = useState(false);
+	const [cliLoading, setCliLoading] = useState(false);
+
+	const refreshCli = useCallback(async () => {
+		if (!isTauri()) return;
+		setCliLoading(true);
+		try {
+			const status = await fetchCliInstallStatus();
+			setCli(status);
+		} catch {
+			notifyError(t("about.cli.statusFailed"));
+		} finally {
+			setCliLoading(false);
+		}
+	}, [t]);
 
 	useEffect(() => {
 		void getVersion()
@@ -28,6 +51,9 @@ export function AboutPane() {
 			.catch(() => undefined);
 	}, []);
 	useEffect(() => subscribeUpdate(setUpdate), []);
+	useEffect(() => {
+		void refreshCli();
+	}, [refreshCli]);
 
 	const checking = update.phase === "checking";
 	const installing =
@@ -42,6 +68,29 @@ export function AboutPane() {
 			}
 		});
 	};
+	const onInstallCli = () => {
+		setCliBusy(true);
+		void installCliCommand()
+			.then(async (res) => {
+				setCli(res.status);
+				await refreshCli();
+				notifySuccess(t("about.cli.installSuccess"));
+			})
+			.catch(() => notifyError(t("about.cli.installFailed")))
+			.finally(() => setCliBusy(false));
+	};
+	const onUninstallCli = () => {
+		setCliBusy(true);
+		void uninstallCliCommand()
+			.then(async (res) => {
+				setCli(res.status);
+				await refreshCli();
+				notifySuccess(t("about.cli.uninstallSuccess"));
+			})
+			.catch(() => notifyError(t("about.cli.uninstallFailed")))
+			.finally(() => setCliBusy(false));
+	};
+
 	const description = (() => {
 		switch (update.phase) {
 			case "unsupported":
@@ -75,6 +124,18 @@ export function AboutPane() {
 				return t("about.update.idle");
 		}
 	})();
+
+	const cliDescription = (() => {
+		if (!cli) {
+			return cliLoading ? "…" : t("about.cli.statusFailed");
+		}
+		if (!cli.bundledPath) {
+			return t("about.cli.notBundled");
+		}
+		return t("about.cli.description");
+	})();
+
+	const canInstallCli = Boolean(cli?.bundledPath) && !cliBusy;
 
 	return (
 		<>
@@ -124,6 +185,55 @@ export function AboutPane() {
 					</div>
 				) : null}
 			</SettingsGroup>
+			{isTauri() ? (
+				<SettingsGroup>
+					<SettingsRow
+						label={
+							<span className="inline-flex items-center gap-1.5">
+								<Terminal
+									className="size-3.5 shrink-0 text-muted-foreground"
+									aria-hidden
+								/>
+								{t("about.cli.label")}
+							</span>
+						}
+						description={cliDescription}
+					>
+						<div className="flex flex-wrap items-center justify-end gap-2">
+							{cli?.installed ? (
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={cliBusy || cliLoading}
+									onClick={onUninstallCli}
+								>
+									{cliBusy ? (
+										<LoaderCircle
+											data-icon="inline-start"
+											className="animate-spin"
+										/>
+									) : null}
+									{t("about.cli.uninstall")}
+								</Button>
+							) : (
+								<Button
+									size="sm"
+									disabled={!canInstallCli || cliLoading}
+									onClick={onInstallCli}
+								>
+									{cliBusy ? (
+										<LoaderCircle
+											data-icon="inline-start"
+											className="animate-spin"
+										/>
+									) : null}
+									{t("about.cli.install")}
+								</Button>
+							)}
+						</div>
+					</SettingsRow>
+				</SettingsGroup>
+			) : null}
 		</>
 	);
 }

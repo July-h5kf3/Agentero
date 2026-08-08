@@ -48,3 +48,5 @@ src-tauri/target/
 .superpowers/
 
 .pnpm-store/
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep

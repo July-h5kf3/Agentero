@@ -390,6 +390,18 @@
 			"tagInstalling": "安装中…",
 			"toastTitle": "Agentero {{version}} 已可用",
 			"toastDescription": "下载已验证的更新并重启 Agentero"
+		},
+		"cli": {
+			"label": "命令行工具",
+			"description": "无界面操作 Vault / Catalog，供脚本与外部 Agent 使用",
+			"notBundled": "当前构建未内置 CLI",
+			"install": "安装",
+			"uninstall": "移除",
+			"installSuccess": "已安装 CLI 命令",
+			"uninstallSuccess": "已移除 CLI 命令",
+			"installFailed": "无法安装 CLI 命令",
+			"uninstallFailed": "无法移除 CLI 命令",
+			"statusFailed": "无法读取 CLI 状态"
 		}
 	}
 }

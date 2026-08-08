@@ -47,11 +47,16 @@ jobs:
             Sideload it directly; the app is a remote client for your desktop Vault.
 
             ## CLI (`agentero`)
-            Headless Vault / Catalog machine interface (no BYOA).
-            Download the matching `agentero-cli-<version>-<rust-host>…` archive, extract, and put `agentero` on your `PATH`.
+            Headless Vault / Catalog machine interface (no BYOA). **Bundled with the desktop app** at the same version.
+
+            After installing the desktop app:
+            - **Windows / Linux**: installers expose `agentero` on PATH when possible.
+            - **macOS (DMG)**: Settings → About → **Install CLI** (writes `~/.local/bin/agentero`; does not edit shell rc).
+            - Standalone CLI archives remain available for headless-only machines.
 
             ```bash
             agentero --version
+            agentero open ~/research   # or: agentero ~/research
             agentero vault which --json
             ```
 
@@ -106,6 +111,12 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+
+      # Bundle same-version headless CLI into the desktop artifact (externalBin).
+      # `beforeBuildCommand` also runs `pnpm cli:bundle:release`; this pre-step
+      # makes the triple-suffixed binary available for tauri-build early checks.
+      - name: Prepare bundled CLI
+        run: pnpm cli:bundle:release
 
       # macOS: Developer ID signing + notarytool (see docs/development/macos-signing.md).
       # Without APPLE_CERTIFICATE the build still runs unsigned (existing behavior).
@@ -385,13 +396,15 @@ jobs:
 
           STAGE="agentero-cli-${VERSION}-${HOST}"
           mkdir -p "$STAGE"
+          # Cargo bin is `agentero-cli` (no collision with GUI `agentero`);
+          # archive still exposes the user-facing name `agentero`.
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            cp "target/release/agentero.exe" "$STAGE/agentero.exe"
+            cp "target/release/agentero-cli.exe" "$STAGE/agentero.exe"
             powershell.exe -NoProfile -Command \
               "Compress-Archive -Path '${STAGE}/agentero.exe' -DestinationPath '${OUT_DIR}/${STAGE}.zip' -Force"
             echo "CLI_ASSET=${OUT_DIR}/${STAGE}.zip" >> "$GITHUB_ENV"
           else
-            cp "target/release/agentero" "$STAGE/agentero"
+            cp "target/release/agentero-cli" "$STAGE/agentero"
             chmod +x "$STAGE/agentero"
             tar -C "$STAGE" -czf "${OUT_DIR}/${STAGE}.tar.gz" agentero
             echo "CLI_ASSET=${OUT_DIR}/${STAGE}.tar.gz" >> "$GITHUB_ENV"

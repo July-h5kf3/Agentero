@@ -6,12 +6,14 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 
 - 目录：`cli/`（crate `agentero-cli`）
 - path 依赖 `agentero_lib`：`features::{vault,catalog,import,wiki}` + `core::{error,fs}`
-- 桌面安装包内置同版本 CLI（规划）：[../development/bundled-cli.md](../development/bundled-cli.md)（[#165](https://github.com/poco-ai/Agentero/issues/165)）
+- 桌面安装包内置同版本 CLI：[../development/bundled-cli.md](../development/bundled-cli.md)（[#165](https://github.com/poco-ai/Agentero/issues/165) / [#166](https://github.com/poco-ai/Agentero/issues/166)）
+  - 设置 → 关于：显示 CLI 版本、是否已安装 PATH 入口，并支持手动安装 / 卸载（不静默改 shell rc）
 
 ## 命令组
 
 | 组 | 用途 |
 |---|---|
+| `open` | 在桌面 App 打开本地目录为 Vault（`agentero open <PATH>`；简写 `agentero <PATH>`） |
 | `vault` | create / which / info 等 |
 | `tree` | 列树 |
 | `paper` | list/get、tag list/set/add/rm、move、download/parse… |
@@ -88,11 +90,23 @@ agentero -y trash purge <batch-id> <stored>
 agentero -y trash purge
 ```
 
-论文移动会更新文件夹和 Catalog 路径：
+论文移动会更新文件夹和 Catalog 路径。目标父目录不存在时会自动创建；目标已存在或路径逃出 `papers/` 时失败且不改 Catalog：
 
 ```bash
 agentero paper move papers/inbox/demo papers/archive
+# 目标父目录可尚未存在：
+agentero paper move papers/inbox/demo papers/new-shelf
 ```
+
+### 从命令行打开桌面 App
+
+```bash
+agentero open ~/research
+agentero ~/research    # 路径简写（已知子命令名优先）
+agentero .             # 当前目录
+```
+
+CLI 通过 `agentero://open?path=…` 深链唤起已安装的桌面 App；无参数时仍打印 help，不会隐式打开最近 Vault。
 
 ## 双链检查
 
