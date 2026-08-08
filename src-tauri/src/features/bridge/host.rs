@@ -936,6 +936,7 @@ async fn dispatch_agent_rpc(
                 app.state::<AgentRunController>(),
                 app.state::<PermissionGate>(),
                 app.state::<crate::features::agent::ElicitationGate>(),
+                app.state::<crate::features::agent::AskUserGate>(),
                 app.state::<std::sync::Arc<RemoteRegistry>>(),
                 request,
             )
@@ -962,6 +963,14 @@ async fn dispatch_agent_rpc(
                 serde_json::from_value(params)?;
             api_result_data(crate::features::agent::commands::agent_respond_elicitation(
                 app.state::<crate::features::agent::ElicitationGate>(),
+                request,
+            ))
+        }
+        "agent_respond_ask_user" => {
+            let request: crate::features::agent::commands::AskUserResponseRequest =
+                serde_json::from_value(params)?;
+            api_result_data(crate::features::agent::commands::agent_respond_ask_user(
+                app.state::<crate::features::agent::AskUserGate>(),
                 request,
             ))
         }

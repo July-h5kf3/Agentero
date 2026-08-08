@@ -1,6 +1,7 @@
 pub mod acp;
 #[cfg(test)]
 mod acp_tests;
+pub mod ask_user;
 pub mod background_commands;
 pub mod background_tasks;
 pub mod commands;
@@ -20,6 +21,7 @@ pub use acp::{
     list_acp_sessions, load_acp_session, new_ids, probe_agent, run_once, warm_agent,
     PermissionPolicy,
 };
+pub use ask_user::AskUserGate;
 pub use elicitation::ElicitationGate;
 pub use events::AgentEventEmitter;
 pub use permission::PermissionGate;

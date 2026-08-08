@@ -1,4 +1,5 @@
 use crate::core::error::{map_err, ApiResult, AppError};
+use crate::features::agent::ask_user::AskUserAnswer;
 use crate::features::agent::elicitation::ElicitationAnswer;
 use crate::features::agent::models::{
     AgentDescriptor, AgentListResponse, AgentSkill, CatalogScanResponse, ProbeResult,
@@ -6,7 +7,7 @@ use crate::features::agent::models::{
 };
 use crate::features::agent::{
     list_agent_skills, new_ids, probe_agent, run_once, warm_agent, AgentEventEmitter,
-    AgentRegistry, AgentRunController, AgentWarmGate, ElicitationGate, PermissionGate,
+    AgentRegistry, AgentRunController, AgentWarmGate, AskUserGate, ElicitationGate, PermissionGate,
     PermissionPolicy,
 };
 use crate::features::remote::{materialize_skills_to_work, resolve_remote_target, RemoteRegistry};
@@ -291,12 +292,14 @@ pub async fn agent_probe_catalog(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn agent_run_once(
     window: tauri::WebviewWindow,
     registry: State<'_, AgentRegistry>,
     runs: State<'_, AgentRunController>,
     gate: State<'_, PermissionGate>,
     elicitation_gate: State<'_, ElicitationGate>,
+    ask_user_gate: State<'_, AskUserGate>,
     remote_registry: State<'_, Arc<RemoteRegistry>>,
     request: RunOnceRequest,
 ) -> Result<ApiResult<RunOnceAccepted>, String> {
@@ -352,6 +355,7 @@ pub async fn agent_run_once(
     let events = AgentEventEmitter::new(app_handle.clone(), window.label());
     let permission_gate = gate.inner().clone();
     let elicitation_gate = elicitation_gate.inner().clone();
+    let ask_user_gate = ask_user_gate.inner().clone();
     let permission_policy = match request.permission_mode.as_deref() {
         Some("auto") => PermissionPolicy::Auto,
         Some("ask") => PermissionPolicy::Ask,
@@ -384,6 +388,7 @@ pub async fn agent_run_once(
             permission_policy,
             permission_gate.clone(),
             elicitation_gate.clone(),
+            ask_user_gate.clone(),
             request.response_language,
             request.personal_prompt,
             cancellation,
@@ -547,6 +552,33 @@ pub fn agent_respond_elicitation(
         "accept" => ElicitationAnswer::Accept(request.content.unwrap_or_default()),
         "decline" => ElicitationAnswer::Decline,
         _ => ElicitationAnswer::Cancel,
+    };
+    let resolved = gate.resolve(&request.request_id, answer);
+    ApiResult::ok(PermissionResponded { resolved })
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AskUserResponseRequest {
+    pub request_id: String,
+    /// accept | cancel
+    pub action: String,
+    /// Parallel answer strings (multi-select joined with ", ").
+    #[serde(default)]
+    pub answers: Option<Vec<String>>,
+}
+
+/// Answer a pending Grok `_x.ai/ask_user_question` extension request.
+#[tauri::command]
+pub fn agent_respond_ask_user(
+    gate: State<'_, AskUserGate>,
+    request: AskUserResponseRequest,
+) -> ApiResult<PermissionResponded> {
+    let answer = match request.action.as_str() {
+        "accept" => AskUserAnswer::Accepted {
+            answers: request.answers.unwrap_or_default(),
+        },
+        _ => AskUserAnswer::Cancelled,
     };
     let resolved = gate.resolve(&request.request_id, answer);
     ApiResult::ok(PermissionResponded { resolved })

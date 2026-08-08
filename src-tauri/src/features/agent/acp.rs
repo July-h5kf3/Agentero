@@ -1,4 +1,8 @@
 use crate::core::error::AppError;
+use crate::features::agent::ask_user::{
+    cancelled_response, grok_response_from_answers, questions_to_dto, AskUserAnswer, AskUserGate,
+    AskUserRequestEvent, GrokAskUserRequest,
+};
 use crate::features::agent::discover::{path_entries, resolve_command};
 use crate::features::agent::elicitation::{ElicitationAnswer, ElicitationGate};
 use crate::features::agent::events::AgentEventEmitter;
@@ -852,8 +856,13 @@ fn elicitation_fields_from_request(
                     } else {
                         "select".to_string()
                     };
-                    let is_other_answer = codex_meta_flag(&s.meta, "isOtherAnswer");
-                    let parent_field_id = codex_meta_string(&s.meta, "questionId");
+                    let is_other_answer = codex_meta_flag(&s.meta, "isOtherAnswer")
+                        || codex_meta_flag(&s.meta, "is_other_answer");
+                    // codex-acp uses questionId; some adapters use parentFieldId / parentId.
+                    let parent_field_id = codex_meta_string(&s.meta, "questionId")
+                        .or_else(|| codex_meta_string(&s.meta, "parentFieldId"))
+                        .or_else(|| codex_meta_string(&s.meta, "parent_field_id"))
+                        .or_else(|| codex_meta_string(&s.meta, "parentId"));
                     ElicitationFieldView {
                         id: id.clone(),
                         title: s.title.clone().unwrap_or_else(|| id.clone()),
@@ -958,6 +967,49 @@ fn elicitation_response_from_answer(answer: ElicitationAnswer) -> CreateElicitat
         }
         ElicitationAnswer::Decline => CreateElicitationResponse::new(ElicitationAction::Decline),
         ElicitationAnswer::Cancel => CreateElicitationResponse::new(ElicitationAction::Cancel),
+    }
+}
+
+/// Forward Grok `_x.ai/ask_user_question` to the frontend; timeout → cancel.
+async fn await_grok_ask_user(
+    app: &AgentEventEmitter,
+    gate: &AskUserGate,
+    runtime_session_id: &str,
+    request: &GrokAskUserRequest,
+) -> serde_json::Value {
+    let params = &request.0;
+    let questions = questions_to_dto(&params.questions);
+    if questions.is_empty() {
+        log::warn!(
+            target: "agentero::agent",
+            "grok ask_user_question with no valid questions; cancelling"
+        );
+        return cancelled_response();
+    }
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let mode = match params.mode.as_deref() {
+        Some("plan") => "plan".to_string(),
+        _ => "default".to_string(),
+    };
+    let rx = gate.register(&request_id);
+    let _ = app.emit(
+        "agent:ask-user-request",
+        AskUserRequestEvent {
+            request_id: request_id.clone(),
+            session_id: runtime_session_id.to_string(),
+            tool_call_id: Some(params.tool_call_id.clone()).filter(|s| !s.is_empty()),
+            mode,
+            questions,
+        },
+    );
+
+    let answer = tokio::time::timeout(std::time::Duration::from_secs(300), rx).await;
+    match answer {
+        Ok(Ok(AskUserAnswer::Accepted { answers })) => {
+            grok_response_from_answers(&params.questions, &answers)
+        }
+        _ => cancelled_response(),
     }
 }
 
@@ -1203,6 +1255,7 @@ pub async fn run_once(
     permission_policy: PermissionPolicy,
     permission_gate: PermissionGate,
     elicitation_gate: ElicitationGate,
+    ask_user_gate: AskUserGate,
     response_language: Option<String>,
     personal_prompt: Option<String>,
     mut cancellation: watch::Receiver<bool>,
@@ -1396,6 +1449,21 @@ pub async fn run_once(
                         &request,
                     )
                     .await;
+                    let _ = responder.respond(response);
+                    Ok(())
+                }
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
+            {
+                let app_for_ask = app_for_conn.clone();
+                let session_for_ask = session_for_conn.clone();
+                let ask_user_gate = ask_user_gate.clone();
+                async move |request: GrokAskUserRequest, responder, _cx| {
+                    let response =
+                        await_grok_ask_user(&app_for_ask, &ask_user_gate, &session_for_ask, &request)
+                            .await;
                     let _ = responder.respond(response);
                     Ok(())
                 }
