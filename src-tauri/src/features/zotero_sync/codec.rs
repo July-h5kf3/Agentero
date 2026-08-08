@@ -57,16 +57,66 @@ pub fn markdown_to_html(md: &str) -> String {
     out
 }
 
-/// Vault Markdown → Zotero-friendly HTML. Zotero notes are rich-text HTML, so
-/// Obsidian-flavored syntax must be cleaned before conversion or it shows up
-/// as raw Markdown garbage: YAML frontmatter (aliases) would render as a
-/// horizontal rule + text, `> [!type]` callout markers and `[[wikilinks]]`
-/// would stay literal.
+/// Vault Markdown → Zotero-friendly HTML. Zotero notes are rich-text HTML and
+/// already carry title/abstract as item fields, so the vault note must be
+/// cleaned before conversion or it reads as garbage: the paper shell (title +
+/// abstract) and the `---` separators would render as a redundant heading,
+/// blockquote and horizontal rules; YAML frontmatter, callout markers,
+/// wikilinks and htmd's zero-width spaces would stay literal.
 pub fn markdown_to_zotero_html(md: &str) -> String {
     let body = strip_frontmatter(md);
+    let body = strip_shell(&body);
+    let body = strip_hr_separators(&body);
+    let body = strip_invisible(&body);
     let body = convert_callouts(&body);
     let body = convert_wikilinks(&body);
+    let body = body.trim().to_string();
     markdown_to_html(&body)
+}
+
+/// Drop the paper shell — the title heading + abstract blockquote that Zotero
+/// already stores as item fields. The shell always sits before the first `---`
+/// separator written by the shell/append logic, so drop everything up to and
+/// including that first separator. When there is no separator there is no
+/// reading-note content yet, so leave the text untouched (never lose content).
+fn strip_shell(md: &str) -> String {
+    // Locate the first line that is exactly `---`.
+    let mut offset = 0usize;
+    for line in md.split_inclusive('\n') {
+        if line.trim() == "---" {
+            let after = offset + line.len();
+            return md[after..].trim_start_matches(['\r', '\n']).to_string();
+        }
+        offset += line.len();
+    }
+    md.to_string()
+}
+
+/// Remove standalone `---` horizontal-rule lines (Agentero's internal note
+/// separators) so they do not become `<hr />` clutter in the Zotero note.
+fn strip_hr_separators(md: &str) -> String {
+    let mut out = String::with_capacity(md.len());
+    for line in md.split_inclusive('\n') {
+        if line.trim() == "---" {
+            continue;
+        }
+        out.push_str(line);
+    }
+    out
+}
+
+/// Strip invisible characters htmd and friends leave behind (zero-width space,
+/// BOM, zero-width non-joiner/joiner, word joiner) — they show up as empty
+/// `<p></p>` noise in Zotero.
+fn strip_invisible(md: &str) -> String {
+    md.chars()
+        .filter(|c| {
+            !matches!(
+                c,
+                '\u{200b}' | '\u{feff}' | '\u{200c}' | '\u{200d}' | '\u{2060}'
+            )
+        })
+        .collect()
 }
 
 /// Drop a leading YAML frontmatter block (`---\n…\n---`).
@@ -255,5 +305,38 @@ mod tests {
         assert!(html.contains("别名"), "got: {html}");
         assert!(!html.contains("[["), "got: {html}");
         assert!(!html.contains("#Sec"), "got: {html}");
+    }
+
+    #[test]
+    fn zotero_html_drops_shell_and_separators() {
+        // Real NOTES.md shape: frontmatter + title + abstract, then `---`,
+        // then reading notes separated by more `---`.
+        let md = "---\naliases: [x]\n---\n\n# Some Paper\n\n> the abstract\n\n---\n\nfirst note\n\n---\n\nsecond note";
+        let html = markdown_to_zotero_html(md);
+        // Shell (title + abstract) and every separator must be gone.
+        assert!(!html.contains("Some Paper"), "got: {html}");
+        assert!(!html.contains("the abstract"), "got: {html}");
+        assert!(!html.contains("<hr"), "got: {html}");
+        assert!(!html.contains("aliases"), "got: {html}");
+        // The actual reading notes survive.
+        assert!(html.contains("first note"), "got: {html}");
+        assert!(html.contains("second note"), "got: {html}");
+    }
+
+    #[test]
+    fn zotero_html_keeps_content_when_no_separator() {
+        // No `---` separator: nothing is dropped (never lose user content).
+        let md = "# Title\n\njust a note";
+        let html = markdown_to_zotero_html(md);
+        assert!(html.contains("just a note"), "got: {html}");
+    }
+
+    #[test]
+    fn zotero_html_strips_invisible_chars() {
+        let md = "---\n\nnote with\u{200b}zero-width\u{feff}spaces";
+        let html = markdown_to_zotero_html(md);
+        assert!(!html.contains('\u{200b}'), "got: {html}");
+        assert!(!html.contains('\u{feff}'), "got: {html}");
+        assert!(html.contains("note withzero-widthspaces"), "got: {html}");
     }
 }
