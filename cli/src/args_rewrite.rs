@@ -48,9 +48,7 @@ pub fn rewrite_path_shorthand(args: Vec<OsString>) -> Vec<OsString> {
 }
 
 fn is_known_command(name: &str) -> bool {
-    KNOWN_COMMANDS
-        .iter()
-        .any(|c| c.eq_ignore_ascii_case(name))
+    KNOWN_COMMANDS.iter().any(|c| c.eq_ignore_ascii_case(name))
 }
 
 fn looks_like_path(text: &str) -> bool {
@@ -112,11 +110,7 @@ fn takes_value_flag(flag: &OsStr) -> bool {
     let s = flag.to_string_lossy();
     matches!(
         s.as_ref(),
-        "-v" | "--vault"
-            | "--output"
-            | "--color"
-            | "--translator-url"
-            | "-C" // reserved
+        "-v" | "--vault" | "--output" | "--color" | "--translator-url" | "-C" // reserved
     ) || s.starts_with("--vault=")
         || s.starts_with("--output=")
         || s.starts_with("--color=")

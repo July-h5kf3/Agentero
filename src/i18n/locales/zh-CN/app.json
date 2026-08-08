@@ -170,6 +170,7 @@
 		"recentEmpty": "暂无最近使用的知识库。",
 		"removeRecent": "从最近列表移除 {{name}}",
 		"recentMissing": "文件夹已不存在：{{path}}",
+		"openPathMissing": "无法打开 Vault — 文件夹不存在：{{path}}",
 		"switchVault": "切换知识库",
 		"openVaultButton": "打开知识库…",
 		"openRemoteVaultButton": "打开远程…",

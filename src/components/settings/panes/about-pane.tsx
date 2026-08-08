@@ -1,6 +1,12 @@
 import { getVersion } from "@tauri-apps/api/app";
-import { Download, LoaderCircle, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+	Download,
+	LoaderCircle,
+	RefreshCw,
+	Terminal,
+	Trash2,
+} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	PageTitle,
@@ -8,7 +14,14 @@ import {
 	SettingsRow,
 } from "@/components/settings/settings-layout";
 import { Button } from "@/components/ui/button";
-import { notifyError } from "@/lib/core/notify";
+import {
+	type CliInstallStatus,
+	fetchCliInstallStatus,
+	installCliCommand,
+	uninstallCliCommand,
+} from "@/lib/cli/api";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
+import { isTauri } from "@/lib/core/tauri";
 import {
 	checkForUpdate,
 	getUpdateSnapshot,
@@ -21,6 +34,22 @@ export function AboutPane() {
 	const { t } = useTranslation("settings");
 	const [version, setVersion] = useState<string>();
 	const [update, setUpdate] = useState<UpdateSnapshot>(getUpdateSnapshot);
+	const [cli, setCli] = useState<CliInstallStatus | null>(null);
+	const [cliBusy, setCliBusy] = useState(false);
+	const [cliLoading, setCliLoading] = useState(false);
+
+	const refreshCli = useCallback(async () => {
+		if (!isTauri()) return;
+		setCliLoading(true);
+		try {
+			const status = await fetchCliInstallStatus();
+			setCli(status);
+		} catch {
+			notifyError(t("about.cli.statusFailed"));
+		} finally {
+			setCliLoading(false);
+		}
+	}, [t]);
 
 	useEffect(() => {
 		void getVersion()
@@ -28,6 +57,9 @@ export function AboutPane() {
 			.catch(() => undefined);
 	}, []);
 	useEffect(() => subscribeUpdate(setUpdate), []);
+	useEffect(() => {
+		void refreshCli();
+	}, [refreshCli]);
 
 	const checking = update.phase === "checking";
 	const installing =
@@ -42,6 +74,27 @@ export function AboutPane() {
 			}
 		});
 	};
+	const onInstallCli = () => {
+		setCliBusy(true);
+		void installCliCommand()
+			.then((res) => {
+				setCli(res.status);
+				notifySuccess(t("about.cli.installSuccess"));
+			})
+			.catch(() => notifyError(t("about.cli.installFailed")))
+			.finally(() => setCliBusy(false));
+	};
+	const onUninstallCli = () => {
+		setCliBusy(true);
+		void uninstallCliCommand()
+			.then((res) => {
+				setCli(res.status);
+				notifySuccess(t("about.cli.uninstallSuccess"));
+			})
+			.catch(() => notifyError(t("about.cli.uninstallFailed")))
+			.finally(() => setCliBusy(false));
+	};
+
 	const description = (() => {
 		switch (update.phase) {
 			case "unsupported":
@@ -75,6 +128,36 @@ export function AboutPane() {
 				return t("about.update.idle");
 		}
 	})();
+
+	const cliDescription = (() => {
+		if (!cli) {
+			return cliLoading ? "…" : t("about.cli.statusFailed");
+		}
+		const parts: string[] = [];
+		if (cli.bundledVersion) {
+			parts.push(t("about.cli.version", { version: cli.bundledVersion }));
+		} else if (!cli.bundledPath) {
+			parts.push(t("about.cli.notBundled"));
+		} else {
+			parts.push(t("about.cli.versionUnknown"));
+		}
+		if (cli.installed && cli.installPath) {
+			parts.push(t("about.cli.installed", { path: cli.installPath }));
+			if (!cli.shimCurrent) {
+				parts.push(t("about.cli.stale"));
+			}
+		} else {
+			parts.push(t("about.cli.notInstalled"));
+		}
+		if (cli.installed && !cli.preferredBinOnPath) {
+			parts.push(t("about.cli.pathHint", { dir: cli.preferredBinDir }));
+		} else if (cli.message) {
+			parts.push(cli.message);
+		}
+		return parts.join(" · ");
+	})();
+
+	const canInstallCli = Boolean(cli?.bundledPath) && !cliBusy;
 
 	return (
 		<>
@@ -124,6 +207,64 @@ export function AboutPane() {
 					</div>
 				) : null}
 			</SettingsGroup>
+			{isTauri() ? (
+				<SettingsGroup>
+					<SettingsRow
+						label={t("about.cli.label")}
+						description={cliDescription}
+					>
+						<div className="flex flex-wrap items-center justify-end gap-2">
+							<Button
+								variant="outline"
+								size="sm"
+								disabled={cliLoading || cliBusy}
+								onClick={() => void refreshCli()}
+								aria-label={t("about.cli.refresh")}
+							>
+								{cliLoading ? (
+									<LoaderCircle
+										data-icon="inline-start"
+										className="animate-spin"
+									/>
+								) : (
+									<RefreshCw data-icon="inline-start" />
+								)}
+								{t("about.cli.refresh")}
+							</Button>
+							{cli?.installed ? (
+								<>
+									<Button
+										size="sm"
+										disabled={!canInstallCli}
+										onClick={onInstallCli}
+									>
+										<Terminal data-icon="inline-start" />
+										{t("about.cli.reinstall")}
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={cliBusy}
+										onClick={onUninstallCli}
+									>
+										<Trash2 data-icon="inline-start" />
+										{t("about.cli.uninstall")}
+									</Button>
+								</>
+							) : (
+								<Button
+									size="sm"
+									disabled={!canInstallCli}
+									onClick={onInstallCli}
+								>
+									<Terminal data-icon="inline-start" />
+									{t("about.cli.install")}
+								</Button>
+							)}
+						</div>
+					</SettingsRow>
+				</SettingsGroup>
+			) : null}
 		</>
 	);
 }

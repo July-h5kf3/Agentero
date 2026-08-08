@@ -7,6 +7,7 @@
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { useSettings, useVaultStore } from "@/hooks/use-app-stores";
+import { useVaultOpenRequest } from "@/hooks/use-vault-open-request";
 import i18n, { resolveLocale } from "@/i18n";
 import { isTauri } from "@/lib/core/tauri";
 import { refreshLibrary } from "@/lib/paper/library-store";
@@ -23,6 +24,8 @@ import { initWorkspaceStore } from "@/lib/workspace/store";
 
 export function useAppBootstrap(): void {
 	const { setTheme } = useTheme();
+	// CLI / deep-link: agentero open <path> → vault:open-request
+	useVaultOpenRequest();
 
 	// Seed stores from persisted state on first render (after settings boot).
 	useState(() => {

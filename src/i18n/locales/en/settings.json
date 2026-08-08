@@ -397,6 +397,25 @@
 			"tagInstalling": "Installing…",
 			"toastTitle": "Agentero {{version}} is available",
 			"toastDescription": "Download the verified update and restart Agentero"
+		},
+		"cli": {
+			"label": "Command-line tools",
+			"version": "CLI {{version}}",
+			"versionUnknown": "CLI version unknown",
+			"notBundled": "CLI is not bundled in this build",
+			"installed": "Installed at {{path}}",
+			"notInstalled": "Not installed on PATH",
+			"stale": "Installed shim may point to an older binary — reinstall to update",
+			"pathHint": "{{dir}} is not on PATH; add it in your shell settings",
+			"install": "Install CLI",
+			"reinstall": "Reinstall CLI",
+			"uninstall": "Remove CLI",
+			"refresh": "Refresh",
+			"installSuccess": "CLI command installed",
+			"uninstallSuccess": "CLI command removed",
+			"installFailed": "Could not install CLI command",
+			"uninstallFailed": "Could not remove CLI command",
+			"statusFailed": "Could not read CLI status"
 		}
 	}
 }

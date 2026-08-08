@@ -37,6 +37,8 @@ export {
 	removeRecentVault,
 	saveVaultPath,
 } from "@/lib/vault/session";
+// openLocalVaultPath / activateVault live in actions (import from there to
+// avoid circular re-exports through this barrel).
 export {
 	collectTreeRefreshTargets,
 	collectWikiTargetRelPaths,

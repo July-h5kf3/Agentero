@@ -1,0 +1,51 @@
+/**
+ * Bundled CLI install status and PATH shim management (Settings → About).
+ */
+
+import { invoke } from "@tauri-apps/api/core";
+import { type ApiResult, invokeApi } from "@/lib/core/ipc";
+import { isTauri } from "@/lib/core/tauri";
+
+export type CliInstallStatus = {
+	appVersion: string;
+	bundledVersion: string | null;
+	bundledPath: string | null;
+	installed: boolean;
+	installPath: string | null;
+	shimCurrent: boolean;
+	preferredBinDir: string;
+	preferredBinOnPath: boolean;
+	message: string | null;
+};
+
+export type CliInstallResult = {
+	status: CliInstallStatus;
+	action: string;
+};
+
+export function fetchCliInstallStatus(): Promise<CliInstallStatus> {
+	return invokeApi<CliInstallStatus>("cli_install_status", undefined, {
+		fallback: "Failed to read CLI install status",
+	});
+}
+
+export function installCliCommand(): Promise<CliInstallResult> {
+	return invokeApi<CliInstallResult>("cli_install_command", undefined, {
+		fallback: "Failed to install CLI command",
+	});
+}
+
+export function uninstallCliCommand(): Promise<CliInstallResult> {
+	return invokeApi<CliInstallResult>("cli_uninstall_command", undefined, {
+		fallback: "Failed to uninstall CLI command",
+	});
+}
+
+/** Consume Host-queued vault path from a cold-start deep link (null if none). */
+export async function takePendingVaultOpen(): Promise<string | null> {
+	if (!isTauri()) return null;
+	const res = await invoke<ApiResult<string | null>>("vault_open_take_pending");
+	if (!res.ok) return null;
+	// `data: null` means no pending path (not a failure).
+	return res.data ?? null;
+}

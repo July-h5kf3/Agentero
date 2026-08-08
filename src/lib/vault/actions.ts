@@ -168,21 +168,42 @@ export async function openRemoteVault(args: {
 }
 
 export async function openRecentVault(path: string): Promise<void> {
+	await openLocalVaultPath(path, { missingAsRecentError: true });
+}
+
+/**
+ * Open a local directory as the active Vault (picker, recent, deep link, CLI).
+ * Host validates deep-link paths before emit; still re-check existence here.
+ */
+export async function openLocalVaultPath(
+	path: string,
+	opts?: { missingAsRecentError?: boolean },
+): Promise<void> {
+	const trimmed = path?.trim();
+	if (!trimmed) return;
 	try {
 		if (!isTauri()) {
 			notifyError(i18n.t("app:errors.openVaultDesktopOnly"));
 			return;
 		}
 		setVaultBusy(true);
-		await ensureLocalFsScope(path);
+		await ensureLocalFsScope(trimmed);
 		const { exists } = await import("@tauri-apps/plugin-fs");
-		if (!(await exists(path))) {
-			removeRecentVault(path);
-			refreshRecentVaults();
-			notifyError(i18n.t("app:vault.recentMissing", { path }));
+		if (!(await exists(trimmed))) {
+			if (opts?.missingAsRecentError) {
+				removeRecentVault(trimmed);
+				refreshRecentVaults();
+				notifyError(i18n.t("app:vault.recentMissing", { path: trimmed }));
+			} else {
+				notifyError(i18n.t("app:vault.openPathMissing", { path: trimmed }));
+			}
 			return;
 		}
-		await activateVault(path);
+		// Skip no-op switch to the already-active vault.
+		if (getVaultPath() === trimmed) {
+			return;
+		}
+		await activateVault(trimmed);
 	} catch (e) {
 		notifyError(e instanceof Error ? e.message : String(e));
 	} finally {
