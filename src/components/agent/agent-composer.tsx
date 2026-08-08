@@ -11,9 +11,8 @@ import {
 	Zap,
 } from "lucide-react";
 import type { KeyboardEvent, DragEvent as ReactDragEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AskUserQuestionForm } from "@/components/agent/ask-user-question-form";
 import { ContextPathIcon } from "@/components/agent/context-path-icon";
 import type { QueuedPrompt } from "@/components/agent/types";
 import {
@@ -72,16 +71,9 @@ import type {
 	AgentModeChoice,
 	AgentModelChoice,
 	AgentSkill,
-	ElicitationRequest,
 	PromptImage,
 } from "@/lib/agent";
-import { respondElicitation } from "@/lib/agent/api";
-import {
-	elicitationContentFromAnswers,
-	questionsFromElicitationFields,
-	SUGGESTION_KEYS,
-	SUGGESTION_WORKFLOW,
-} from "@/lib/agent/chat-state";
+import { SUGGESTION_KEYS, SUGGESTION_WORKFLOW } from "@/lib/agent/chat-state";
 import { mentionPathHasChildren } from "@/lib/agent/mention";
 import {
 	COMPOSER_IMAGE_ACCEPT,
@@ -353,9 +345,6 @@ export function AgentComposer({
 	onCancelRun,
 	messageQueue,
 	onRemoveQueuedMessage,
-	// Form elicitation (Codex request_user_input) — same UI as AskUserQuestion
-	elicitationRequest,
-	onElicitationResolved,
 	// Follow-up suggestions
 	onSendSuggestion,
 }: {
@@ -434,8 +423,6 @@ export function AgentComposer({
 	fastEnabled: boolean;
 	onFastEnabledToggle: () => void;
 	onCancelRun: () => void;
-	elicitationRequest: ElicitationRequest | null;
-	onElicitationResolved: () => void;
 	onSendSuggestion: (label: string, workflow?: string) => void;
 }) {
 	const { t } = useTranslation("agent");
@@ -444,13 +431,6 @@ export function AgentComposer({
 	// Attachments live inside PromptInput; base gate ignores them (see ComposerSubmitControl).
 	const canSubmitBase = hasComposerText || hasVisualDrafts;
 	const composerMenuOpen = showMentionMenu || showSkillMenu || showSlashMenu;
-	const elicitationQuestions = useMemo(
-		() =>
-			elicitationRequest
-				? questionsFromElicitationFields(elicitationRequest.fields)
-				: [],
-		[elicitationRequest],
-	);
 	// Nested enter/leave counter so moving over chips/textarea does not flicker the drop ring.
 	const fileDragDepthRef = useRef(0);
 	const [isFileDragOver, setIsFileDragOver] = useState(false);
@@ -509,21 +489,14 @@ export function AgentComposer({
 		};
 	}, [isFileDragOver, resetFileDragHighlight]);
 
-	const hasElicitation =
-		Boolean(elicitationRequest) && elicitationQuestions.length > 0;
-	// Questionnaire needs room; grow the fixed composer so the card can scroll.
-	const shellHeightPx =
-		heightPx && hasElicitation
-			? Math.max(heightPx, Math.min(420, Math.round(heightPx * 1.85)))
-			: heightPx;
-
 	return (
 		<div
 			className={cn(
+				// Only the prompt shell is height-bound (resize handle is above this in the panel).
 				"flex shrink-0 flex-col overflow-hidden border-t bg-muted/10",
 				compact ? "gap-1.5 p-2" : "gap-2 p-3",
 			)}
-			style={shellHeightPx ? { height: shellHeightPx } : undefined}
+			style={heightPx ? { height: heightPx } : undefined}
 		>
 			{linesLength > 0 && !activeTabIsRunning && !compact ? (
 				<Suggestions>
@@ -588,49 +561,6 @@ export function AgentComposer({
 						</QueueSectionContent>
 					</QueueSection>
 				</Queue>
-			) : null}
-			{elicitationRequest && elicitationQuestions.length > 0 ? (
-				<div
-					className={cn(
-						// Cap height inside the fixed composer; scroll body so options are reachable.
-						"min-h-0 max-h-[min(55%,22rem)] shrink overflow-y-auto overscroll-contain rounded-xl border border-border bg-muted/20",
-						compact ? "p-2" : "p-3",
-					)}
-				>
-					{(() => {
-						const msg = elicitationRequest.message?.trim() ?? "";
-						// Codex uses a generic "Input requested" when batching questions.
-						const showMessage =
-							msg.length > 0 && !/^input\s+requested\.?$/i.test(msg);
-						return showMessage ? (
-							<p className="mb-2 text-sm leading-5">{msg}</p>
-						) : null;
-					})()}
-					<AskUserQuestionForm
-						key={elicitationRequest.requestId}
-						questions={elicitationQuestions}
-						disabled={switching}
-						onSubmit={async (answers) => {
-							const content = elicitationContentFromAnswers(
-								elicitationQuestions,
-								answers,
-							);
-							await respondElicitation({
-								requestId: elicitationRequest.requestId,
-								action: "accept",
-								content,
-							});
-							onElicitationResolved();
-							return true;
-						}}
-						onCancel={() => {
-							void respondElicitation({
-								requestId: elicitationRequest.requestId,
-								action: "cancel",
-							}).finally(() => onElicitationResolved());
-						}}
-					/>
-				</div>
 			) : null}
 			<div className="relative min-h-0 flex-1">
 				<PromptInput

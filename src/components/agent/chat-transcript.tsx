@@ -1,7 +1,6 @@
 import { CopyIcon, Pencil } from "lucide-react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { AskUserQuestionForm } from "@/components/agent/ask-user-question-form";
 import {
 	ChatAttachedImages,
 	ChatVisualAnnotations,
@@ -74,7 +73,7 @@ import {
 	agentTextFromParts,
 	type ChatLine,
 	copyText,
-	formatAskUserAnswers,
+	isPendingAskUserToolStatus,
 	parseAskUserQuestions,
 	SUGGESTION_KEYS,
 	SUGGESTION_WORKFLOW,
@@ -83,27 +82,14 @@ import {
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 
-function AskUserQuestionTool({
-	input,
-	disabled,
-	onAnswer,
-}: {
-	input: unknown;
-	disabled: boolean;
-	onAnswer: (answer: string) => Promise<boolean>;
-}) {
-	const questions = parseAskUserQuestions(input);
-	if (!questions) return null;
-
+/** Compact note: interactive form lives in the composer, not inside the tool card. */
+function AskUserToolPendingNote() {
+	const { t } = useTranslation("agent");
 	return (
 		<ToolContent>
-			<AskUserQuestionForm
-				questions={questions}
-				disabled={disabled}
-				onSubmit={(answers) =>
-					onAnswer(formatAskUserAnswers(questions, answers))
-				}
-			/>
+			<p className="text-xs text-muted-foreground">
+				{t("askUserQuestion.pendingInComposer")}
+			</p>
 		</ToolContent>
 	);
 }
@@ -126,7 +112,6 @@ export function ChatTranscript({
 	onResendEdited,
 	onStartEditing,
 	onSendSuggestion,
-	onAnswerQuestion,
 	onOpenSource,
 }: {
 	lines: ChatLine[];
@@ -153,7 +138,6 @@ export function ChatTranscript({
 	onResendEdited: (lineId: string) => void;
 	onStartEditing: (lineId: string, text: string) => void;
 	onSendSuggestion: (label: string, workflow?: string) => void;
-	onAnswerQuestion: (answer: string) => Promise<boolean>;
 	/** Open a vault path / paper (or external URL) from Sources / inline citation. */
 	onOpenSource?: (source: string) => void;
 }) {
@@ -408,28 +392,21 @@ export function ChatTranscript({
 														const askUserQuestion = parseAskUserQuestions(
 															tool.input,
 														);
+														// Interactive form is owned by the composer; transcript
+														// only shows a compact tool row (and a short pending note).
+														const askPending =
+															Boolean(askUserQuestion) &&
+															isPendingAskUserToolStatus(tool.status);
 														return (
-															<Tool
-																key={partKey}
-																defaultOpen={Boolean(askUserQuestion)}
-															>
+															<Tool key={partKey} defaultOpen={askPending}>
 																<ToolHeader
 																	title={tool.title || t("tool.defaultTitle")}
 																	type={`tool-${tool.kind}`}
 																	state={state}
 																/>
-																{askUserQuestion ? (
-																	<AskUserQuestionTool
-																		input={tool.input}
-																		disabled={
-																			switching ||
-																			submitting ||
-																			(tool.status !== "pending" &&
-																				tool.status !== "in_progress")
-																		}
-																		onAnswer={onAnswerQuestion}
-																	/>
-																) : (
+																{askPending ? (
+																	<AskUserToolPendingNote />
+																) : askUserQuestion ? null : (
 																	<ToolContent>
 																		{tool.input !== undefined ? (
 																			<ToolInput input={tool.input} />

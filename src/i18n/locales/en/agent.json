@@ -142,7 +142,12 @@
 		"prev": "Back",
 		"next": "Next",
 		"progress": "{{current}} / {{total}}",
-		"freeTextPlaceholder": "Type your answer"
+		"freeTextPlaceholder": "Type your answer",
+		"pendingInComposer": "Answer in the input area below",
+		"keyboardHint": "↑↓ options · Space select · Enter confirm",
+		"keyboardHintMulti": "↑↓ options · Space select · Enter next · ←→ pages",
+		"collapse": "Collapse questionnaire",
+		"expand": "Expand questionnaire"
 	},
 	"citation": {
 		"vaultPath": "Vault path referenced by agent"

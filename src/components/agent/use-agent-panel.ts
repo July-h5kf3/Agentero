@@ -31,6 +31,7 @@ import {
 	type AgentSkill,
 	type AgentStreamEvent,
 	type AgentToolEvent,
+	type AskUserRequest,
 	type CatalogScanResponse,
 	cancelAgentRun,
 	type ElicitationRequest,
@@ -58,6 +59,7 @@ import {
 	loadSession,
 	type PermissionRequest,
 	type PromptImage,
+	respondAskUser,
 	respondElicitation,
 	respondPermission,
 	runOnce,
@@ -93,14 +95,17 @@ import {
 	errorChatLine,
 	errorText,
 	isBackgroundWorkflowHistoryTitle,
+	isPendingAskUserToolStatus,
 	mapToolStatus,
 	nextLineId,
 	nextPartId,
 	type PendingSessionEvent,
 	type PendingTerminalEvent,
+	parseAskUserQuestions,
 	providerSessionIdForHistoryLoad,
 	resolveSelected,
 	shouldDeferSessionEvent,
+	type ToolAskUserRequest,
 	upsertChatSessionTurn,
 	upsertPlanPart,
 } from "@/lib/agent/chat-state";
@@ -817,6 +822,11 @@ export function useAgentPanel({
 		[isChatOwnedSession, updateSessionLines],
 	);
 
+	// OpenCode / Claude / Codex tool-shaped ask → composer form (not transcript).
+	// Declared before applyToolEvent so the promote path can set it.
+	const [toolAskUserRequest, setToolAskUserRequest] =
+		useState<ToolAskUserRequest | null>(null);
+
 	const applyToolEvent = useCallback(
 		(ev: AgentToolEvent) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
@@ -838,6 +848,24 @@ export function useAgentPanel({
 				};
 				return next;
 			});
+
+			// Promote pending ask-user tools to the composer (single interactive surface).
+			// Composer priority: elicitation > Grok ext > tool; listeners clear tool on host asks.
+			const questions = parseAskUserQuestions(ev.input);
+			const pending = isPendingAskUserToolStatus(ev.status);
+			if (questions && pending) {
+				setToolAskUserRequest({
+					toolCallId: ev.toolCallId,
+					sessionId: ev.sessionId,
+					questions,
+				});
+				return;
+			}
+			if (questions && !pending) {
+				setToolAskUserRequest((prev) =>
+					prev?.toolCallId === ev.toolCallId ? null : prev,
+				);
+			}
 		},
 		[isChatOwnedSession, updateSessionLines],
 	);
@@ -1825,6 +1853,10 @@ export function useAgentPanel({
 	// Codex Plan-mode request_user_input → form elicitation.
 	const [elicitationRequest, setElicitationRequest] =
 		useState<ElicitationRequest | null>(null);
+	// Grok `_x.ai/ask_user_question` extension method.
+	const [askUserRequest, setAskUserRequest] = useState<AskUserRequest | null>(
+		null,
+	);
 
 	const permissionRequestRef = useRef(permissionRequest);
 	permissionRequestRef.current = permissionRequest;
@@ -1848,6 +1880,28 @@ export function useAgentPanel({
 				action: "cancel",
 			});
 			setElicitationRequest(null);
+		},
+	);
+
+	const askUserRequestRef = useRef(askUserRequest);
+	askUserRequestRef.current = askUserRequest;
+	useOverlayRegistration("agent-ask-user", askUserRequest !== null, () => {
+		const req = askUserRequestRef.current;
+		if (!req) return;
+		void respondAskUser({
+			requestId: req.requestId,
+			action: "cancel",
+		});
+		setAskUserRequest(null);
+	});
+
+	const toolAskUserRequestRef = useRef(toolAskUserRequest);
+	toolAskUserRequestRef.current = toolAskUserRequest;
+	useOverlayRegistration(
+		"agent-tool-ask-user",
+		toolAskUserRequest !== null,
+		() => {
+			setToolAskUserRequest(null);
 		},
 	);
 
@@ -1878,7 +1932,33 @@ export function useAgentPanel({
 			if (cancelled) return;
 			unsub = await listen<ElicitationRequest>(
 				"agent:elicitation-request",
-				({ payload }) => setElicitationRequest(payload),
+				({ payload }) => {
+					// Prefer host elicitation over tool-card promote.
+					setToolAskUserRequest(null);
+					setElicitationRequest(payload);
+				},
+			);
+		})();
+		return () => {
+			cancelled = true;
+			unsub?.();
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!isTauri()) return;
+		let unsub: (() => void) | undefined;
+		let cancelled = false;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsub = await listen<AskUserRequest>(
+				"agent:ask-user-request",
+				({ payload }) => {
+					// Grok ext is the authoritative respond path; drop tool-promote duplicate.
+					setToolAskUserRequest(null);
+					setAskUserRequest(payload);
+				},
 			);
 		})();
 		return () => {
@@ -2509,6 +2589,41 @@ export function useAgentPanel({
 		return send(textRaw, { workflow, images });
 	};
 
+	/**
+	 * Answer a tool-shaped ask-user form (OpenCode `question`, Claude AskUserQuestion, …).
+	 *
+	 * The agent turn is usually still `running` (blocked on the tool). Normal
+	 * composer submit would only enqueue and never drain until the run ends —
+	 * a deadlock. Cancel the stuck turn so the answer can send immediately
+	 * (same net effect as enqueue + stop, without the extra click).
+	 * Grok ext / elicitation use dedicated respond paths and do not need this.
+	 */
+	const answerToolAskUser = async (answer: string): Promise<boolean> => {
+		if (switchingRef.current || submittingRef.current) return false;
+		resetPromptHistoryBrowse();
+		const text = answer.trim();
+		if (!text) return false;
+
+		setToolAskUserRequest(null);
+
+		if (!activeTabIsRunning) {
+			return send(text);
+		}
+
+		// Queue first so cancel → idle drains it; then free the blocked run.
+		const enqueued = enqueueMessage(text);
+		if (!enqueued) return false;
+		const sessionId = activeTabId;
+		if (!sessionId || !isTauri()) return true;
+		try {
+			await cancelAgentRun(sessionId);
+		} catch (error) {
+			// Leave the queued answer; user can still stop the run manually.
+			setLines((prev) => [...prev, errorChatLine(errorText(error))]);
+		}
+		return true;
+	};
+
 	const removeQueuedMessage = useCallback((id: string) => {
 		setMessageQueue((prev) => {
 			const next = prev.filter((item) => item.id !== id);
@@ -2685,6 +2800,10 @@ export function useAgentPanel({
 		if (!sessionId || !isTauri()) return;
 		try {
 			await cancelAgentRun(sessionId);
+			// Drop promoted tool-ask form for this turn.
+			setToolAskUserRequest((prev) =>
+				prev?.sessionId === sessionId ? null : prev,
+			);
 		} catch (error) {
 			setLines((prev) => [...prev, errorChatLine(errorText(error))]);
 		}
@@ -3435,6 +3554,13 @@ export function useAgentPanel({
 		// Form elicitation (request_user_input)
 		elicitationRequest,
 		setElicitationRequest,
+		// Grok ask-user extension
+		askUserRequest,
+		setAskUserRequest,
+		// Tool-shaped ask promoted to composer
+		toolAskUserRequest,
+		setToolAskUserRequest,
+		answerToolAskUser,
 		// Refs used by composer submit race guards
 		switchingRef,
 		submittingRef,

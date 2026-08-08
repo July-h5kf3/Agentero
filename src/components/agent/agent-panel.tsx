@@ -3,6 +3,7 @@ import type {
 	PointerEvent as ReactPointerEvent,
 } from "react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { AgentAskUserSurface } from "@/components/agent/agent-ask-user-surface";
 import { AgentComposer } from "@/components/agent/agent-composer";
 import { SidebarHistoryTrailing } from "@/components/agent/agent-history";
 import { AgentPermissionDialog } from "@/components/agent/agent-permission-dialog";
@@ -237,6 +238,11 @@ export const AgentPanel = memo(function AgentPanel({
 		setPermissionRequest,
 		elicitationRequest,
 		setElicitationRequest,
+		askUserRequest,
+		setAskUserRequest,
+		toolAskUserRequest,
+		setToolAskUserRequest,
+		answerToolAskUser,
 		switchingRef,
 		submittingRef,
 	} = panel;
@@ -294,8 +300,19 @@ export const AgentPanel = memo(function AgentPanel({
 						onResendEdited={(lineId) => void resendEditedMessage(lineId)}
 						onStartEditing={startEditingMessage}
 						onSendSuggestion={sendSuggestion}
-						onAnswerQuestion={submitComposer}
 						onOpenSource={onOpenSource}
+					/>
+
+					{/* Questionnaire lives above the resize handle — only the prompt shell resizes. */}
+					<AgentAskUserSurface
+						elicitationRequest={elicitationRequest}
+						onElicitationResolved={() => setElicitationRequest(null)}
+						askUserRequest={askUserRequest}
+						onAskUserResolved={() => setAskUserRequest(null)}
+						toolAskUserRequest={toolAskUserRequest}
+						onToolAskUserResolved={() => setToolAskUserRequest(null)}
+						onAnswerToolAskUser={answerToolAskUser}
+						disabled={switching}
 					/>
 
 					<button
@@ -403,8 +420,6 @@ export const AgentPanel = memo(function AgentPanel({
 						fastEnabled={fastEnabled}
 						onFastEnabledToggle={() => setFastEnabled((current) => !current)}
 						onCancelRun={() => void cancelCurrentRun()}
-						elicitationRequest={elicitationRequest}
-						onElicitationResolved={() => setElicitationRequest(null)}
 						onSendSuggestion={sendSuggestion}
 					/>
 				</div>

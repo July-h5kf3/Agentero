@@ -315,6 +315,33 @@ export type ElicitationRequest = {
 	fields: ElicitationField[];
 };
 
+/** One option in a Grok `_x.ai/ask_user_question` (or similar) request. */
+export type AskUserOptionDto = {
+	label: string;
+	description?: string | null;
+};
+
+/** One question in a Grok ask-user extension request. */
+export type AskUserQuestionDto = {
+	question: string;
+	options: AskUserOptionDto[];
+	multiSelect: boolean;
+	allowOther: boolean;
+};
+
+/**
+ * Grok Build ACP extension `_x.ai/ask_user_question` (Host → UI).
+ * Not form elicitation; answers go back via `agent_respond_ask_user`.
+ */
+export type AskUserRequest = {
+	requestId: string;
+	sessionId: string;
+	toolCallId?: string | null;
+	/** default | plan */
+	mode: string;
+	questions: AskUserQuestionDto[];
+};
+
 /** ACP permission request forwarded to the user in "ask" mode. */
 export type PermissionRequest = {
 	requestId: string;
@@ -572,6 +599,21 @@ export async function respondElicitation(request: {
 			requestId: request.requestId,
 			action: request.action,
 			content: request.content ?? null,
+		},
+	});
+}
+
+/** Answer a pending Grok `_x.ai/ask_user_question` extension request. */
+export async function respondAskUser(request: {
+	requestId: string;
+	action: "accept" | "cancel";
+	answers?: string[];
+}): Promise<void> {
+	await invokeAgentApi<{ resolved: boolean }>("agent_respond_ask_user", {
+		request: {
+			requestId: request.requestId,
+			action: request.action,
+			answers: request.answers ?? null,
 		},
 	});
 }
