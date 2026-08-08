@@ -7,6 +7,7 @@
  *   node scripts/prepare-bundled-cli.mjs           # debug (default)
  *   node scripts/prepare-bundled-cli.mjs --release
  *   node scripts/prepare-bundled-cli.mjs --stub    # tiny non-empty placeholder for typecheck
+ *   node scripts/prepare-bundled-cli.mjs --ensure  # seed stub only if missing (tauri dev)
  */
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -17,6 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const release = process.argv.includes("--release");
 const stub = process.argv.includes("--stub");
+const ensure = process.argv.includes("--ensure");
 const isWin = process.platform === "win32";
 const ext = isWin ? ".exe" : "";
 
@@ -47,6 +49,21 @@ function writeStub(target) {
 	} catch {
 		// windows
 	}
+}
+
+function needsSeed(target) {
+	return !fs.existsSync(target) || fs.statSync(target).size === 0;
+}
+
+if (ensure) {
+	// For `tauri dev`: create a compile-time placeholder without overwriting a real CLI.
+	if (needsSeed(dest)) {
+		writeStub(dest);
+		console.log(`[prepare-bundled-cli] ensure seeded stub → ${dest}`);
+	} else {
+		console.log(`[prepare-bundled-cli] ensure ok → ${dest}`);
+	}
+	process.exit(0);
 }
 
 if (stub) {
