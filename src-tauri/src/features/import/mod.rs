@@ -1055,6 +1055,8 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
         summary: meta.summary.clone(),
         status: meta.status.clone(),
         is_read: false,
+        zotero_item_id: None,
+        zotero_last_synced: None,
         added_at: meta.added_at.clone(),
         updated_at: meta.updated_at.clone(),
     }

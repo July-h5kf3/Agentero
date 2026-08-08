@@ -166,6 +166,12 @@ pub struct PaperRecord {
     /// Whether paper-reader workflow has completed for this paper.
     #[serde(default)]
     pub is_read: bool,
+    /// Zotero itemID this paper is linked to (bidirectional sync).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zotero_item_id: Option<i64>,
+    /// ISO 8601 watermark of the last Zotero sync touching this paper.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zotero_last_synced: Option<String>,
     pub added_at: String,
     pub updated_at: String,
 }
@@ -201,7 +207,7 @@ pub fn list_by_id(vault_root: &Path, id: &str) -> Result<Vec<PaperRecord>, AppEr
                 added_at, updated_at,
                 creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
                 publisher, place, series, language, zotero_item_type, meta_source, extra,
-                is_read
+                is_read, zotero_item_id, zotero_last_synced
             FROM papers
             WHERE id = ?1
             ORDER BY path ASC
@@ -276,7 +282,7 @@ pub fn list_all_conn(conn: &Connection) -> Result<Vec<PaperRecord>, AppError> {
                 added_at, updated_at,
                 creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
                 publisher, place, series, language, zotero_item_type, meta_source, extra,
-                is_read
+                is_read, zotero_item_id, zotero_last_synced
             FROM papers
             ORDER BY updated_at DESC, title COLLATE NOCASE ASC
             "#,
@@ -359,6 +365,8 @@ pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
                             summary: None,
                             status: "completed".to_string(),
                             is_read: false,
+                            zotero_item_id: None,
+                            zotero_last_synced: None,
                             added_at: now.clone(),
                             updated_at: now,
                         };
@@ -530,7 +538,7 @@ pub fn list_under_path(vault_root: &Path, path: &str) -> Result<Vec<PaperRecord>
                 added_at, updated_at,
                 creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
                 publisher, place, series, language, zotero_item_type, meta_source, extra,
-                is_read
+                is_read, zotero_item_id, zotero_last_synced
             FROM papers
             WHERE path = ?1 OR path LIKE ?2
             ORDER BY path ASC
@@ -631,7 +639,7 @@ fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
             added_at, updated_at,
             creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
             publisher, place, series, language, zotero_item_type, meta_source, extra,
-            is_read
+            is_read, zotero_item_id, zotero_last_synced
         ) VALUES (
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
             ?9, ?10, ?11, ?12, ?13,
@@ -639,7 +647,7 @@ fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
             ?20, ?21,
             ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30,
             ?31, ?32, ?33, ?34, ?35, ?36, ?37,
-            ?38
+            ?38, ?39, ?40
         )
         ON CONFLICT(path) DO UPDATE SET
             id = excluded.id,
@@ -677,7 +685,9 @@ fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
             zotero_item_type = excluded.zotero_item_type,
             meta_source = excluded.meta_source,
             extra = excluded.extra,
-            is_read = excluded.is_read
+            is_read = excluded.is_read,
+            zotero_item_id = excluded.zotero_item_id,
+            zotero_last_synced = excluded.zotero_last_synced
         "#,
         params![
             r.path,
@@ -718,6 +728,8 @@ fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
             r.meta_source,
             r.extra,
             if r.is_read { 1i32 } else { 0i32 },
+            r.zotero_item_id,
+            r.zotero_last_synced,
         ],
     )
     .map_err(AppError::from)?;
@@ -729,6 +741,8 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PaperRecord> {
     let tags_json: String = row.get(7)?;
     let creators_json: Option<String> = row.get(21)?;
     let is_read_i: i32 = row.get(37).unwrap_or(0);
+    let zotero_item_id: Option<i64> = row.get(38).ok().flatten();
+    let zotero_last_synced: Option<String> = row.get(39).ok().flatten();
     Ok(PaperRecord {
         path: row.get(0)?,
         id: row.get(1)?,
@@ -770,6 +784,8 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PaperRecord> {
         meta_source: row.get(35)?,
         extra: row.get(36)?,
         is_read: is_read_i != 0,
+        zotero_item_id,
+        zotero_last_synced,
     })
 }
 
@@ -784,7 +800,7 @@ fn get_conn(conn: &Connection, path: &str) -> Result<Option<PaperRecord>, AppErr
                 added_at, updated_at,
                 creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
                 publisher, place, series, language, zotero_item_type, meta_source, extra,
-                is_read
+                is_read, zotero_item_id, zotero_last_synced
             FROM papers WHERE path = ?1
             "#,
         )
@@ -935,6 +951,8 @@ mod tests {
             summary: None,
             status: "completed".into(),
             is_read: false,
+            zotero_item_id: None,
+            zotero_last_synced: None,
             added_at: "t".into(),
             updated_at: "t".into(),
         };
@@ -989,6 +1007,8 @@ mod tests {
             summary: None,
             status: "completed".into(),
             is_read: false,
+            zotero_item_id: None,
+            zotero_last_synced: None,
             added_at: "t".into(),
             updated_at: "t".into(),
         };

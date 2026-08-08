@@ -409,6 +409,8 @@ mod tests {
             summary: None,
             status: "completed".into(),
             is_read: false,
+            zotero_item_id: None,
+            zotero_last_synced: None,
             added_at: "t".into(),
             updated_at: "t".into(),
         }

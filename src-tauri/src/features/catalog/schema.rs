@@ -3,6 +3,7 @@
 //! - v1: initial papers table
 //! - v2: Translator / magic-wand fields (publication, volume, isbn, …)
 //! - v3: `is_read` for paper-reader workflow
+//! - v4: Zotero sync linkage (`zotero_item_id`, `zotero_last_synced`)
 
 use crate::core::error::AppError;
 use rusqlite::Connection;
@@ -10,7 +11,7 @@ use std::fs;
 use std::path::Path;
 
 /// Current catalog schema version written to `schema_meta`.
-pub const SCHEMA_VERSION: i32 = 3;
+pub const SCHEMA_VERSION: i32 = 4;
 
 const DDL_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -77,6 +78,13 @@ CREATE INDEX IF NOT EXISTS idx_papers_isbn ON papers(isbn);
 const MIGRATE_V2_TO_V3: &str = r#"
 ALTER TABLE papers ADD COLUMN is_read INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_papers_is_read ON papers(is_read);
+"#;
+
+/// Columns added in schema v4 (Zotero bidirectional sync linkage).
+const MIGRATE_V3_TO_V4: &str = r#"
+ALTER TABLE papers ADD COLUMN zotero_item_id INTEGER;
+ALTER TABLE papers ADD COLUMN zotero_last_synced TEXT;
+CREATE INDEX IF NOT EXISTS idx_papers_zotero_item_id ON papers(zotero_item_id);
 "#;
 
 /// Absolute path to `{vault}/.agentero/catalog.sqlite`.
@@ -159,6 +167,27 @@ fn migrate(conn: &Connection) -> Result<(), AppError> {
         set_schema_version(conn, 3)?;
     }
 
+    let version = schema_version(conn).unwrap_or(0);
+    if version < 4 {
+        for stmt in MIGRATE_V3_TO_V4.split(';') {
+            let s = stmt.trim();
+            if s.is_empty() {
+                continue;
+            }
+            match conn.execute_batch(&format!("{s};")) {
+                Ok(()) => {}
+                Err(e) => {
+                    let msg = e.to_string();
+                    if msg.contains("duplicate column name") {
+                        continue;
+                    }
+                    return Err(AppError::message(format!("catalog migrate v4: {e}")));
+                }
+            }
+        }
+        set_schema_version(conn, 4)?;
+    }
+
     Ok(())
 }
 
@@ -239,6 +268,16 @@ mod tests {
             )
             .unwrap();
         assert_eq!(has_read, 1);
+
+        // v4 Zotero sync columns exist
+        let has_zotero: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('papers') WHERE name IN ('zotero_item_id', 'zotero_last_synced')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has_zotero, 2);
 
         // Idempotent second open
         drop(conn);

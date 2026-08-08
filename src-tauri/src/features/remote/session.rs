@@ -388,6 +388,8 @@ mod tests {
             summary: None,
             status: "unread".into(),
             is_read: false,
+            zotero_item_id: None,
+            zotero_last_synced: None,
             added_at: now.clone(),
             updated_at: now,
         };
@@ -585,6 +587,8 @@ mod tests {
                 summary: None,
                 status: "unread".into(),
                 is_read: false,
+                zotero_item_id: None,
+                zotero_last_synced: None,
                 added_at: now.clone(),
                 updated_at: now.clone(),
             };

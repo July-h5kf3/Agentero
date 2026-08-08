@@ -391,6 +391,16 @@ async fn migrate_one(
                 }
             }
         }
+        // Backfill the Zotero linkage on legacy rows (imported before the
+        // sync columns existed) so later syncs match exactly.
+        if let Some(p) = &path {
+            if let Ok(Some(mut rec)) = papers::get_by_path(vault, p) {
+                if rec.zotero_item_id.is_none() {
+                    rec.zotero_item_id = Some(item.item_id);
+                    let _ = papers::upsert_paper(vault, &rec);
+                }
+            }
+        }
         if relocated {
             return Ok(MigrateOutcome::Relocated {
                 path: path.unwrap_or_default(),
@@ -412,7 +422,12 @@ async fn migrate_one(
     if !blocks.is_empty() {
         append_markdown_blocks(&paper_dir.join("NOTES.md"), &blocks);
     }
-    let record = paper_record_from_meta(&path_rel, &meta);
+    let mut record = paper_record_from_meta(&path_rel, &meta);
+    // Zotero sync linkage: fresh imports carry their source itemID so later
+    // bidirectional syncs match exactly (fallback stays DOI/arXiv/title).
+    record.zotero_item_id = Some(item.item_id);
+    record.zotero_last_synced =
+        Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     papers::upsert_paper(vault, &record)?;
     dedup.insert(&meta, &path_rel);
 
