@@ -66,6 +66,7 @@ specta-typescript = "0.0.12"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 # LiteParse relies on a desktop PDFium binary. Mobile (iOS/Android) uses the
 # paired desktop Host for PDF parsing instead of packaging PDFium in the app.
