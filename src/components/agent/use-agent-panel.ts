@@ -45,7 +45,6 @@ import {
 	listenAgentFailed,
 	listenAgentFastMode,
 	listenAgentModels,
-	listenAgentModes,
 	listenAgentPlan,
 	listenAgentStream,
 	listenAgentTool,
@@ -55,7 +54,6 @@ import {
 	loadModelCatalog,
 	loadModelFavorites,
 	loadModelPref,
-	loadModePref,
 	loadSession,
 	type PermissionRequest,
 	type PromptImage,
@@ -67,7 +65,6 @@ import {
 	saveModelCatalog,
 	saveModelFavorites,
 	saveModelPref,
-	saveModePref,
 	scanCatalog,
 	setDefaultAgent,
 	warmAgent,
@@ -308,8 +305,6 @@ export function useAgentPanel({
 	const [agentListenersReady, setAgentListenersReady] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const [skills, setSkills] = useState<AgentSkill[]>([]);
-	const [modeOptions, setModeOptions] = useState<AgentModeChoice[]>([]);
-	const [modeId, setModeId] = useState<string | null>(null);
 	const [collaborationOptions, setCollaborationOptions] = useState<
 		AgentModeChoice[]
 	>([]);
@@ -432,31 +427,6 @@ export function useAgentPanel({
 				// Nested setState: keep free-form selection visible in the picker.
 				setModels(ensureModelsInclude(catalogModels, [next, prevId]));
 				return next;
-			});
-		},
-		[],
-	);
-
-	const applyModesEvent = useCallback(
-		(ev: { agentId: string; currentId: string; modes: AgentModeChoice[] }) => {
-			const cur = selectedAgentIdRef.current;
-			if (cur && cur !== ev.agentId) return;
-			if (!ev.modes.length) {
-				setModeOptions([]);
-				setModeId(null);
-				return;
-			}
-			const pref = loadModePref(ev.agentId)?.trim() || null;
-			const current = ev.currentId?.trim() || null;
-			const validPref =
-				pref && ev.modes.some((mode) => mode.id === pref) ? pref : null;
-			setModeOptions(ev.modes);
-			setModeId((prev) => {
-				const prevId = prev?.trim() || null;
-				if (prevId && ev.modes.some((mode) => mode.id === prevId)) {
-					return prevId;
-				}
-				return validPref || current || ev.modes[0]?.id || null;
 			});
 		},
 		[],
@@ -653,8 +623,6 @@ export function useAgentPanel({
 			setModels([]);
 			setModelId(null);
 			setFavoriteIds([]);
-			setModeOptions([]);
-			setModeId(null);
 			setCollaborationOptions([]);
 			setCollaborationModeId(null);
 			setEffortOptions([]);
@@ -665,8 +633,6 @@ export function useAgentPanel({
 			setUsageBySession({});
 			return;
 		}
-		setModeOptions([]);
-		setModeId(loadModePref(selectedAgentId));
 		setCollaborationOptions([]);
 		setCollaborationModeId(loadCollaborationPref(selectedAgentId));
 		setEffortOptions([]);
@@ -707,7 +673,6 @@ export function useAgentPanel({
 			agentId: string;
 			vaultPath: string | null;
 			modelId?: string;
-			modeId?: string;
 			collaborationModeId?: string;
 			generation: number;
 			/** Apply models/usage only when still the intended warm target. */
@@ -725,7 +690,6 @@ export function useAgentPanel({
 					agentId: args.agentId,
 					vaultPath: args.vaultPath ?? undefined,
 					modelId: args.modelId,
-					modeId: args.modeId,
 					collaborationModeId: args.collaborationModeId,
 				});
 				if (args.generation !== warmGenRef.current || !args.stillValid()) {
@@ -762,7 +726,6 @@ export function useAgentPanel({
 			agentId,
 			vaultPath: requestVaultPath,
 			modelId: loadModelPref(agentId) ?? undefined,
-			modeId: loadModePref(agentId) ?? undefined,
 			collaborationModeId: loadCollaborationPref(agentId) ?? undefined,
 			generation: gen,
 			stillValid: () =>
@@ -822,7 +785,7 @@ export function useAgentPanel({
 		[isChatOwnedSession, updateSessionLines],
 	);
 
-	// OpenCode / Claude / Codex tool-shaped ask → composer form (not transcript).
+	// OpenCode / Claude / Codex tool-shaped ask → bottom form surface (not transcript).
 	// Declared before applyToolEvent so the promote path can set it.
 	const [toolAskUserRequest, setToolAskUserRequest] =
 		useState<ToolAskUserRequest | null>(null);
@@ -849,8 +812,8 @@ export function useAgentPanel({
 				return next;
 			});
 
-			// Promote pending ask-user tools to the composer (single interactive surface).
-			// Composer priority: elicitation > Grok ext > tool; listeners clear tool on host asks.
+			// Promote pending ask-user tools to the bottom surface (hides free-text composer).
+			// Surface priority: elicitation > Grok ext > tool; listeners clear tool on host asks.
 			const questions = parseAskUserQuestions(ev.input);
 			const pending = isPendingAskUserToolStatus(ev.status);
 			if (questions && pending) {
@@ -1226,9 +1189,6 @@ export function useAgentPanel({
 			const uModels = await listenAgentModels((ev) => {
 				applyModelsEvent(ev);
 			});
-			const uModes = await listenAgentModes((ev) => {
-				applyModesEvent(ev);
-			});
 			const uCollab = await listenAgentCollaboration((ev) => {
 				applyCollaborationEvent(ev);
 			});
@@ -1266,7 +1226,6 @@ export function useAgentPanel({
 				uUsage();
 				uCommands();
 				uModels();
-				uModes();
 				uCollab();
 				uEffort();
 				uFast();
@@ -1281,7 +1240,6 @@ export function useAgentPanel({
 				uUsage,
 				uCommands,
 				uModels,
-				uModes,
 				uCollab,
 				uEffort,
 				uFast,
@@ -1299,7 +1257,6 @@ export function useAgentPanel({
 		applyCollaborationEvent,
 		applyEffortEvent,
 		applyFastModeEvent,
-		applyModesEvent,
 		applyModelsEvent,
 		applyPlanEvent,
 		applyStreamEvent,
@@ -1688,11 +1645,6 @@ export function useAgentPanel({
 		}
 	};
 
-	const selectedModeName = useMemo(() => {
-		if (!modeId) return null;
-		return modeOptions.find((mode) => mode.id === modeId)?.name ?? modeId;
-	}, [modeId, modeOptions]);
-
 	const selectedCollaborationName = useMemo(() => {
 		if (!collaborationModeId) return null;
 		return (
@@ -1700,17 +1652,6 @@ export function useAgentPanel({
 				?.name ?? collaborationModeId
 		);
 	}, [collaborationModeId, collaborationOptions]);
-
-	const pickMode = useCallback(
-		(id: string) => {
-			const next = id.trim();
-			if (!next || !modeOptions.some((mode) => mode.id === next)) return;
-			setModeId(next);
-			if (!selectedAgentId) return;
-			saveModePref(selectedAgentId, next);
-		},
-		[modeOptions, selectedAgentId],
-	);
 
 	const pickCollaborationMode = useCallback(
 		(id: string) => {
@@ -1763,7 +1704,6 @@ export function useAgentPanel({
 			agentId,
 			vaultPath: requestVaultPath,
 			modelId: next,
-			modeId: loadModePref(agentId) ?? modeId ?? undefined,
 			collaborationModeId:
 				loadCollaborationPref(agentId) ?? collaborationModeId ?? undefined,
 			generation,
@@ -2237,10 +2177,6 @@ export function useAgentPanel({
 				workflow: workflow ?? "free",
 				target: workflowTarget,
 				modelId: resolvedModelId,
-				modeId:
-					modeId && modeOptions.some((mode) => mode.id === modeId)
-						? modeId
-						: undefined,
 				collaborationModeId:
 					collaborationModeId &&
 					collaborationOptions.some((mode) => mode.id === collaborationModeId)
@@ -3531,10 +3467,6 @@ export function useAgentPanel({
 		warming,
 		pickModel,
 		toggleFavorite,
-		modeOptions,
-		modeId,
-		selectedModeName,
-		pickMode,
 		collaborationOptions,
 		collaborationModeId,
 		selectedCollaborationName,

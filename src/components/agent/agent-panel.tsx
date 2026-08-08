@@ -220,10 +220,6 @@ export const AgentPanel = memo(function AgentPanel({
 		warming,
 		pickModel,
 		toggleFavorite,
-		modeOptions,
-		modeId,
-		selectedModeName,
-		pickMode,
 		collaborationOptions,
 		collaborationModeId,
 		selectedCollaborationName,
@@ -417,10 +413,6 @@ export const AgentPanel = memo(function AgentPanel({
 								warming={warming}
 								onPickModel={pickModel}
 								onToggleFavorite={toggleFavorite}
-								modeOptions={modeOptions}
-								modeId={modeId}
-								selectedModeName={selectedModeName}
-								onPickMode={pickMode}
 								collaborationOptions={collaborationOptions}
 								collaborationModeId={collaborationModeId}
 								selectedCollaborationName={selectedCollaborationName}

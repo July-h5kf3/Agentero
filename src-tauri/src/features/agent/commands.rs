@@ -380,7 +380,6 @@ pub async fn agent_run_once(
             request.target.clone(),
             request.vault_path,
             request.model_id,
-            request.mode_id,
             request.collaboration_mode_id,
             request.reasoning_effort,
             request.fast_mode,
@@ -640,7 +639,6 @@ pub async fn agent_warm(
         desc,
         request.vault_path,
         request.model_id,
-        request.mode_id,
         request.collaboration_mode_id,
         remote,
     )

@@ -255,14 +255,6 @@ export type AgentModeChoice = {
 	description?: string | null;
 };
 
-export type AgentModesEvent = {
-	sessionId: string;
-	agentId: string;
-	configId: string;
-	currentId: string;
-	modes: AgentModeChoice[];
-};
-
 /** Codex collaboration mode (Default / Plan) via config id collaboration_mode. */
 export type AgentCollaborationEvent = {
 	sessionId: string;
@@ -484,8 +476,6 @@ export async function runOnce(request: {
 	target?: string;
 	/** ACP model config value id (from agent:models). */
 	modelId?: string;
-	/** ACP permission/sandbox mode id (from agent:modes), e.g. read-only. */
-	modeId?: string;
 	/** Collaboration mode id (from agent:collaboration), e.g. default / plan. */
 	collaborationModeId?: string;
 	/** ACP reasoning-effort value id (from agent:effort). */
@@ -533,7 +523,6 @@ export async function runOnce(request: {
 			workflow: request.workflow,
 			target: request.target,
 			modelId: request.modelId,
-			modeId: request.modeId,
 			collaborationModeId: request.collaborationModeId,
 			reasoningEffort: request.reasoningEffort,
 			fastMode: request.fastMode,
@@ -632,7 +621,6 @@ export async function warmAgent(request: {
 	agentId?: string;
 	vaultPath?: string;
 	modelId?: string;
-	modeId?: string;
 	collaborationModeId?: string;
 }): Promise<WarmResult> {
 	return invokeAgentApi("agent_warm", {
@@ -640,7 +628,6 @@ export async function warmAgent(request: {
 			agentId: request.agentId,
 			vaultPath: request.vaultPath,
 			modelId: request.modelId,
-			modeId: request.modeId,
 			collaborationModeId: request.collaborationModeId,
 		},
 	});
@@ -715,12 +702,6 @@ export async function listenAgentFastMode(
 	return listenAgentEvent("agent:fast-mode", handler);
 }
 
-export async function listenAgentModes(
-	handler: (e: AgentModesEvent) => void,
-): Promise<UnlistenFn> {
-	return listenAgentEvent("agent:modes", handler);
-}
-
 export async function listenAgentCollaboration(
 	handler: (e: AgentCollaborationEvent) => void,
 ): Promise<UnlistenFn> {
@@ -740,21 +721,6 @@ export function saveModelPref(agentId: string, modelId: string): void {
 	const map = readJsonStorage<Record<string, string>>(MODEL_PREF_KEY, {});
 	map[agentId] = modelId;
 	writeJsonStorage(MODEL_PREF_KEY, map);
-}
-
-const MODE_PREF_KEY = "agentero-agent-mode-pref";
-
-/** Persist last chosen ACP session mode id per agent. */
-export function loadModePref(agentId: string | null): string | null {
-	if (!agentId) return null;
-	const map = readJsonStorage<Record<string, string>>(MODE_PREF_KEY, {});
-	return typeof map[agentId] === "string" ? map[agentId] : null;
-}
-
-export function saveModePref(agentId: string, modeId: string): void {
-	const map = readJsonStorage<Record<string, string>>(MODE_PREF_KEY, {});
-	map[agentId] = modeId;
-	writeJsonStorage(MODE_PREF_KEY, map);
 }
 
 const COLLABORATION_PREF_KEY = "agentero-agent-collaboration-pref";

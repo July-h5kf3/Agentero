@@ -314,7 +314,7 @@ export function AgentComposer({
 	slashActiveIndex,
 	onAttachSlashCommand,
 	onSlashActiveIndexChange,
-	// Model / mode / collaboration / effort / usage / fast
+	// Model / collaboration (session mode) / effort / usage / fast
 	modelSelectorOpen,
 	onModelSelectorOpenChange,
 	models,
@@ -325,10 +325,6 @@ export function AgentComposer({
 	warming,
 	onPickModel,
 	onToggleFavorite,
-	modeOptions,
-	modeId,
-	selectedModeName,
-	onPickMode,
 	collaborationOptions,
 	collaborationModeId,
 	selectedCollaborationName,
@@ -406,10 +402,6 @@ export function AgentComposer({
 	warming: boolean;
 	onPickModel: (id: string) => void;
 	onToggleFavorite: (id: string) => void;
-	modeOptions: AgentModeChoice[];
-	modeId: string | null;
-	selectedModeName: string | null;
-	onPickMode: (id: string) => void;
 	collaborationOptions: AgentModeChoice[];
 	collaborationModeId: string | null;
 	selectedCollaborationName: string | null;
@@ -1220,62 +1212,14 @@ export function AgentComposer({
 											<DropdownMenuItem
 												key={mode.id}
 												className={cn(
-													"flex flex-col items-start gap-0.5 rounded-md",
+													"flex items-center justify-between gap-2 rounded-md",
 													collaborationModeId === mode.id && "bg-muted",
 												)}
 												onSelect={() => onPickCollaborationMode(mode.id)}
 											>
-												<span className="flex w-full items-center justify-between gap-2">
-													<span className="truncate">{mode.name}</span>
-													{collaborationModeId === mode.id ? (
-														<CheckIcon className="size-3.5 shrink-0 text-muted-foreground" />
-													) : null}
-												</span>
-												{mode.description ? (
-													<span className="text-muted-foreground text-xs leading-snug">
-														{mode.description}
-													</span>
-												) : null}
-											</DropdownMenuItem>
-										))}
-									</DropdownMenuContent>
-								</DropdownMenu>
-							) : null}
-							{!compact && modeOptions.length > 0 ? (
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<PromptInputButton
-											type="button"
-											className="h-7 max-w-[min(10rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
-											tooltip={t("composer.modeTooltip")}
-										>
-											<span className="truncate">
-												{t("composer.mode.label")}:{" "}
-												{selectedModeName ?? modeId ?? t("composer.mode.label")}
-											</span>
-											<ChevronDown className="size-3 shrink-0 opacity-70" />
-										</PromptInputButton>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="start" className="min-w-36 p-1">
-										{modeOptions.map((mode) => (
-											<DropdownMenuItem
-												key={mode.id}
-												className={cn(
-													"flex flex-col items-start gap-0.5 rounded-md",
-													modeId === mode.id && "bg-muted",
-												)}
-												onSelect={() => onPickMode(mode.id)}
-											>
-												<span className="flex w-full items-center justify-between gap-2">
-													<span className="truncate">{mode.name}</span>
-													{modeId === mode.id ? (
-														<CheckIcon className="size-3.5 shrink-0 text-muted-foreground" />
-													) : null}
-												</span>
-												{mode.description ? (
-													<span className="text-muted-foreground text-xs leading-snug">
-														{mode.description}
-													</span>
+												<span className="truncate">{mode.name}</span>
+												{collaborationModeId === mode.id ? (
+													<CheckIcon className="size-3.5 shrink-0 text-muted-foreground" />
 												) : null}
 											</DropdownMenuItem>
 										))}

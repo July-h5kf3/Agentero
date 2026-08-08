@@ -97,13 +97,9 @@
 		"mentionEmptyFolder": "此文件夹中没有可选项",
 		"fast": "快速",
 		"fastToggle": "切换快速模式",
-		"collaborationTooltip": "协作模式（Plan 下可用 request_user_input）",
+		"collaborationTooltip": "会话模式",
 		"collaboration": {
-			"label": "协作"
-		},
-		"modeTooltip": "权限 / 沙箱模式（Agent 支持时显示）",
-		"mode": {
-			"label": "权限"
+			"label": "模式"
 		},
 		"effortTooltip": "选择推理强度",
 		"effort": {

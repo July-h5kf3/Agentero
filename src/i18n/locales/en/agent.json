@@ -97,13 +97,9 @@
 		"mentionEmptyFolder": "No items in this folder",
 		"fast": "Fast",
 		"fastToggle": "Toggle Fast mode",
-		"collaborationTooltip": "Collaboration mode (Plan enables request_user_input)",
+		"collaborationTooltip": "Session mode",
 		"collaboration": {
-			"label": "Collab"
-		},
-		"modeTooltip": "Permission / sandbox mode (when the agent supports it)",
-		"mode": {
-			"label": "Access"
+			"label": "Mode"
 		},
 		"effortTooltip": "Select reasoning effort",
 		"effort": {

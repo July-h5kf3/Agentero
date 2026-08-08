@@ -275,9 +275,6 @@ pub struct RunOnceRequest {
     /// Preferred model id from ACP session config (category: model). Applied after session/new.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
-    /// Preferred ACP permission/sandbox mode (category: mode), e.g. read-only / agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode_id: Option<String>,
     /// Preferred Codex-style collaboration mode (`collaboration_mode`), e.g. default / plan.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collaboration_mode_id: Option<String>,
@@ -403,17 +400,6 @@ pub struct AgentModeChoice {
     pub description: Option<String>,
 }
 
-/// ACP permission/sandbox mode selector (category: mode), e.g. Read-only / Agent.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentModesEvent {
-    pub session_id: String,
-    pub agent_id: String,
-    pub config_id: String,
-    pub current_id: String,
-    pub modes: Vec<AgentModeChoice>,
-}
-
 /// Collaboration mode selector (Codex `collaboration_mode`: Default / Plan).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -526,9 +512,6 @@ pub struct WarmRequest {
     pub vault_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
-    /// Preferred ACP permission/sandbox mode (category: mode).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode_id: Option<String>,
     /// Preferred collaboration mode (`collaboration_mode`: default / plan).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collaboration_mode_id: Option<String>,

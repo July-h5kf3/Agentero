@@ -11,9 +11,8 @@ use crate::features::agent::models::{
     AcpSessionCapabilities, AcpSessionInfo, AgentCollaborationEvent, AgentCommand,
     AgentCommandInput, AgentCommandsEvent, AgentDescriptor, AgentEffortChoice, AgentEffortEvent,
     AgentFailedEvent, AgentFastModeEvent, AgentModeChoice, AgentModelChoice, AgentModelsEvent,
-    AgentModesEvent, AgentPlanEntry, AgentPlanEvent, AgentResultPayload, AgentStreamEvent,
-    AgentStreamKind, AgentTemplate, AgentToolEvent, AgentUsageEvent, ProbeResult, PromptImage,
-    WarmResult,
+    AgentPlanEntry, AgentPlanEvent, AgentResultPayload, AgentStreamEvent, AgentStreamKind,
+    AgentTemplate, AgentToolEvent, AgentUsageEvent, ProbeResult, PromptImage, WarmResult,
 };
 use crate::features::agent::permission::PermissionGate;
 use crate::features::agent::prompts::{build_prompt, extract_sources};
@@ -395,23 +394,6 @@ fn is_fast_option(opt: &SessionConfigOption) -> bool {
     ) && (opt.id.0.as_ref() == "fast-mode" || opt.name.to_ascii_lowercase().contains("fast"))
 }
 
-fn is_mode_option(opt: &SessionConfigOption) -> bool {
-    // Permission/sandbox axis (Codex: Read-only / Agent / Full-access). Not collaboration.
-    if is_collaboration_option(opt) {
-        return false;
-    }
-    if matches!(
-        opt.category.as_ref(),
-        Some(SessionConfigOptionCategory::Mode)
-    ) {
-        return true;
-    }
-    // Name/id fallback for agents that omit category. Avoid matching fast-mode.
-    matches!(opt.id.0.as_ref(), "mode" | "session_mode" | "session-mode")
-        || opt.name.eq_ignore_ascii_case("mode")
-        || opt.name.eq_ignore_ascii_case("session mode")
-}
-
 fn is_collaboration_option(opt: &SessionConfigOption) -> bool {
     // Codex codex-acp: id + category "collaboration_mode" (Default / Plan).
     if matches!(
@@ -459,32 +441,6 @@ fn collect_mode_choices_from_select(
         _ => {}
     }
     modes
-}
-
-/// Extract permission/sandbox mode selector from ACP config options.
-fn mode_from_config_options(
-    session_id: &str,
-    agent_id: &str,
-    opts: &[SessionConfigOption],
-) -> Option<AgentModesEvent> {
-    let opt = opts.iter().find(|opt| is_mode_option(opt))?;
-    let SessionConfigKind::Select(sel) = &opt.kind else {
-        return None;
-    };
-    let modes = collect_mode_choices_from_select(sel)
-        .into_iter()
-        .filter(|m| !m.id.trim().is_empty() && !m.name.trim().is_empty())
-        .collect::<Vec<_>>();
-    if modes.is_empty() {
-        return None;
-    }
-    Some(AgentModesEvent {
-        session_id: session_id.to_string(),
-        agent_id: agent_id.to_string(),
-        config_id: opt.id.to_string(),
-        current_id: sel.current_value.to_string(),
-        modes,
-    })
 }
 
 /// Extract collaboration mode (Codex Default / Plan) from ACP config options.
@@ -569,9 +525,6 @@ fn emit_session_config_options(
 ) {
     if let Some(ev) = models_from_config_options(session_id, agent_id, opts) {
         let _ = app.emit("agent:models", ev);
-    }
-    if let Some(ev) = mode_from_config_options(session_id, agent_id, opts) {
-        let _ = app.emit("agent:modes", ev);
     }
     if let Some(ev) = collaboration_from_config_options(session_id, agent_id, opts) {
         let _ = app.emit("agent:collaboration", ev);
@@ -1247,7 +1200,6 @@ pub async fn run_once(
     target: Option<String>,
     vault_path: Option<String>,
     preferred_model_id: Option<String>,
-    preferred_mode_id: Option<String>,
     preferred_collaboration_mode_id: Option<String>,
     preferred_reasoning_effort: Option<String>,
     fast_mode: Option<bool>,
@@ -1474,7 +1426,6 @@ pub async fn run_once(
             let full_prompt = full_prompt.clone();
             let prompt_images = prompt_images.clone();
             let preferred_model = preferred_model_id.clone();
-            let preferred_mode = preferred_mode_id.clone();
             let preferred_collaboration = preferred_collaboration_mode_id.clone();
             let preferred_effort = preferred_reasoning_effort.clone();
             let app_for_models = app_for_conn.clone();
@@ -1655,32 +1606,6 @@ pub async fn run_once(
                                         e
                                     );
                                 }
-                            }
-                        }
-                    }
-                }
-                if let Some(pref) = preferred_mode.clone() {
-                    if let Some(ev) = mode_from_config_options(
-                        &session_for_models,
-                        &agent_id_for_models,
-                        &config_options,
-                    ) {
-                        if pref != ev.current_id && ev.modes.iter().any(|mode| mode.id == pref) {
-                            let response = tokio::select! {
-                                result = timed_acp_request(
-                                    "set mode",
-                                    connection
-                                        .send_request(SetSessionConfigOptionRequest::new(
-                                            acp_session_id.clone(),
-                                            SessionConfigId::new(ev.config_id.as_str()),
-                                            SessionConfigOptionValue::value_id(pref),
-                                        ))
-                                        .block_task(),
-                                ) => result.ok(),
-                                () = wait_for_cancellation(&mut cancellation) => return_cancelled!(),
-                            };
-                            if let Some(response) = response {
-                                config_options = response.config_options;
                             }
                         }
                     }
@@ -1901,7 +1826,6 @@ pub async fn warm_agent(
     desc: AgentDescriptor,
     vault_path: Option<String>,
     preferred_model_id: Option<String>,
-    preferred_mode_id: Option<String>,
     preferred_collaboration_mode_id: Option<String>,
     remote: Option<crate::features::remote::RemoteAgentTarget>,
 ) -> WarmResult {
@@ -1939,7 +1863,6 @@ pub async fn warm_agent(
     let agent_for_notif = agent_id.clone();
 
     let preferred = preferred_model_id.clone();
-    let preferred_mode = preferred_mode_id.clone();
     let preferred_collaboration = preferred_collaboration_mode_id.clone();
     let app_for_conn = app.clone();
     let session_for_conn = session_id.clone();
@@ -1992,7 +1915,6 @@ pub async fn warm_agent(
         )
         .connect_with(acp, {
             let preferred = preferred.clone();
-            let preferred_mode = preferred_mode.clone();
             let preferred_collaboration = preferred_collaboration.clone();
             let models_for_conn = models_for_conn.clone();
             move |connection: ConnectionTo<Agent>| async move {
@@ -2043,41 +1965,6 @@ pub async fn warm_agent(
                                         "agent={} warm set model failed (listed={}): pref={} err={}",
                                         agent_for_conn,
                                         listed,
-                                        pref,
-                                        e
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-                if let Some(pref) = preferred_mode.clone() {
-                    if let Some(ev) = mode_from_config_options(
-                        &session_for_conn,
-                        &agent_for_conn,
-                        &config_options,
-                    ) {
-                        if pref != ev.current_id && ev.modes.iter().any(|mode| mode.id == pref) {
-                            match timed_acp_request(
-                                "set mode",
-                                connection
-                                    .send_request(SetSessionConfigOptionRequest::new(
-                                        acp_session_id.clone(),
-                                        SessionConfigId::new(ev.config_id.as_str()),
-                                        SessionConfigOptionValue::value_id(pref.clone()),
-                                    ))
-                                    .block_task(),
-                            )
-                            .await
-                            {
-                                Ok(response) => {
-                                    config_options = response.config_options;
-                                }
-                                Err(e) => {
-                                    log::debug!(
-                                        target: "agentero::agent",
-                                        "agent={} warm set mode failed: pref={} err={}",
-                                        agent_for_conn,
                                         pref,
                                         e
                                     );
@@ -2603,14 +2490,14 @@ mod cancelled_payload_tests {
 mod config_option_tests {
     use super::{
         collaboration_from_config_options, effort_from_config_options,
-        fast_mode_from_config_options, mode_from_config_options, models_from_config_options,
+        fast_mode_from_config_options, models_from_config_options,
     };
     use agent_client_protocol::schema::v1::{
         SessionConfigOption, SessionConfigOptionCategory, SessionConfigSelectOption,
     };
 
     #[test]
-    fn extracts_permission_mode_from_mode_category() {
+    fn ignores_permission_sandbox_mode_category() {
         let options = vec![SessionConfigOption::select(
             "mode",
             "Session mode",
@@ -2622,15 +2509,12 @@ mod config_option_tests {
         )
         .category(SessionConfigOptionCategory::Mode)];
 
-        let modes = mode_from_config_options("session", "codex", &options)
-            .expect("permission mode selector should be exposed");
-        assert_eq!(modes.current_id, "read-only");
-        assert_eq!(modes.modes[0].id, "read-only");
+        // Host does not surface ACP category:mode (sandbox); only collaboration_mode.
         assert!(collaboration_from_config_options("session", "codex", &options).is_none());
     }
 
     #[test]
-    fn extracts_codex_collaboration_mode_separately() {
+    fn extracts_codex_collaboration_mode() {
         let options = vec![
             SessionConfigOption::select(
                 "mode",
@@ -2657,16 +2541,13 @@ mod config_option_tests {
             )),
         ];
 
-        let modes = mode_from_config_options("session", "codex", &options)
-            .expect("permission mode still extracted");
-        assert_eq!(modes.current_id, "read-only");
-
         let collab = collaboration_from_config_options("session", "codex", &options)
             .expect("collaboration mode should be exposed");
         assert_eq!(collab.config_id, "collaboration_mode");
         assert_eq!(collab.current_id, "default");
         assert_eq!(collab.modes.len(), 2);
         assert_eq!(collab.modes[1].id, "plan");
+        assert_eq!(collab.modes[1].name, "Plan");
     }
 
     #[test]
@@ -2682,7 +2563,6 @@ mod config_option_tests {
         )
         .category(SessionConfigOptionCategory::ModelConfig)];
 
-        assert!(mode_from_config_options("session", "codex", &options).is_none());
         assert!(collaboration_from_config_options("session", "codex", &options).is_none());
     }
 
