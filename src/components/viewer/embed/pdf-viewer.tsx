@@ -79,9 +79,7 @@ import {
 	Languages,
 	List,
 	Loader2,
-	Maximize2,
 	MessageSquareText,
-	Minimize2,
 	Minus,
 	Moon,
 	MoveVertical,
@@ -332,6 +330,18 @@ function writePdfColorScheme(next: PdfColorScheme): void {
 	}
 }
 
+function isPdfDocumentCloseRaceError(error: unknown): boolean {
+	const message =
+		error instanceof Error
+			? error.message
+			: typeof error === "string"
+				? error
+				: error && typeof error === "object" && "message" in error
+					? String((error as { message?: unknown }).message)
+					: "";
+	return /document does not open/i.test(message);
+}
+
 export type PdfViewerHandle = {
 	getHighlights: () => PdfHighlight[];
 	scrollToHighlight: (id: string) => void;
@@ -381,10 +391,6 @@ export type PdfViewerProps = {
 	paperRelPath?: string | null;
 	/** Current vault root for ACP cwd */
 	vaultPath?: string | null;
-	/** Immersive full-window reading mode (adapts width + hides app chrome). */
-	zen?: boolean;
-	/** Toggle immersive mode; when provided a toolbar button is shown. */
-	onToggleZen?: () => void;
 	/** Open the annotations overview (App-level right sidebar tab). */
 	onOpenAnnotations?: () => void;
 	/** Open Translate settings from a translation error card. */
@@ -917,9 +923,7 @@ function PdfViewerInner({
 	paperAbsPath = null,
 	paperRelPath = null,
 	vaultPath = null,
-	zen = false,
 	isActive = true,
-	onToggleZen,
 	onOpenAnnotations,
 	onOpenSettings,
 	onHandle,
@@ -2152,6 +2156,7 @@ function PdfViewerInner({
 			opts?: { seq?: number; ephemeral?: boolean },
 		) => {
 			if (!engine || !docCap || visualCropPendingRef.current) return;
+			if (!docCap.isDocumentOpen(docId)) return;
 			const document = docCap.getDocument(docId);
 			if (!document) {
 				notifyError(t("pdfExplain.cropFailed"));
@@ -2168,6 +2173,7 @@ function PdfViewerInner({
 					pageIndex: page - 1,
 					region,
 				});
+				if (!docCap.isDocumentOpen(docId)) return;
 				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
 					return;
 				}
@@ -2189,6 +2195,12 @@ function PdfViewerInner({
 				layoutHoverRegionIdRef.current = null;
 			} catch (error) {
 				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
+					return;
+				}
+				if (
+					!docCap.isDocumentOpen(docId) ||
+					isPdfDocumentCloseRaceError(error)
+				) {
 					return;
 				}
 				const message =
@@ -3961,16 +3973,19 @@ function PdfViewerInner({
 				const eng = engineRef.current;
 				const docs = docCapRef.current;
 				if (!eng || !docs) return null;
+				if (!docs.isDocumentOpen(docId)) return null;
 				const document = docs.getDocument(docId);
 				if (!document) return null;
 				try {
-					return await renderPdfRegionPromptImage({
+					const image = await renderPdfRegionPromptImage({
 						engine: eng,
 						document,
 						pageIndex,
 						region: bbox,
 						maxEdgePx: maxEdgePx ?? 360,
 					});
+					if (!docs.isDocumentOpen(docId)) return null;
+					return image;
 				} catch {
 					return null;
 				}
@@ -5072,7 +5087,7 @@ function PdfViewerInner({
 					)
 				: null}
 
-			{/* Bottom bar: page nav + PDF color scheme + immersive (zen). */}
+			{/* Bottom bar: page nav + PDF color scheme. */}
 			{totalPages > 0 ? (
 				<div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
 					<TooltipProvider delayDuration={200}>
@@ -5160,29 +5175,6 @@ function PdfViewerInner({
 									{t("pdf.zoomFitPage")}
 								</TooltipContent>
 							</Tooltip>
-							{onToggleZen ? (
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											size="icon-xs"
-											variant="ghost"
-											aria-label={zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
-											aria-pressed={zen}
-											onClick={onToggleZen}
-										>
-											{zen ? (
-												<Minimize2 className="size-3.5" />
-											) : (
-												<Maximize2 className="size-3.5" />
-											)}
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent side="top">
-										{zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
-									</TooltipContent>
-								</Tooltip>
-							) : null}
 						</div>
 					</TooltipProvider>
 				</div>

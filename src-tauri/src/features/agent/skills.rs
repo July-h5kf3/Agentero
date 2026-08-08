@@ -29,7 +29,9 @@ pub fn skill_mention_style(template: &AgentTemplate) -> SkillMentionStyle {
         // All other agents use slash-style skill mentions.
         AgentTemplate::ClaudeAcp
         | AgentTemplate::Opencode
+        | AgentTemplate::OpenClaw
         | AgentTemplate::Gemini
+        | AgentTemplate::Hermes
         | AgentTemplate::QoderCli
         | AgentTemplate::GrokBuild
         | AgentTemplate::Custom => SkillMentionStyle::Slash,

@@ -145,6 +145,13 @@
 		"desktopHint": "运行 `pnpm tauri dev` 以扫描本机上的 Agent。",
 		"commonAgents": "常用 Agent",
 		"commonAgentsHint": "若 ACP 失败，可尝试在「通用」当中配置代理。",
+		"defaultAgent": {
+			"section": "默认 Agent",
+			"label": "默认 Agent",
+			"description": "工作流或对话未指定 Agent 时使用。",
+			"placeholder": "选择默认 Agent",
+			"empty": "暂无可用 Agent"
+		},
 		"custom": "自定义",
 		"addCustom": "添加自定义 Agent",
 		"probe": "刷新",

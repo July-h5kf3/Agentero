@@ -6,7 +6,7 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
 
 - Crate：`agent-client-protocol`（及 Codex 的 npm ACP 适配器进程）。
 - 会话 `cwd` = 当前 Vault 根（远程则为远端 Vault 根）。
-- 统一接口：OpenCode、Gemini、Claude ACP、Codex ACP、Qoder、Grok、自定义 `command`/`args`/`env`。
+- 统一接口：OpenCode、OpenClaw、Hermes、Gemini、Claude ACP、Codex ACP、Qoder、Grok、自定义 `command`/`args`/`env`。
 - Gemini：spawn 时注入 `NO_BROWSER=true`（用户显式配置则不覆盖），避免未登录时
   `new_session` 反复拉起浏览器 OAuth；登录须在终端完成（BYOA）。
 - 设置页会将 ACP 探测中的认证错误（如 `invalid_grant` / `failed to authenticate`）
@@ -71,7 +71,8 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 - Skill：Claude 倾向 `/id`；其它注入 `SKILL.md` 文本（`SkillMentionStyle`）。
 - paper-reader：写 NOTES + `paper_set_is_read`；前端任务条编排。
 - 输出约定：工作流要求 `## Sources`（相对 Vault 路径）；双链保留 `[[...]]`。
-- 规划：自动注入 Vault 根 `AGENTS.md`（路线图 0.3）。
+- `AGENTS.md` 已作为 progressive disclosure 系统上下文注入所有工作流 prompt（优先级：Vault 根 `AGENTS.md` → 当前 paper `NOTES.md` → marks）。
+- 自由模型选择：`preferred_model_id` 可指向 ACP catalog 外的任意模型 id；Warm / Run 时始终尝试 `session/set_config_option`，失败不阻断会话。
 
 ## 模型协商
 

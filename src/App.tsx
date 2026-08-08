@@ -37,8 +37,8 @@ import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
 import { useLayoutModelPrefetch } from "@/hooks/use-layout-model-prefetch";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
+import { SIDEBAR_DEFAULT_PX, useShellLayout } from "@/hooks/use-shell-layout";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
-import { SIDEBAR_DEFAULT_PX, useZenLayout } from "@/hooks/use-zen-layout";
 import {
 	listenOpenAgentWithPrompt,
 	setPendingAgentComposerPrompt,
@@ -227,12 +227,11 @@ export default function App() {
 		editorPaneRef,
 		leftWidthPxRef,
 		rightWidthPxRef,
-	} = useZenLayout();
+	} = useShellLayout();
 
 	const vaultPath = useVaultStore((s) => s.vaultPath);
 	const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
 	const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
-	const pdfZenMode = useUiStore((s) => s.pdfZenMode);
 
 	// The Settings window is a separate WebView. Mirror unsaved Markdown paths
 	// into Host state so Doctor can reject a batch before touching any file.
@@ -380,7 +379,7 @@ export default function App() {
 							panelRef={sidebarPanelRef}
 							defaultSize={SIDEBAR_DEFAULT_PX}
 							minSize={160}
-							maxSize={420}
+							maxSize="30%"
 							collapsible
 							collapsedSize={0}
 							// Keep pixel width when the right rail or Notes column toggles.
@@ -403,12 +402,11 @@ export default function App() {
 							</aside>
 						</ResizablePanel>
 
-						{sidebarCollapsed || pdfZenMode ? null : <ResizableHandle />}
+						{sidebarCollapsed ? null : <ResizableHandle />}
 
 						<ResizablePanel
 							id="source"
 							panelRef={sourcePanelRef}
-							defaultSize="40"
 							minSize={200}
 							collapsible
 							collapsedSize={0}
@@ -430,13 +428,13 @@ export default function App() {
 						</ResizablePanel>
 
 						{/* Right sidebar: always mounted + collapsible (same as left). */}
-						{rightSidebarOpen && !pdfZenMode ? <ResizableHandle /> : null}
+						{rightSidebarOpen ? <ResizableHandle /> : null}
 						<ResizablePanel
 							id="right-sidebar"
 							panelRef={rightSidebarPanelRef}
 							defaultSize={0}
-							minSize={pdfZenMode ? 0 : 260}
-							maxSize={520}
+							minSize={260}
+							maxSize="50%"
 							collapsible
 							collapsedSize={0}
 							groupResizeBehavior="preserve-pixel-size"

@@ -2,7 +2,7 @@
 //!
 //! Ported from CC Switch's tool-lifecycle patterns (official installer first,
 //! npm fallback; login-shell PATH for GUI apps; no `curl | bash` pipes).
-//! Scoped to Motif catalog templates (not openclaw/hermes).
+//! Scoped to Motif catalog templates.
 
 use crate::features::agent::discover::resolve_command;
 use crate::features::agent::templates::{template_info, CLAUDE_ACP_INSTALL_COMMAND};
@@ -17,9 +17,11 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 /// Catalog template ids that support silent install/update.
 pub const LIFECYCLE_TEMPLATES: &[&str] = &[
     "opencode",
+    "openclaw",
     "claude-acp",
     "codex-acp",
     "gemini",
+    "hermes",
     "grok-build",
 ];
 
@@ -32,9 +34,16 @@ const CLAUDE_INSTALL_UNIX: &str = "bash -c 'tmp=$(mktemp) && curl -fsSL https://
 const OPENCODE_INSTALL_UNIX: &str = "bash -c 'tmp=$(mktemp) && curl -fsSL https://opencode.ai/install -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
 #[cfg(not(target_os = "windows"))]
 const GROK_INSTALL_UNIX: &str = "bash -c 'tmp=$(mktemp) && curl -fsSL https://x.ai/cli/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
+#[cfg(not(target_os = "windows"))]
+const HERMES_INSTALL_UNIX: &str = "bash -c 'tmp=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
+#[cfg(not(target_os = "windows"))]
+const HERMES_UPDATE_UNIX: &str = "hermes update || bash -c 'tmp=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
 
 #[cfg(target_os = "windows")]
 const GROK_INSTALL_WINDOWS_SCRIPT: &str = "irm https://x.ai/cli/install.ps1 | iex";
+#[cfg(target_os = "windows")]
+const HERMES_INSTALL_WINDOWS_SCRIPT: &str =
+    "irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolLifecycleAction {
@@ -76,7 +85,7 @@ pub fn run_template_lifecycle(
         .unwrap_or(info.command.as_str());
     let host_present = resolve_command(detect).is_some();
     let acp_present = resolve_command(&info.command).is_some();
-    // Same binary for host and ACP (opencode, gemini, grok via npx).
+    // Same binary for host and ACP (opencode, openclaw, gemini, hermes, grok via npx).
     let needs_separate_adapter = info
         .detect_command
         .as_ref()
@@ -169,6 +178,8 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
             "codex-acp" => Ok("npm i -g @openai/codex@latest".to_string()),
             "gemini" => Ok("npm i -g @google/gemini-cli@latest".to_string()),
             "opencode" => Ok("npm i -g opencode-ai@latest".to_string()),
+            "openclaw" => Ok("npm i -g openclaw@latest".to_string()),
+            "hermes" => Ok(hermes_install_windows_command()),
             "grok-build" => Ok(chain_or(
                 &grok_install_windows_command(),
                 "npm i -g @xai-official/grok@latest",
@@ -189,6 +200,8 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
                 OPENCODE_INSTALL_UNIX,
                 "npm i -g opencode-ai@latest",
             )),
+            "openclaw" => Ok("npm i -g openclaw@latest".to_string()),
+            "hermes" => Ok(HERMES_INSTALL_UNIX.to_string()),
             "grok-build" => Ok(chain_or(
                 GROK_INSTALL_UNIX,
                 "npm i -g @xai-official/grok@latest",
@@ -224,6 +237,20 @@ fn host_update_command(template_id: &str) -> Result<String, String> {
         }
         "codex-acp" => Ok("npm i -g @openai/codex@latest".to_string()),
         "gemini" => Ok("npm i -g @google/gemini-cli@latest".to_string()),
+        "openclaw" => Ok(chain_or(
+            "openclaw update --yes",
+            "npm i -g openclaw@latest",
+        )),
+        "hermes" => {
+            #[cfg(target_os = "windows")]
+            {
+                Ok(chain_or("hermes update", &hermes_install_windows_command()))
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Ok(HERMES_UPDATE_UNIX.to_string())
+            }
+        }
         "opencode" => {
             #[cfg(target_os = "windows")]
             {
@@ -299,6 +326,14 @@ fn grok_install_windows_command() -> String {
     )
 }
 
+#[cfg(target_os = "windows")]
+fn hermes_install_windows_command() -> String {
+    format!(
+        "powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand {}",
+        powershell_encoded_command(HERMES_INSTALL_WINDOWS_SCRIPT)
+    )
+}
+
 /// Manual one-click install text for Settings (copyable). Matches backend install chains.
 pub fn manual_install_commands_text() -> String {
     #[cfg(target_os = "windows")]
@@ -314,10 +349,15 @@ npm i -g @agentclientprotocol/codex-acp@latest
 npm i -g @google/gemini-cli@latest
 # OpenCode
 npm i -g opencode-ai@latest
+# OpenClaw
+npm i -g openclaw@latest
+# Hermes Agent
+{hermes}
 # Grok Build
 {grok}
 # (or) npm i -g @xai-official/grok@latest"#,
             claude_acp = CLAUDE_ACP_INSTALL_COMMAND,
+            hermes = hermes_install_windows_command(),
             grok = grok_install_windows_command(),
         )
     }
@@ -334,11 +374,16 @@ npm i -g @agentclientprotocol/codex-acp@latest
 npm i -g @google/gemini-cli@latest
 # OpenCode
 {opencode} || npm i -g opencode-ai@latest
+# OpenClaw
+npm i -g openclaw@latest
+# Hermes Agent
+{hermes}
 # Grok Build
 {grok} || npm i -g @xai-official/grok@latest"#,
             claude_host = CLAUDE_INSTALL_UNIX,
             claude_acp = CLAUDE_ACP_INSTALL_COMMAND,
             opencode = OPENCODE_INSTALL_UNIX,
+            hermes = HERMES_INSTALL_UNIX,
             grok = GROK_INSTALL_UNIX,
         )
     }
@@ -498,6 +543,8 @@ mod tests {
         assert!(text.contains("Claude"));
         assert!(text.contains("Gemini"));
         assert!(text.contains("OpenCode"));
+        assert!(text.contains("OpenClaw"));
+        assert!(text.contains("Hermes"));
         assert!(text.contains("Grok"));
     }
 

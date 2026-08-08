@@ -81,9 +81,9 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/lib/pdf/annotations-store.ts` | 按 tab 状态 |
 | `src/lib/pdf/selection/` | 选区与 marks IO |
 
-## 版面分析（实验）
+## 版面分析（Figures 侧栏）
 
-右栏 **解析** header（分析 / 叠加层）→ 页内检测 → 列表（image/chart、table、algorithm、**有编号 formula 置底**）。
+右栏 **Figures**（原「解析」header：分析 / 叠加层）→ 页内检测 → 列表（image/chart、table、algorithm、**有编号 formula 置底**）。
 
 **完整流水线、14 条核心规则、阈值与代码地图**见：
 

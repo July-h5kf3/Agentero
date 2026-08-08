@@ -1,6 +1,8 @@
 # PDF 版面分析（Figures / Tables / Algorithms / Formulas）
 
-实验能力：浏览器内 ONNX（PP-DocLayoutV3）检测 PDF 版面 → 应用层 **文字角色 + 联图聚合 + 公式按编号框几何聚合（不解析编号文本）+ 置信度去重** → 右栏 **Figures**。
+浏览器内 ONNX（PP-DocLayoutV3）检测 PDF 版面 → 应用层 **文字角色 + 联图聚合 + 公式按编号框几何聚合（不解析编号文本）+ 置信度去重** → 右栏 **Figures**。
+
+> 该能力已落地并可随论文打开自动运行；大模型推理在低端设备上可能卡顿，分析结果仅写入可重建 sidecar，不改 PDF 二进制。
 
 | | |
 |---|---|
@@ -20,6 +22,7 @@
 打开论文 PDF（含非 active 的已挂载 tab）→ enqueue 到后台任务队列
         │  多篇并行打开：都进左下角任务列表；ONNX 串行（concurrency:1）避免抢模型
         │  实现：viewer mount 调 `enqueuePaperLayoutAnalysis`（与入库后同一路径）
+        │  后台 ONNX 不依赖当前 active 论文窗口：headless EmbedPDF 独立打开本地 PDF
         │  激活中的 tab：有 layout.json → 静默载入 store（无新任务条）
         │  尚无缓存 → 轮询 sidecar，headless 写完后再静默载入
         │  无 paper 目录的散落 PDF：仅 active tab 用 viewer 内分析（asBackgroundTask）

@@ -152,6 +152,13 @@
 		"desktopHint": "Run `pnpm tauri dev` to scan agents on this machine.",
 		"commonAgents": "Common agents",
 		"commonAgentsHint": "If ACP fails, try configuring a proxy under General.",
+		"defaultAgent": {
+			"section": "Default agent",
+			"label": "Default Agent",
+			"description": "Used when a workflow or conversation does not choose a specific Agent.",
+			"placeholder": "Choose default Agent",
+			"empty": "No available Agent"
+		},
 		"custom": "Custom",
 		"addCustom": "Add custom agent",
 		"probe": "Refresh",

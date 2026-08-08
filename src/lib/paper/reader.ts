@@ -47,6 +47,8 @@ export function skillMentionStyleForTemplate(
 ): SkillMentionStyle {
 	switch (template) {
 		case "claude-acp":
+		case "openclaw":
+		case "hermes":
 			return "slash";
 		default:
 			return "injected";

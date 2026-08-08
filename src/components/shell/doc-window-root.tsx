@@ -190,8 +190,6 @@ export function DocWindowRoot() {
 							onTabPatch,
 						}}
 						pdf={{
-							zen: false,
-							onToggleZen: () => {},
 							onOpenAnnotations: () => {},
 							onOpenSettings: () => openSettingsWindow("general"),
 							registerHandle: () => {},

@@ -167,6 +167,7 @@ export function ChatTranscript({
 	lines,
 	activeTabId,
 	agentName,
+	compact = false,
 	activeTabIsRunning,
 	submitting,
 	switching,
@@ -186,6 +187,7 @@ export function ChatTranscript({
 	lines: ChatLine[];
 	activeTabId: string;
 	agentName: string;
+	compact?: boolean;
 	activeTabIsRunning: boolean;
 	submitting: boolean;
 	switching: boolean;
@@ -214,7 +216,13 @@ export function ChatTranscript({
 
 	return (
 		<Conversation className="min-h-0 flex-1">
-			<ConversationContent>
+			<ConversationContent
+				scrollClassName={
+					compact
+						? "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+						: undefined
+				}
+			>
 				<div className="flex w-full flex-col gap-8">
 					{lines.length === 0 ? (
 						<ConversationEmptyState

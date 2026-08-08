@@ -1,5 +1,5 @@
 /**
- * App shell UI state (zustand vanilla): side rails, PDF immersive mode, palette and
+ * App shell UI state (zustand vanilla): side rails, palette and
  * dialog visibility, and one-shot open signals. Signal bumps only re-render
  * their subscribers instead of the whole App.
  */
@@ -62,8 +62,6 @@ type UiStore = {
 	/** Right sidebar (⌘L): Agent (default) or Backlinks with Graph below. */
 	rightSidebarOpen: boolean;
 	rightSidebarTab: RightSidebarTab;
-	/** Immersive full-window PDF reading. */
-	pdfZenMode: boolean;
 	/** Keep AgentPanel mounted when switching right-rail tabs. */
 	agentPanelMounted: boolean;
 	/**
@@ -87,7 +85,6 @@ export const uiStore = createStore<UiStore>(() => ({
 	sidebarCollapsed: false,
 	rightSidebarOpen: false,
 	rightSidebarTab: "agent",
-	pdfZenMode: false,
 	agentPanelMounted: false,
 	featurePoppedOut: {},
 	lookupOpenSignal: 0,
@@ -109,10 +106,6 @@ export function setRightSidebarOpenState(open: boolean): void {
 
 export function setRightSidebarTab(tab: RightSidebarTab): void {
 	uiStore.setState({ rightSidebarTab: tab });
-}
-
-export function setPdfZenMode(zen: boolean): void {
-	uiStore.setState({ pdfZenMode: zen });
 }
 
 export function setAgentPanelMounted(mounted: boolean): void {
@@ -162,8 +155,6 @@ export type LayoutController = {
 		collapsed: boolean,
 		opts?: { focusAgent?: boolean },
 	) => void;
-	enterPdfZen: () => void;
-	exitPdfZen: () => void;
 	/** Expand the left rail and move focus into it. */
 	focusSidebar: () => void;
 	focusEditorPane: () => void;
@@ -295,9 +286,4 @@ export function requestOpenAgentSession(
 export function clearAgentSessionOpenRequest(): void {
 	if (!uiStore.getState().agentSessionOpenRequest) return;
 	uiStore.setState({ agentSessionOpenRequest: null });
-}
-
-export function togglePdfZen(): void {
-	if (uiStore.getState().pdfZenMode) layout()?.exitPdfZen();
-	else layout()?.enterPdfZen();
 }

@@ -625,11 +625,13 @@ fn apply_user_agent_to_agent(agent: &mut AgentDescriptor, user_agent: &str, prov
         AgentTemplate::ClaudeAcp => {
             merge_anthropic_custom_headers_user_agent(&mut agent.env, ua);
         }
-        // OpenCode / Gemini / Grok / Qoder: only AGENTERO_USER_AGENT today (agent may ignore it).
+        // Other ACP templates: only AGENTERO_USER_AGENT today (agent may ignore it).
         AgentTemplate::Opencode
         | AgentTemplate::Gemini
         | AgentTemplate::QoderCli
-        | AgentTemplate::GrokBuild => {}
+        | AgentTemplate::GrokBuild
+        | AgentTemplate::OpenClaw
+        | AgentTemplate::Hermes => {}
     }
 }
 

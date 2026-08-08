@@ -609,7 +609,9 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 
 ---
 
-## 9. Host 模块布局（规划）
+## 9. Host 模块布局（早期规划，仅供参考）
+
+> 实际落地时相关逻辑并入了 `src-tauri/src/features/import/`（`parse.rs`、`map.rs`、`assets.rs`、`paper_import/mod.rs` 等），没有独立的 `commands/` / `services/` 分层。下列结构保留为设计阶段参考。
 
 ```text
 src-tauri/src/

@@ -85,13 +85,13 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 功能 | 文档 |
 |---|---|
 | 工作台壳 | [shell.md](shell.md) |
-| Dockview 工作区 | [workspace.md](workspace.md) |
+| Dockview 工作区 / 功能窗 / 文档弹窗 | [workspace.md](workspace.md) |
 | 文件树 | [vault-tree.md](vault-tree.md) |
-| 论文库 Library | [library.md](library.md) |
+| 论文库 Library（含阅读热力条） | [library.md](library.md) |
 | 入库 UI | [paper-import.md](paper-import.md) |
 | Markdown 编辑 | [markdown.md](markdown.md) |
 | PDF 阅读与划词 | [pdf.md](pdf.md) |
-| PDF 版面分析（实验） | [pdf-layout-analysis.md](pdf-layout-analysis.md) |
+| PDF 版面分析（Figures / Tables / Algorithms / Formulas） | [pdf-layout-analysis.md](pdf-layout-analysis.md) |
 | Agent 面板 | [agent.md](agent.md) |
 | 移动端壳与 Bridge 客户端 | [mobile.md](mobile.md) |
 | 双链 UI | [wiki.md](wiki.md) |

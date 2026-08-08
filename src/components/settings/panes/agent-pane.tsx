@@ -11,13 +11,18 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AgentLogo } from "@/components/agent/agent-logo";
 import { AgentCommonRows } from "@/components/settings/agent-common-rows";
 import { AgentModelPicker } from "@/components/settings/agent-model-picker";
 import {
+	buildDefaultAgentChoices,
 	catalogNeedsProbe,
 	catalogProbeKey,
 	catalogStatusTone,
 	customProbeKey,
+	type DefaultAgentChoice,
+	defaultAgentChoiceValue,
+	NO_DEFAULT_AGENT_CHOICE,
 	ProbingBadge,
 	patchCatalogProbe,
 	patchCustomProbe,
@@ -42,6 +47,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
 	type AgentTemplate,
@@ -58,6 +70,7 @@ import {
 	runToolLifecycle,
 	scanCatalog,
 	setAgentUserAgent,
+	setDefaultAgent,
 	type ToolLifecycleAction,
 	USER_AGENT_PRESETS,
 	upsertAgent,
@@ -84,6 +97,9 @@ export function AgentPane({
 	const [loading, setLoading] = useState(false);
 	/** Template id currently running silent install (row-level spinner). */
 	const [installingId, setInstallingId] = useState<string | null>(null);
+	const [savingDefaultValue, setSavingDefaultValue] = useState<string | null>(
+		null,
+	);
 	const [adding, setAdding] = useState(false);
 	const [formName, setFormName] = useState(() => t("agent.form.defaultName"));
 	const [formCommand, setFormCommand] = useState("");
@@ -297,16 +313,32 @@ export function AgentPane({
 		await rescanAndProbe(true);
 	};
 
-	const onUseDefault = async (entry: CatalogEntry) => {
-		if (!isTauri()) return;
-		setLoading(true);
+	const defaultAgentChoices = useMemo(
+		() => buildDefaultAgentChoices(catalog),
+		[catalog],
+	);
+	const selectedDefaultValue = useMemo(
+		() => defaultAgentChoiceValue(catalog, defaultAgentChoices),
+		[catalog, defaultAgentChoices],
+	);
+
+	const onDefaultAgentChange = async (value: string) => {
+		if (!isTauri() || value === NO_DEFAULT_AGENT_CHOICE) return;
+		const choice = defaultAgentChoices.find((c) => c.value === value);
+		if (!choice) return;
+		setSavingDefaultValue(value);
 		try {
-			await ensureCatalogAgent(entry.templateId, true);
+			if (choice.source === "catalog" && choice.templateId) {
+				await ensureCatalogAgent(choice.templateId, true);
+			} else if (choice.agentId) {
+				await setDefaultAgent(choice.agentId);
+			}
 			await scanOnce();
+			await refreshPdfAskRegistry();
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
-			setLoading(false);
+			setSavingDefaultValue(null);
 		}
 	};
 
@@ -386,6 +418,44 @@ export function AgentPane({
 				<AgentCommonRows settings={settings} patch={patch} />
 			</SettingsGroup>
 
+			<p className="mb-1.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+				{t("agent.defaultAgent.section")}
+			</p>
+			<SettingsGroup>
+				<SettingsRow
+					label={t("agent.defaultAgent.label")}
+					description={t("agent.defaultAgent.description")}
+				>
+					<Select
+						value={selectedDefaultValue}
+						onValueChange={(v) => void onDefaultAgentChange(v)}
+						disabled={
+							!isTauri() ||
+							defaultAgentChoices.length === 0 ||
+							Boolean(savingDefaultValue)
+						}
+					>
+						<SelectTrigger size="sm" className="min-w-[220px] max-w-[300px]">
+							<SelectValue placeholder={t("agent.defaultAgent.empty")} />
+						</SelectTrigger>
+						<SelectContent>
+							{selectedDefaultValue === NO_DEFAULT_AGENT_CHOICE ? (
+								<SelectItem value={NO_DEFAULT_AGENT_CHOICE} disabled>
+									{defaultAgentChoices.length === 0
+										? t("agent.defaultAgent.empty")
+										: t("agent.defaultAgent.placeholder")}
+								</SelectItem>
+							) : null}
+							{defaultAgentChoices.map((choice) => (
+								<SelectItem key={choice.value} value={choice.value}>
+									<AgentChoiceLabel choice={choice} />
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+			</SettingsGroup>
+
 			{!isTauri() ? (
 				<p className="mb-3 text-muted-foreground text-xs">
 					{t("agent.desktopHint")}
@@ -423,8 +493,6 @@ export function AgentPane({
 					</div>
 				) : null}
 				{entries.map((entry) => {
-					const canUse =
-						entry.acpCommandAvailable || entry.acpStatus === "ready";
 					const installAgent = showInstallAgent(entry);
 					const installAcp = showInstallAcp(entry);
 					const updateAgent = showUpdateAgent(entry);
@@ -445,21 +513,29 @@ export function AgentPane({
 							className="flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0"
 						>
 							<div className="flex min-w-0 flex-1 items-center gap-4">
-								<span
-									className={cn(
-										"w-24 shrink-0 truncate font-medium text-[13px]",
-										// Dim label only — never the Install button (looks disabled).
-										notInstalled &&
-											!hasLifecycleAction &&
-											"text-muted-foreground opacity-50",
-										notInstalled &&
-											hasLifecycleAction &&
-											"text-muted-foreground",
-									)}
-								>
-									{entry.name}
-								</span>
+								<div className="flex w-32 shrink-0 items-center gap-2">
+									<AgentLogo template={entry.templateId} />
+									<span
+										className={cn(
+											"min-w-0 truncate font-medium text-[13px]",
+											// Dim label only — never the Install button (looks disabled).
+											notInstalled &&
+												!hasLifecycleAction &&
+												"text-muted-foreground opacity-50",
+											notInstalled &&
+												hasLifecycleAction &&
+												"text-muted-foreground",
+										)}
+									>
+										{entry.name}
+									</span>
+								</div>
 								<div className="flex min-w-0 flex-wrap items-center gap-1.5">
+									{entry.isDefault ? (
+										<StatusBadge tone="primary">
+											{t("agent.badges.default")}
+										</StatusBadge>
+									) : null}
 									{/* Layer 1: Agent host CLI */}
 									{entry.binaryAvailable ? (
 										<StatusBadge
@@ -504,7 +580,7 @@ export function AgentPane({
 							<div
 								className={cn(
 									"flex h-7 shrink-0 items-center justify-center gap-1",
-									hasLifecycleAction ? "min-w-0" : "w-20",
+									hasLifecycleAction ? "min-w-0" : "w-8",
 								)}
 							>
 								{installAgent ? (
@@ -572,26 +648,6 @@ export function AgentPane({
 										{t("agent.updateAgent")}
 									</Button>
 								) : null}
-								{entry.isDefault ? (
-									<span
-										className="flex size-7 items-center justify-center text-primary"
-										title={t("agent.badges.default")}
-										role="img"
-										aria-label={t("agent.badges.default")}
-									>
-										<Check className="size-4" aria-hidden />
-									</span>
-								) : canUse && !needsInstall ? (
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										className="h-7 shrink-0 px-2 text-xs"
-										onClick={() => void onUseDefault(entry)}
-									>
-										{t("agent.useDefault")}
-									</Button>
-								) : null}
 							</div>
 						</div>
 					);
@@ -608,9 +664,12 @@ export function AgentPane({
 							className="flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0"
 						>
 							<div className="flex min-w-0 flex-1 items-center gap-4">
-								<span className="w-24 shrink-0 truncate font-medium text-[13px]">
-									{agent.name}
-								</span>
+								<div className="flex w-32 shrink-0 items-center gap-2">
+									<AgentLogo template={agent.template} />
+									<span className="min-w-0 truncate font-medium text-[13px]">
+										{agent.name}
+									</span>
+								</div>
 								<div className="flex min-w-0 flex-wrap items-center gap-1.5">
 									{isDefault ? (
 										<StatusBadge tone="primary">
@@ -663,9 +722,12 @@ export function AgentPane({
 				{/* Custom entry row — same row style as catalog agents; + expands the form */}
 				<div className="flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0">
 					<div className="flex min-w-0 flex-1 items-center gap-4">
-						<span className="w-24 shrink-0 truncate font-medium text-[13px]">
-							{t("agent.custom")}
-						</span>
+						<div className="flex w-32 shrink-0 items-center gap-2">
+							<AgentLogo template="custom" />
+							<span className="min-w-0 truncate font-medium text-[13px]">
+								{t("agent.custom")}
+							</span>
+						</div>
 					</div>
 					<div className="flex h-7 w-20 shrink-0 items-center justify-center gap-1">
 						<Button
@@ -894,6 +956,15 @@ export function AgentPane({
 	);
 }
 
+function AgentChoiceLabel({ choice }: { choice: DefaultAgentChoice }) {
+	return (
+		<span className="flex min-w-0 items-center gap-2">
+			<AgentLogo template={choice.template} />
+			<span className="min-w-0 truncate">{choice.name}</span>
+		</span>
+	);
+}
+
 /**
  * Agent settings when the active vault is remote: discover + ACP probe run on the
  * SSH host (not this machine). App-level prefs (permission, language) still apply.
@@ -1088,18 +1159,21 @@ export function RemoteAgentPane({
 							className="flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0"
 						>
 							<div className="flex min-w-0 flex-1 items-center gap-4">
-								<span
-									className={cn(
-										"w-24 shrink-0 truncate font-medium text-[13px]",
-										notInstalled && "text-muted-foreground",
-										notInstalled && !installAcp && "opacity-50",
-									)}
-									title={
-										entry.lastProbeError || entry.description || entry.name
-									}
-								>
-									{entry.name}
-								</span>
+								<div className="flex w-32 shrink-0 items-center gap-2">
+									<AgentLogo template={entry.templateId} />
+									<span
+										className={cn(
+											"min-w-0 truncate font-medium text-[13px]",
+											notInstalled && "text-muted-foreground",
+											notInstalled && !installAcp && "opacity-50",
+										)}
+										title={
+											entry.lastProbeError || entry.description || entry.name
+										}
+									>
+										{entry.name}
+									</span>
+								</div>
 								<div className="flex min-w-0 flex-wrap items-center gap-1.5">
 									{entry.binaryAvailable ? (
 										<StatusBadge

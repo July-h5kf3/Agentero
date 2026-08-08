@@ -1,6 +1,7 @@
 import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import type {
+	AgentTemplate,
 	CatalogEntry,
 	CatalogScanResponse,
 	ProbeResult,
@@ -84,6 +85,88 @@ export function showInstallAcp(entry: CatalogEntry): boolean {
 /** Host CLI already on PATH — silent upgrade via `runToolLifecycle(..., "update")`. */
 export function showUpdateAgent(entry: CatalogEntry): boolean {
 	return Boolean(entry.canInstall) && entry.binaryAvailable;
+}
+
+export const NO_DEFAULT_AGENT_CHOICE = "__no_default_agent__";
+
+export type DefaultAgentChoice = {
+	value: string;
+	name: string;
+	template: AgentTemplate;
+	source: "catalog" | "custom";
+	templateId?: string;
+	agentId?: string;
+	isDefault: boolean;
+};
+
+function catalogTemplateFromId(templateId: string): AgentTemplate {
+	switch (templateId) {
+		case "opencode":
+		case "openclaw":
+		case "gemini":
+		case "hermes":
+		case "claude-acp":
+		case "codex-acp":
+		case "qodercli":
+		case "grok-build":
+			return templateId;
+		default:
+			return "custom";
+	}
+}
+
+export function buildDefaultAgentChoices(
+	scan: CatalogScanResponse | null | undefined,
+): DefaultAgentChoice[] {
+	if (!scan) return [];
+	const choices: DefaultAgentChoice[] = [];
+	const seenAgentIds = new Set<string>();
+
+	for (const entry of scan.entries) {
+		const needsInstall = showInstallAgent(entry) || showInstallAcp(entry);
+		const canUse =
+			(entry.acpCommandAvailable || entry.acpStatus === "ready") &&
+			!needsInstall;
+		if (!canUse) continue;
+		if (entry.registeredId) seenAgentIds.add(entry.registeredId);
+		choices.push({
+			value: `catalog:${entry.templateId}`,
+			name: entry.name,
+			template: catalogTemplateFromId(entry.templateId),
+			source: "catalog",
+			templateId: entry.templateId,
+			agentId: entry.registeredId ?? undefined,
+			isDefault: entry.isDefault,
+		});
+	}
+
+	for (const agent of scan.customAgents) {
+		if (!agent.available && agent.lastProbeOk !== true) continue;
+		if (seenAgentIds.has(agent.id)) continue;
+		seenAgentIds.add(agent.id);
+		choices.push({
+			value: `custom:${agent.id}`,
+			name: agent.name,
+			template: agent.template,
+			source: "custom",
+			agentId: agent.id,
+			isDefault: scan.defaultId === agent.id,
+		});
+	}
+
+	return choices;
+}
+
+export function defaultAgentChoiceValue(
+	scan: CatalogScanResponse | null | undefined,
+	choices: DefaultAgentChoice[],
+): string {
+	const current =
+		choices.find((choice) => choice.isDefault) ??
+		choices.find(
+			(choice) => choice.agentId && choice.agentId === scan?.defaultId,
+		);
+	return current?.value ?? NO_DEFAULT_AGENT_CHOICE;
 }
 
 export function patchCatalogProbe(

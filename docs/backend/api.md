@@ -583,7 +583,9 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 }
 ```
 
-### 3.3 arXiv 入库
+### 3.3 arXiv 入库（规划命令）
+
+> 当前未以独立 `arxiv:*` 命令实现。arXiv 输入统一走 §3.6 的 `lookup_import_batch`（含 arXiv Atom fallback）。下列命令保留为后续统一 importer 的参考契约。
 
 #### `arxiv:classify_input`
 
@@ -675,7 +677,9 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 ```
 
-### 3.4 本地 PDF 入库
+### 3.4 本地 PDF 入库（规划命令）
+
+> 当前未以独立 `pdf:*` 命令实现。本地 PDF 统一走 §3.6 的 `paper_import_local_pdf`（含 metadata 确认对话框）。下列命令保留为后续统一 importer 的参考契约。
 
 本地 PDF 通过统一 Importer 接入，与 arXiv 共用 `papers/<id>/` 输出结构。入库分两步：先解析并混合获取元数据供用户确认，再正式入库。
 
@@ -873,7 +877,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     texts: string[];                // 拆分后的原始 token 数组
     translatorBaseUrl?: string;     // 来自设置，默认 https://translator.philfan.cn
     taskId?: string;                // 前端后台任务 id；单条进度聚合在该任务下
-    concurrency?: number;           // 最大并发入库数，默认 3，范围 1–10
+    concurrency?: number;           // 最大并发入库数，默认 5，范围 1–10
   }
   ```
 
@@ -900,7 +904,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   1. 逐条解析 `texts`；未识别则加入 `errors`；Skill 来源进入 `skillCandidates`（或唯一命中时直接入 `skills`）。
   2. 按规范化 value 去重（arXiv 去 version、DOI 小写等）；batch 内重复 → `skipped.reason = 'duplicate_in_batch'`。
   3. 查 catalog：`arxiv_id` / `doi` / `isbn` / `pmid` / `id` 已存在 → `skipped.reason = 'already_in_library'`。
-  4. 其余以 `concurrency`（默认 3，范围 1–10）为上限并发调 `import_by_identifier_with_progress`，共用 `taskId`；单条失败继续，错误加入 `errors`。并发上限可在 **Settings → General → Batch import concurrency** 调整。
+  4. 其余以 `concurrency`（默认 5，范围 1–10）为上限并发调 `import_by_identifier_with_progress`，共用 `taskId`；单条失败继续，错误加入 `errors`。并发上限可在 **Settings → General → Batch import concurrency** 调整。
   5. 前端收到 `imported` / `skills` / `skillCandidates` 后刷新树 / Library / wiki，并对其中仍缺资源的 paper 逐个入下载队列，每篇一个独立的 `download` 后台任务，按并发上限排队执行。**不**自动连跑 paper-reader。若存在 `skillCandidates`，前端打开选择弹窗；用户取消时调用 `skill_discard` 清理临时 discovery。
 
 #### `skill_install`
@@ -1432,7 +1436,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 {
   id?: string; // 省略则新建
   name: string;
-  template?: 'opencode' | 'gemini' | 'claude-acp' | 'codex-acp' | 'qodercli' | 'custom';
+  template?: 'opencode' | 'openclaw' | 'gemini' | 'hermes' | 'claude-acp' | 'codex-acp' | 'qodercli' | 'grok-build' | 'custom';
   command: string;
   args?: string[];
   env?: Record<string, string>;
@@ -1481,17 +1485,17 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 > 已取代旧的 `agent_open_install_terminal`（打开系统终端、Enter 确认后再装）。远端仍用 `remote_agent_open_install_terminal`（SSH 确认安装）。
 
 - **参数**：`{ templateId: string, action: "install" | "update" }`
-  - 支持的 `templateId`：`opencode` · `claude-acp` · `codex-acp` · `gemini` · `grok-build`（不含 `qodercli` / `custom`）
+  - 支持的 `templateId`：`opencode` · `openclaw` · `claude-acp` · `codex-acp` · `gemini` · `hermes` · `grok-build`（不含 `qodercli` / `custom`）
 - **返回**：`{ ok: true; data: null }` 或错误（stderr/stdout 末尾若干行）
 - **行为**
-  - `install`：未装 host 时走官方 installer（POSIX curl→临时文件再 bash，非 `curl|bash`）或 npm；Claude/Codex 在 host 已存在但 ACP 缺失时只装适配器；两者都缺则 host && adapter。
-  - `update`：优先 `tool update` / 官方链，失败再 npm；Codex 固定 npm（避免假成功）；Windows 上 OpenCode 不用交互式 `upgrade`。
+  - `install`：未装 host 时走官方 installer（POSIX curl→临时文件再 bash，非 `curl|bash`）或 npm；Claude/Codex 在 host 已存在但 ACP 缺失时只装适配器；两者都缺则 host && adapter；Hermes 走官方 installer；OpenClaw 走 npm。
+  - `update`：优先 `tool update` / 官方链，失败再 npm；Codex 固定 npm（避免假成功）；OpenClaw 使用 `openclaw update --yes` 后 fallback npm；Windows 上 OpenCode 不用交互式 `upgrade`。
   - macOS/Linux：注入 login shell 的 `PATH`（GUI 窄 PATH）。
   - Windows：写临时 `.bat` + `CREATE_NO_WINDOW` + `call` 前缀。
   - 在 `spawn_blocking` 中执行，避免卡住 async runtime。
 - **实现**：`src-tauri/src/features/agent/tool_lifecycle.rs`
 - **Catalog 两层检测**（`agent_scan_catalog` / 远端 scan）：
-  - **Agent**：`binaryAvailable`（`detect_command`，如 `claude` / `codex` / `opencode`）
+  - **Agent**：`binaryAvailable`（`detect_command`，如 `claude` / `codex` / `opencode` / `openclaw` / `hermes`）
   - **ACP**：`acpCommandAvailable`（`command`，如 `claude-agent-acp`；原生 ACP 时与 Agent 同二进制）
   - `adapterDistinct`：host 与 ACP 入口不同
   - `canInstall`：本机支持静默安装
@@ -2132,7 +2136,7 @@ UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，
 | V0.3 | ACP Client + BYOA：会话与流式事件；`permissionMode`（`restricted`/`ask`/`auto`）+ `agent_respond_permission` / `agent:permission-request`；面板 workflow（`summary`/`qa`/`related_work`）；`paper_set_is_read` + paper-reader（可选自动/手动）。 |
 | V0.4 | `graph:*`（双链 / 反链 / 图谱）；前端文件变更防抖 `graph_rebuild`。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
-| ≤0.2.1 | 全局 Dockview 等已发布能力见功能文档；Host 侧一般无需新 paper API。见 [`../frontend/workspace.md`](../frontend/workspace.md)。 |
+| ≤0.5.0 | 全局 Dockview、视觉批注、版面分析、公式解析卡、阅读热力条、Zotero collection tree 迁移、Agent 自动安装/升级、自由模型选择等已发布能力见功能文档；Host 侧一般无需新 paper API。见 [`../frontend/workspace.md`](../frontend/workspace.md)。 |
 | 0.6 | 引用关系：`citation:*` 或 catalog 扩展表（cites / cited_by 缓存）、远程元数据补全、文内引用解析；与 `graph:*` 双链 API 并存。 |
 | V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`paper-import.md`](paper-import.md)）。 |
 

@@ -5,7 +5,13 @@ use std::collections::HashMap;
 #[serde(rename_all = "kebab-case")]
 pub enum AgentTemplate {
     Opencode,
+    /// OpenClaw native ACP (`openclaw acp`).
+    /// Docs: https://docs.openclaw.ai/cli/acp
+    OpenClaw,
     Gemini,
+    /// Hermes Agent native ACP (`hermes acp`).
+    /// Docs: https://github.com/NousResearch/hermes-agent
+    Hermes,
     ClaudeAcp,
     CodexAcp,
     /// Qoder CLI native ACP (`qodercli --acp`).
@@ -21,7 +27,9 @@ impl AgentTemplate {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Opencode => "opencode",
+            Self::OpenClaw => "openclaw",
             Self::Gemini => "gemini",
+            Self::Hermes => "hermes",
             Self::ClaudeAcp => "claude-acp",
             Self::CodexAcp => "codex-acp",
             Self::QoderCli => "qodercli",

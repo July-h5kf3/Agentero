@@ -84,12 +84,12 @@ nav:
       - 标注惰性定位: development/mark-locate-lazy.md
       - 标注即时定位: development/mark-locate-eager.md
       - 广场 Plaza: development/plaza.md
-      - 标题双链调研: development/wikilink-heading-reference-stability.md
-      - 发布流程: development/release.md
       - Bug 汇总: development/bug.md
 
   - 测试:
       - 概览: test/index.md
+      - 发布流程: test/release.md
+      - iOS TestFlight: test/ios-testflight.md
       - 发布前 Checklist: test/release-checklist.md
 
   - Bug 修复记录:
@@ -97,7 +97,9 @@ nav:
       - ACP 会话恢复 ID 错误: bug_fix/acp-session-resume-id.md
       - 输入法组字 Enter 误发送: bug_fix/ime-composition-enter-submit.md
       - 普通编辑触发全部 Wiki 嵌入闪烁: bug_fix/wiki-embed-unrelated-refresh.md
+      - 标题双链稳定性: bug_fix/wikilink-heading-reference-stability.md
       - 拖动 Dockview 分隔条时 PDF 卡顿: bug_fix/dockview-sash-pdf-resize-jank.md
+      - PDF 切换视觉截图与后台 ONNX: bug_fix/pdf-switch-visual-crop-layout-onnx.md
       - 远端 ACP PATH / SSH: bug_fix/remote-acp-path-ssh.md
       - 远程 Vault 文件树懒加载: bug_fix/remote-vault-tree-lazy.md
       - macOS 签名与公证: bug_fix/macos-signing.md

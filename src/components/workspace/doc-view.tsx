@@ -63,8 +63,6 @@ export type DocViewEditorProps = {
 
 /** PDF viewer props. */
 export type DocViewPdfProps = {
-	zen: boolean;
-	onToggleZen: () => void;
 	onOpenAnnotations: () => void;
 	onOpenSettings: () => void;
 	registerHandle: (tabId: string, handle: PdfViewerHandle | null) => void;
@@ -225,9 +223,7 @@ export const DocView = memo(function DocView({
 							tab.paperMeta?.path ?? paperRelFromNotes(tab.notesPath, vaultPath)
 						}
 						vaultPath={vaultPath}
-						zen={pdf.zen}
 						isActive={active}
-						onToggleZen={pdf.onToggleZen}
 						onOpenAnnotations={pdf.onOpenAnnotations}
 						onOpenSettings={pdf.onOpenSettings}
 						className="h-full w-full"

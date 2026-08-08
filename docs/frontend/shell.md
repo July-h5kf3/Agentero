@@ -11,7 +11,7 @@
 - 左右栏折叠：`⌥⌘S` / `⌘L`（不重叠）。
 - 标题栏右侧：布局菜单、右栏 tab 切换；有新版本可更新时显示更新指示器按钮（见 [settings.md](settings.md) 「应用更新」）。
 
-实现：`src/components/shell/`、`src/lib/shell/ui-store.ts`、`src/lib/shell/leaf.ts`、`src/lib/shell/feature-window.ts`、`hooks/use-zen-layout.ts`。
+实现：`src/components/shell/`、`src/lib/shell/ui-store.ts`、`src/lib/shell/leaf.ts`、`src/lib/shell/feature-window.ts`、`hooks/use-shell-layout.ts`。
 
 ## 欢迎页与多窗口
 
@@ -58,6 +58,16 @@
 | `⌥⌘R` | Finder 显示 |
 | `⌥⌘T` | 终端打开 |
 | `⌘⌫` | 移入回收站 |
+| `⌘+` / `⌘=` | 放大全局 UI |
+| `⌘-` | 缩小全局 UI |
+| `⌘0` | 重置全局 UI 缩放 |
+| `⌘1` | 聚焦左侧文件树 |
+| `⌘2` | 聚焦中间编辑器 |
+| `⌘3` | 聚焦右侧笔记/Agent 面板 |
+| `⌘←` | 折叠当前选中文件夹 |
+| `⇧⌘←` | 折叠树到默认状态 |
+| `⌥⌘S` | 开关左侧边栏（`⌘B` 别名） |
+| `⌘L` | 开关右侧 Agent/Backlinks 面板 |
 
 完整快捷键绑定：`src/lib/shell/shortcuts.ts`。文案 i18n 见 [settings.md](settings.md)。
 

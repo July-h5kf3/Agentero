@@ -78,8 +78,10 @@ mod acp_live {
         let cats = catalog_templates();
         let ids: Vec<_> = cats.iter().map(|c| c.id.as_str()).collect();
         assert!(ids.contains(&"opencode"));
+        assert!(ids.contains(&"openclaw"));
         assert!(ids.contains(&"claude-acp"));
         assert!(ids.contains(&"codex-acp"));
+        assert!(ids.contains(&"hermes"));
         assert!(ids.contains(&"gemini"));
         assert!(ids.contains(&"qodercli"));
         assert!(ids.contains(&"grok-build"));
@@ -96,6 +98,26 @@ mod acp_live {
         assert_eq!(codex.command, "codex-acp");
         assert_eq!(codex.args, Vec::<String>::new());
         assert_eq!(codex.detect_command.as_deref(), Some("codex"));
+    }
+
+    #[test]
+    fn openclaw_and_hermes_templates_use_native_acp() {
+        let cats = catalog_templates();
+        let openclaw = cats
+            .iter()
+            .find(|entry| entry.id == "openclaw")
+            .expect("OpenClaw template");
+        assert_eq!(openclaw.command, "openclaw");
+        assert_eq!(openclaw.args, vec!["acp".to_string()]);
+        assert_eq!(openclaw.detect_command.as_deref(), Some("openclaw"));
+
+        let hermes = cats
+            .iter()
+            .find(|entry| entry.id == "hermes")
+            .expect("Hermes template");
+        assert_eq!(hermes.command, "hermes");
+        assert_eq!(hermes.args, vec!["acp".to_string()]);
+        assert_eq!(hermes.detect_command.as_deref(), Some("hermes"));
     }
 
     #[test]
@@ -153,8 +175,16 @@ mod acp_live {
             assert!(by_id("opencode").binary_available);
             assert_ne!(by_id("opencode").acp_status, CatalogAcpStatus::Missing);
         }
+        if resolve_command("openclaw").is_some() {
+            assert!(by_id("openclaw").binary_available);
+            assert_ne!(by_id("openclaw").acp_status, CatalogAcpStatus::Missing);
+        }
         if resolve_command("claude").is_some() {
             assert!(by_id("claude-acp").binary_available);
+        }
+        if resolve_command("hermes").is_some() {
+            assert!(by_id("hermes").binary_available);
+            assert_ne!(by_id("hermes").acp_status, CatalogAcpStatus::Missing);
         }
         if resolve_command("qodercli").is_some() {
             assert!(by_id("qodercli").binary_available);
