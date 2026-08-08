@@ -1,11 +1,5 @@
 import { getVersion } from "@tauri-apps/api/app";
-import {
-	Download,
-	LoaderCircle,
-	RefreshCw,
-	Terminal,
-	Trash2,
-} from "lucide-react";
+import { Download, LoaderCircle, RefreshCw, Terminal } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -77,8 +71,9 @@ export function AboutPane() {
 	const onInstallCli = () => {
 		setCliBusy(true);
 		void installCliCommand()
-			.then((res) => {
+			.then(async (res) => {
 				setCli(res.status);
+				await refreshCli();
 				notifySuccess(t("about.cli.installSuccess"));
 			})
 			.catch(() => notifyError(t("about.cli.installFailed")))
@@ -87,8 +82,9 @@ export function AboutPane() {
 	const onUninstallCli = () => {
 		setCliBusy(true);
 		void uninstallCliCommand()
-			.then((res) => {
+			.then(async (res) => {
 				setCli(res.status);
+				await refreshCli();
 				notifySuccess(t("about.cli.uninstallSuccess"));
 			})
 			.catch(() => notifyError(t("about.cli.uninstallFailed")))
@@ -133,29 +129,10 @@ export function AboutPane() {
 		if (!cli) {
 			return cliLoading ? "…" : t("about.cli.statusFailed");
 		}
-		// Prefer structured i18n over English Host `message` strings.
-		const parts: string[] = [];
-		if (cli.bundledVersion) {
-			parts.push(t("about.cli.version", { version: cli.bundledVersion }));
-		} else if (!cli.bundledPath) {
-			parts.push(t("about.cli.notBundled"));
-		} else {
-			parts.push(t("about.cli.versionUnknown"));
+		if (!cli.bundledPath) {
+			return t("about.cli.notBundled");
 		}
-		if (cli.installed && cli.installPath) {
-			parts.push(t("about.cli.installed", { path: cli.installPath }));
-			if (!cli.shimCurrent) {
-				parts.push(t("about.cli.stale"));
-			}
-		} else {
-			parts.push(t("about.cli.notInstalled"));
-		}
-		if (cli.installed && !cli.preferredBinOnPath) {
-			parts.push(t("about.cli.pathHint", { dir: cli.preferredBinDir }));
-		} else if (!cli.installed && cli.bundledPath) {
-			parts.push(t("about.cli.installHint", { dir: cli.preferredBinDir }));
-		}
-		return parts.join(" · ");
+		return t("about.cli.description");
 	})();
 
 	const canInstallCli = Boolean(cli?.bundledPath) && !cliBusy;
@@ -211,54 +188,45 @@ export function AboutPane() {
 			{isTauri() ? (
 				<SettingsGroup>
 					<SettingsRow
-						label={t("about.cli.label")}
+						label={
+							<span className="inline-flex items-center gap-1.5">
+								<Terminal
+									className="size-3.5 shrink-0 text-muted-foreground"
+									aria-hidden
+								/>
+								{t("about.cli.label")}
+							</span>
+						}
 						description={cliDescription}
 					>
 						<div className="flex flex-wrap items-center justify-end gap-2">
-							<Button
-								variant="outline"
-								size="sm"
-								disabled={cliLoading || cliBusy}
-								onClick={() => void refreshCli()}
-								aria-label={t("about.cli.refresh")}
-							>
-								{cliLoading ? (
-									<LoaderCircle
-										data-icon="inline-start"
-										className="animate-spin"
-									/>
-								) : (
-									<RefreshCw data-icon="inline-start" />
-								)}
-								{t("about.cli.refresh")}
-							</Button>
 							{cli?.installed ? (
-								<>
-									<Button
-										size="sm"
-										disabled={!canInstallCli}
-										onClick={onInstallCli}
-									>
-										<Terminal data-icon="inline-start" />
-										{t("about.cli.reinstall")}
-									</Button>
-									<Button
-										variant="outline"
-										size="sm"
-										disabled={cliBusy}
-										onClick={onUninstallCli}
-									>
-										<Trash2 data-icon="inline-start" />
-										{t("about.cli.uninstall")}
-									</Button>
-								</>
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={cliBusy || cliLoading}
+									onClick={onUninstallCli}
+								>
+									{cliBusy ? (
+										<LoaderCircle
+											data-icon="inline-start"
+											className="animate-spin"
+										/>
+									) : null}
+									{t("about.cli.uninstall")}
+								</Button>
 							) : (
 								<Button
 									size="sm"
-									disabled={!canInstallCli}
+									disabled={!canInstallCli || cliLoading}
 									onClick={onInstallCli}
 								>
-									<Terminal data-icon="inline-start" />
+									{cliBusy ? (
+										<LoaderCircle
+											data-icon="inline-start"
+											className="animate-spin"
+										/>
+									) : null}
 									{t("about.cli.install")}
 								</Button>
 							)}
