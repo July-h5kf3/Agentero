@@ -131,11 +131,14 @@
 			"label": "Agent 代理"
 		},
 		"userAgent": {
+			"section": "中转站兼容",
+			"sectionHint": "可选。启动 Agent 时注入 User-Agent，用于部分中转的客户端校验。",
 			"label": "User-Agent",
-			"description": "可选。注入到 Codex ACP 的 model_providers.http_headers（用于只放行 Codex 类客户端的中转站）。示例对齐 new-api：codex-cli/<version>。",
 			"placeholder": "codex-cli/0.50.0",
-			"providerIdsLabel": "Provider id",
-			"providerIdsDescription": "可选。逗号分隔的 Codex model_providers 键名。留空则自动（CODEX_CONFIG 已有项、MODEL_PROVIDER，或 openai）。",
+			"presets": "预设",
+			"presetsAria": "User-Agent 预设",
+			"presetOff": "关闭（使用 Agent 默认 UA）",
+			"providerIdsLabel": "Codex Provider id",
 			"providerIdsPlaceholder": "my_proxy, openai"
 		},
 		"desktopOnly": "Agent 注册表需要桌面应用。",

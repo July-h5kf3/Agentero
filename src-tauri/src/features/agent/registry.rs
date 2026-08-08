@@ -590,6 +590,8 @@ fn apply_proxy_to_agent(agent: &mut AgentDescriptor, proxy_enabled: bool, proxy_
 
 /// Env key set on every ACP child when a custom User-Agent is configured.
 pub const AGENTERO_USER_AGENT_ENV: &str = "AGENTERO_USER_AGENT";
+/// Claude Code / Claude ACP recognizes this multi-line header map (cindy/cc pattern).
+pub const ANTHROPIC_CUSTOM_HEADERS_ENV: &str = "ANTHROPIC_CUSTOM_HEADERS";
 
 fn apply_user_agent_settings(state: &mut AgentRegistryState) {
     let ua = state.user_agent.trim().to_string();
@@ -612,15 +614,50 @@ fn apply_user_agent_to_agent(agent: &mut AgentDescriptor, user_agent: &str, prov
         .env
         .insert(AGENTERO_USER_AGENT_ENV.to_string(), ua.to_string());
 
-    // Codex ACP merges CODEX_CONFIG into the session config; model_providers.*.http_headers
-    // is the supported place for custom User-Agent (new-api affinity checks codex-cli/*).
-    // Avoid unknown marker keys — Codex may reject them.
-    if matches!(
-        agent.template,
-        AgentTemplate::CodexAcp | AgentTemplate::Custom
-    ) {
-        merge_codex_config_user_agent(&mut agent.env, ua, provider_ids);
+    match agent.template {
+        // Codex ACP merges CODEX_CONFIG into session config; model_providers.*.http_headers
+        // is the supported place for custom User-Agent (new-api affinity: codex-cli/*).
+        AgentTemplate::CodexAcp | AgentTemplate::Custom => {
+            merge_codex_config_user_agent(&mut agent.env, ua, provider_ids);
+        }
+        // Claude Code ACP / adapter often honors ANTHROPIC_CUSTOM_HEADERS (newline-separated
+        // `Name: value` lines). Inject User-Agent there when present.
+        AgentTemplate::ClaudeAcp => {
+            merge_anthropic_custom_headers_user_agent(&mut agent.env, ua);
+        }
+        // OpenCode / Gemini / Grok / Qoder: only AGENTERO_USER_AGENT today (agent may ignore it).
+        AgentTemplate::Opencode
+        | AgentTemplate::Gemini
+        | AgentTemplate::QoderCli
+        | AgentTemplate::GrokBuild => {}
     }
+}
+
+/// Upsert `User-Agent: …` into `ANTHROPIC_CUSTOM_HEADERS` (newline-separated headers).
+pub fn merge_anthropic_custom_headers_user_agent(
+    env: &mut HashMap<String, String>,
+    user_agent: &str,
+) {
+    let ua = user_agent.trim();
+    if ua.is_empty() {
+        return;
+    }
+    let existing = env
+        .get(ANTHROPIC_CUSTOM_HEADERS_ENV)
+        .map(|s| s.as_str())
+        .unwrap_or("");
+    let mut lines: Vec<String> = existing
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .filter(|l| {
+            let name = l.split_once(':').map(|(n, _)| n.trim()).unwrap_or("");
+            !name.eq_ignore_ascii_case("user-agent")
+        })
+        .map(str::to_string)
+        .collect();
+    lines.push(format!("User-Agent: {ua}"));
+    env.insert(ANTHROPIC_CUSTOM_HEADERS_ENV.to_string(), lines.join("\n"));
 }
 
 /// Merge User-Agent into `CODEX_CONFIG.model_providers.<id>.http_headers`.
@@ -716,8 +753,9 @@ fn refresh_availability(state: &mut AgentRegistryState) {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_user_agent_to_agent, merge_codex_config_user_agent, migrate_legacy_codex_agents,
-        AGENTERO_USER_AGENT_ENV,
+        apply_user_agent_to_agent, merge_anthropic_custom_headers_user_agent,
+        merge_codex_config_user_agent, migrate_legacy_codex_agents, AGENTERO_USER_AGENT_ENV,
+        ANTHROPIC_CUSTOM_HEADERS_ENV,
     };
     use crate::features::agent::models::{AgentDescriptor, AgentRegistryState, AgentTemplate};
     use std::collections::HashMap;
@@ -819,5 +857,49 @@ mod tests {
         // Empty UA only clears our env key; snapshot always restarts from disk.
         apply_user_agent_to_agent(&mut agent, "", "");
         assert!(!agent.env.contains_key(AGENTERO_USER_AGENT_ENV));
+    }
+
+    #[test]
+    fn merge_anthropic_headers_upserts_user_agent_line() {
+        let mut env = HashMap::new();
+        env.insert(
+            ANTHROPIC_CUSTOM_HEADERS_ENV.to_string(),
+            "X-Tenant: acme\nUser-Agent: old-cli/0.1".to_string(),
+        );
+        merge_anthropic_custom_headers_user_agent(&mut env, "claude-cli/2.1.161");
+        let raw = env.get(ANTHROPIC_CUSTOM_HEADERS_ENV).expect("headers");
+        assert!(raw.contains("X-Tenant: acme"));
+        assert!(raw.contains("User-Agent: claude-cli/2.1.161"));
+        assert!(!raw.contains("old-cli/0.1"));
+    }
+
+    #[test]
+    fn apply_user_agent_sets_anthropic_headers_for_claude() {
+        let mut agent = AgentDescriptor {
+            id: "cc".into(),
+            name: "Claude".into(),
+            template: AgentTemplate::ClaudeAcp,
+            command: "claude-agent-acp".into(),
+            args: vec![],
+            env: HashMap::new(),
+            available: true,
+            last_error: None,
+            last_probe_ok: None,
+            last_probe_agent_name: None,
+            last_probe_error: None,
+            last_probed_at: None,
+        };
+        apply_user_agent_to_agent(&mut agent, "claude-code/1.0.0", "");
+        assert_eq!(
+            agent.env.get(AGENTERO_USER_AGENT_ENV).map(String::as_str),
+            Some("claude-code/1.0.0")
+        );
+        assert_eq!(
+            agent
+                .env
+                .get(ANTHROPIC_CUSTOM_HEADERS_ENV)
+                .map(String::as_str),
+            Some("User-Agent: claude-code/1.0.0")
+        );
     }
 }

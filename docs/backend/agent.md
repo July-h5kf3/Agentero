@@ -81,17 +81,29 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 
 ## User-Agent（中转站亲和）
 
-部分中转站（如 new-api 的 Codex 通道）用 `User-Agent` 做客户端亲和，期望 `codex-cli/<version>` 一类串。
+部分中转站用 `User-Agent` 做客户端亲和（new-api Codex 通道常见 `codex-cli/<version>`；Claude 侧常见 `claude-cli/*` / `claude-code/*`）。
 
-- 设置 → Agent → **User-Agent**（可选）+ **Provider id**（可选，逗号分隔）。
-- Host 在 registry snapshot 时注入子进程 env：
-  - `AGENTERO_USER_AGENT=<value>`
-  - 对 `codex-acp` / `custom`：合并 `CODEX_CONFIG.model_providers.<id>.http_headers.User-Agent`（codex-acp 将 `CODEX_CONFIG` 并入 session config）
-- Provider 目标：显式列表；否则 `CODEX_CONFIG` 已有 keys、`MODEL_PROVIDER`、或回退 `openai`。
-- 远程 SSH spawn 会转发 `AGENTERO_USER_AGENT` / `CODEX_CONFIG` / `MODEL_PROVIDER`（与 proxy 同源）。
+Agentero 是 ACP **Client**：模型 HTTP **不**经 Host 转发，因此只能在 **spawn ACP 子进程时** 注入 env/config（与 bb 等 Host 一致），不能像 cc-switch 本地代理那样中途改头。
+
+- 设置 → Agent → **User-Agent**（预设下拉 + 可手填）+ **Codex Provider id**（可选）。
+- Host 在 registry snapshot 时按模板注入：
+  - 所有模板：`AGENTERO_USER_AGENT=<value>`
+  - `codex-acp` / `custom`：`CODEX_CONFIG.model_providers.<id>.http_headers.User-Agent`
+  - `claude-acp`：`ANTHROPIC_CUSTOM_HEADERS` 中 upsert `User-Agent: …` 行
+- Codex Provider 目标：显式列表；否则 `CODEX_CONFIG` 已有 keys、`MODEL_PROVIDER`、或回退 `openai`。
+- 远程 SSH 转发：`AGENTERO_USER_AGENT` / `CODEX_CONFIG` / `MODEL_PROVIDER` / `ANTHROPIC_CUSTOM_HEADERS`。
 - 命令：`agent_set_user_agent`；`agent_scan_catalog` 回传当前值。
 
-说明：最终是否生效取决于底层 Agent 是否把 `http_headers` 带到出站 HTTP；配置了自定义 `model_providers` 的中转最有效。
+说明：是否生效取决于底层 Agent 是否认上述 env/config；OpenCode/Gemini/Grok 目前仅带 `AGENTERO_USER_AGENT`（多数忽略）。
+
+**new-api 侧（源码）在做什么：**
+
+- 读的是 **客户端请求** 的 `User-Agent`（`c.Request.UserAgent()`），不是 model id。
+- 通道亲和规则可选 `user_agent_include`：子串匹配（大小写不敏感）；**默认规则该项为 nil = 不按 UA 过滤**。
+- Codex 默认亲和规则还匹配路径 `/v1/responses`、模型 `^gpt-.*$`，并把客户端的 `User-Agent`、`Originator`、`Session_id` 等 **透传** 到上游。
+- new-api **自己** 调上游 Codex 模型列表时会设 `User-Agent: codex-cli/<version>`（`service/codex_models.go`）——那是网关出站，不是你的客户端。
+
+因此：若限制来自「亲和规则要求 UA 含 `codex-cli`」或上游看透传 UA，我们的 spawn 注入 **有机会** 解决；若还校验其它 Codex 专有头/路径/鉴权形态，仅改 UA **不够**。
 
 ## 注册表（非模型 BYOK）
 

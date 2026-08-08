@@ -100,10 +100,11 @@ pub const REMOTE_PROXY_ENV_KEYS: &[&str] = &[
     "http_proxy",
     "https_proxy",
     "all_proxy",
-    // Custom User-Agent for Codex / mid-station affinity (#207).
+    // Custom User-Agent for Codex/Claude / mid-station affinity (#207).
     "AGENTERO_USER_AGENT",
     "CODEX_CONFIG",
     "MODEL_PROVIDER",
+    "ANTHROPIC_CUSTOM_HEADERS",
 ];
 
 /// Collect proxy / Codex UA env pairs from an agent descriptor (after registry apply).
