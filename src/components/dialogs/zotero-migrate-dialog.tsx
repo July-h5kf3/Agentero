@@ -201,16 +201,59 @@ export function ZoteroMigrateDialog({
 		};
 	}, [open, dir]);
 
+	// Collection helpers: depth + descendant-inclusive item counts, so picking
+	// a parent folder clearly means "this folder and everything inside it".
+	const collectionInfo = useMemo(() => {
+		if (!scan) return null;
+		const idToPath = new Map<number, string>();
+		for (const c of scan.collections) idToPath.set(c.id, c.path);
+		const inclusive = new Map<number, number>();
+		for (const c of scan.collections) {
+			let n = 0;
+			if (c.id === 0) {
+				n = scan.items.filter((it) => it.collections.length === 0).length;
+			} else {
+				const prefix = `${c.path}/`;
+				for (const it of scan.items) {
+					if (
+						it.collections.some((cid) => {
+							const p = idToPath.get(cid);
+							return p !== undefined && (p === c.path || p.startsWith(prefix));
+						})
+					) {
+						n++;
+					}
+				}
+			}
+			inclusive.set(c.id, n);
+		}
+		return { idToPath, inclusive };
+	}, [scan]);
+
 	const filtered = useMemo(() => {
 		if (!scan) return [];
 		const q = query.trim().toLowerCase();
+		const selectedPath =
+			collectionInfo && typeof collFilter === "number" && collFilter !== 0
+				? collectionInfo.idToPath.get(collFilter)
+				: undefined;
+		const prefix = selectedPath !== undefined ? `${selectedPath}/` : undefined;
 		return scan.items.filter((it) => {
 			if (q && !it.title.toLowerCase().includes(q)) return false;
 			if (collFilter === "all") return true;
 			if (collFilter === 0) return it.collections.length === 0;
+			// A folder selection includes every descendant folder's papers.
+			if (selectedPath !== undefined && prefix !== undefined) {
+				return it.collections.some((cid) => {
+					const p = collectionInfo?.idToPath.get(cid);
+					return (
+						p !== undefined && (p === selectedPath || p.startsWith(prefix))
+					);
+				});
+			}
 			return it.collections.includes(collFilter);
 		});
-	}, [scan, query, collFilter]);
+	}, [scan, query, collFilter, collectionInfo]);
 
 	const allFilteredSelected =
 		filtered.length > 0 && filtered.every((it) => selectedItems.has(it.id));
@@ -483,24 +526,44 @@ export function ZoteroMigrateDialog({
 													}
 													disabled={busy}
 												>
-													<SelectTrigger className="w-48 shrink-0">
+													<SelectTrigger className="w-56 shrink-0">
 														<SelectValue />
 													</SelectTrigger>
 													<SelectContent>
 														<SelectItem value="all">
 															{t("sidebar:zoteroMigrate.allFolders")}
 														</SelectItem>
-														{scan.collections.map((c) => (
-															<SelectItem key={c.id} value={String(c.id)}>
-																{(c.path ||
-																	t("sidebar:zoteroMigrate.unfiled")) +
-																	` (${c.itemCount})`}
-															</SelectItem>
-														))}
+														{scan.collections.map((c) => {
+															const depth = c.path
+																? c.path.split("/").length - 1
+																: 0;
+															const leaf = c.path
+																? (c.path.split("/").pop() ?? c.path)
+																: t("sidebar:zoteroMigrate.unfiled");
+															const count =
+																collectionInfo?.inclusive.get(c.id) ??
+																c.itemCount;
+															return (
+																<SelectItem key={c.id} value={String(c.id)}>
+																	<span
+																		className="inline-block"
+																		style={{ paddingLeft: `${depth * 12}px` }}
+																	>
+																		{depth > 0 ? "└ " : ""}
+																		{leaf} ({count})
+																	</span>
+																</SelectItem>
+															);
+														})}
 													</SelectContent>
 												</Select>
 											) : null}
 										</div>
+										{collFilter !== "all" ? (
+											<p className="text-muted-foreground text-xs">
+												{t("sidebar:zoteroMigrate.folderFilterHint")}
+											</p>
+										) : null}
 										<ScrollArea className="h-56 rounded-md border">
 											<div className="space-y-0.5 p-1.5">
 												{filtered.map((it) => (

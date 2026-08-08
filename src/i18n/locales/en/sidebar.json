@@ -136,6 +136,7 @@
 		"detecting": "Looking for your Zotero library…",
 		"selectAll": "All",
 		"selectNone": "None",
+		"folderFilterHint": "Selecting a folder includes papers in all of its subfolders.",
 		"unfiled": "(Unfiled)",
 		"papers": "Papers to import",
 		"searchPlaceholder": "Search titles…",

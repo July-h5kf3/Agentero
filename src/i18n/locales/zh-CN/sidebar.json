@@ -136,6 +136,7 @@
 		"detecting": "正在查找你的 Zotero 文库…",
 		"selectAll": "全选",
 		"selectNone": "清空",
+		"folderFilterHint": "选择文件夹会包含其所有子文件夹中的文献。",
 		"unfiled": "(未分类)",
 		"papers": "导入哪些论文",
 		"searchPlaceholder": "搜索标题…",
