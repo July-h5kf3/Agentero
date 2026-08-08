@@ -262,8 +262,14 @@ fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> {
     if let Some(parent) = shim.parent() {
         fs::create_dir_all(parent)?;
     }
-    // Remove stale shim first.
+    // Never clobber a user-owned binary/symlink that we did not create.
     if shim.exists() {
+        if !is_agentero_shim(shim) && !shim_points_to(shim, Some(bundled)) {
+            return Err(AppError::message(format!(
+                "refusing to overwrite {}: not an Agentero-managed CLI entry",
+                shim.display()
+            )));
+        }
         fs::remove_file(shim)?;
     }
     #[cfg(unix)]
@@ -386,4 +392,46 @@ pub fn user_bin_candidates() -> Vec<PathBuf> {
         out.push(PathBuf::from(abs));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_dir(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("agentero-cli-install-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn install_refuses_non_managed_file() {
+        let dir = test_dir("refuse");
+        let foreign = dir.join(SHIM_NAME);
+        let bundled = dir.join(BUNDLED_CLI_NAME);
+        fs::write(&foreign, b"not-agentero").unwrap();
+        fs::write(&bundled, b"bundled").unwrap();
+        let err = install_shim(&bundled, &foreign).unwrap_err();
+        assert!(err.to_string().contains("refusing to overwrite"));
+        assert_eq!(fs::read(&foreign).unwrap(), b"not-agentero");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_replaces_managed_symlink() {
+        let dir = test_dir("replace");
+        let bundled_old = dir.join("agentero-cli-old");
+        let bundled_new = dir.join(BUNDLED_CLI_NAME);
+        let shim = dir.join(SHIM_NAME);
+        fs::write(&bundled_old, b"old").unwrap();
+        fs::write(&bundled_new, b"new").unwrap();
+        std::os::unix::fs::symlink(&bundled_old, &shim).unwrap();
+        install_shim(&bundled_new, &shim).unwrap();
+        let target = fs::read_link(&shim).unwrap();
+        assert_eq!(target, bundled_new);
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

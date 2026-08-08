@@ -75,11 +75,21 @@ pub fn parse_open_url(raw: &str) -> Result<PathBuf, AppError> {
     Ok(PathBuf::from(path))
 }
 
-/// Validate local directory, allow fs scope, store pending, emit + focus window.
-pub fn handle_open_path<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<String, AppError> {
+/// Validate a local absolute directory for vault open (no AppHandle required).
+///
+/// Deep-link / second-instance paths must be absolute so resolution does not
+/// depend on the App process CWD. Relative paths are rejected even if they
+/// would resolve under the current working directory.
+pub fn validate_open_dir(path: &Path) -> Result<PathBuf, AppError> {
     let trimmed = path.to_string_lossy();
     if trimmed.trim().is_empty() {
         return Err(AppError::message("path is required"));
+    }
+    if !path.is_absolute() {
+        return Err(AppError::message(format!(
+            "path must be absolute: {}",
+            path.display()
+        )));
     }
     if !path.exists() {
         return Err(AppError::message(format!(
@@ -93,9 +103,13 @@ pub fn handle_open_path<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<S
             path.display()
         )));
     }
-    let canonical = path
-        .canonicalize()
-        .map_err(|e| AppError::message(format!("failed to resolve path: {e}")))?;
+    path.canonicalize()
+        .map_err(|e| AppError::message(format!("failed to resolve path: {e}")))
+}
+
+/// Validate local directory, allow fs scope, store pending, emit + focus window.
+pub fn handle_open_path<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<String, AppError> {
+    let canonical = validate_open_dir(path)?;
     let path_str = canonical.to_string_lossy().to_string();
 
     if let Err(e) = app.fs_scope().allow_directory(&canonical, true) {
@@ -196,10 +210,25 @@ pub fn vault_open_take_pending(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+
+    fn test_dir(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("agentero-open-req-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
 
     #[test]
     fn parses_open_query() {
         let p = parse_open_url("agentero://open?path=%2Ftmp%2Fresearch").unwrap();
+        assert_eq!(p, PathBuf::from("/tmp/research"));
+    }
+
+    #[test]
+    fn parses_open_path_form() {
+        let p = parse_open_url("agentero:open?path=%2Ftmp%2Fresearch").unwrap();
         assert_eq!(p, PathBuf::from("/tmp/research"));
     }
 
@@ -211,5 +240,30 @@ mod tests {
     #[test]
     fn rejects_other_scheme() {
         assert!(parse_open_url("https://example.com/open?path=/tmp").is_err());
+    }
+
+    #[test]
+    fn rejects_relative_open_dir() {
+        let err = validate_open_dir(Path::new("relative/vault")).unwrap_err();
+        assert!(err.to_string().contains("absolute"));
+    }
+
+    #[test]
+    fn accepts_absolute_existing_dir() {
+        let dir = test_dir("ok");
+        let canonical = validate_open_dir(&dir).unwrap();
+        assert!(canonical.is_absolute());
+        assert!(canonical.is_dir());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rejects_absolute_file() {
+        let dir = test_dir("file");
+        let file = dir.join("note.md");
+        fs::write(&file, "x").unwrap();
+        let err = validate_open_dir(&file).unwrap_err();
+        assert!(err.to_string().contains("not a directory"));
+        let _ = fs::remove_dir_all(&dir);
     }
 }
