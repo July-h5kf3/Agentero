@@ -24,17 +24,21 @@ import { useSessionComposerState } from "@/hooks/use-session-composer-state";
 import {
 	type AgentEffortChoice,
 	type AgentListResponse,
+	type AgentModeChoice,
 	type AgentModelChoice,
 	type AgentPlanEvent,
 	type AgentResultPayload,
 	type AgentSkill,
 	type AgentStreamEvent,
 	type AgentToolEvent,
+	type AskUserRequest,
 	type CatalogScanResponse,
 	cancelAgentRun,
+	type ElicitationRequest,
 	ensureCatalogAgent,
 	listAgentSkills,
 	listAgents,
+	listenAgentCollaboration,
 	listenAgentCommands,
 	listenAgentCompleted,
 	listenAgentEffort,
@@ -46,14 +50,18 @@ import {
 	listenAgentTool,
 	listenAgentUsage,
 	listSessions,
+	loadCollaborationPref,
 	loadModelCatalog,
 	loadModelFavorites,
 	loadModelPref,
 	loadSession,
 	type PermissionRequest,
 	type PromptImage,
+	respondAskUser,
+	respondElicitation,
 	respondPermission,
 	runOnce,
+	saveCollaborationPref,
 	saveModelCatalog,
 	saveModelFavorites,
 	saveModelPref,
@@ -84,14 +92,17 @@ import {
 	errorChatLine,
 	errorText,
 	isBackgroundWorkflowHistoryTitle,
+	isPendingAskUserToolStatus,
 	mapToolStatus,
 	nextLineId,
 	nextPartId,
 	type PendingSessionEvent,
 	type PendingTerminalEvent,
+	parseAskUserQuestions,
 	providerSessionIdForHistoryLoad,
 	resolveSelected,
 	shouldDeferSessionEvent,
+	type ToolAskUserRequest,
 	upsertChatSessionTurn,
 	upsertPlanPart,
 } from "@/lib/agent/chat-state";
@@ -294,6 +305,12 @@ export function useAgentPanel({
 	const [agentListenersReady, setAgentListenersReady] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const [skills, setSkills] = useState<AgentSkill[]>([]);
+	const [collaborationOptions, setCollaborationOptions] = useState<
+		AgentModeChoice[]
+	>([]);
+	const [collaborationModeId, setCollaborationModeId] = useState<string | null>(
+		null,
+	);
 	const [effortOptions, setEffortOptions] = useState<AgentEffortChoice[]>([]);
 	const [reasoningEffort, setReasoningEffort] = useState<string | null>(null);
 	const [fastAvailable, setFastAvailable] = useState(false);
@@ -410,6 +427,31 @@ export function useAgentPanel({
 				// Nested setState: keep free-form selection visible in the picker.
 				setModels(ensureModelsInclude(catalogModels, [next, prevId]));
 				return next;
+			});
+		},
+		[],
+	);
+
+	const applyCollaborationEvent = useCallback(
+		(ev: { agentId: string; currentId: string; modes: AgentModeChoice[] }) => {
+			const cur = selectedAgentIdRef.current;
+			if (cur && cur !== ev.agentId) return;
+			if (!ev.modes.length) {
+				setCollaborationOptions([]);
+				setCollaborationModeId(null);
+				return;
+			}
+			const pref = loadCollaborationPref(ev.agentId)?.trim() || null;
+			const current = ev.currentId?.trim() || null;
+			const validPref =
+				pref && ev.modes.some((mode) => mode.id === pref) ? pref : null;
+			setCollaborationOptions(ev.modes);
+			setCollaborationModeId((prev) => {
+				const prevId = prev?.trim() || null;
+				if (prevId && ev.modes.some((mode) => mode.id === prevId)) {
+					return prevId;
+				}
+				return validPref || current || ev.modes[0]?.id || null;
 			});
 		},
 		[],
@@ -581,6 +623,8 @@ export function useAgentPanel({
 			setModels([]);
 			setModelId(null);
 			setFavoriteIds([]);
+			setCollaborationOptions([]);
+			setCollaborationModeId(null);
 			setEffortOptions([]);
 			setReasoningEffort(null);
 			setFastAvailable(false);
@@ -589,6 +633,8 @@ export function useAgentPanel({
 			setUsageBySession({});
 			return;
 		}
+		setCollaborationOptions([]);
+		setCollaborationModeId(loadCollaborationPref(selectedAgentId));
 		setEffortOptions([]);
 		setReasoningEffort(null);
 		setFastAvailable(false);
@@ -627,6 +673,7 @@ export function useAgentPanel({
 			agentId: string;
 			vaultPath: string | null;
 			modelId?: string;
+			collaborationModeId?: string;
 			generation: number;
 			/** Apply models/usage only when still the intended warm target. */
 			stillValid: () => boolean;
@@ -643,6 +690,7 @@ export function useAgentPanel({
 					agentId: args.agentId,
 					vaultPath: args.vaultPath ?? undefined,
 					modelId: args.modelId,
+					collaborationModeId: args.collaborationModeId,
 				});
 				if (args.generation !== warmGenRef.current || !args.stillValid()) {
 					return;
@@ -678,6 +726,7 @@ export function useAgentPanel({
 			agentId,
 			vaultPath: requestVaultPath,
 			modelId: loadModelPref(agentId) ?? undefined,
+			collaborationModeId: loadCollaborationPref(agentId) ?? undefined,
 			generation: gen,
 			stillValid: () =>
 				!cancelled &&
@@ -736,6 +785,11 @@ export function useAgentPanel({
 		[isChatOwnedSession, updateSessionLines],
 	);
 
+	// OpenCode / Claude / Codex tool-shaped ask → bottom form surface (not transcript).
+	// Declared before applyToolEvent so the promote path can set it.
+	const [toolAskUserRequest, setToolAskUserRequest] =
+		useState<ToolAskUserRequest | null>(null);
+
 	const applyToolEvent = useCallback(
 		(ev: AgentToolEvent) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
@@ -757,6 +811,24 @@ export function useAgentPanel({
 				};
 				return next;
 			});
+
+			// Promote pending ask-user tools to the bottom surface (hides free-text composer).
+			// Surface priority: elicitation > Grok ext > tool; listeners clear tool on host asks.
+			const questions = parseAskUserQuestions(ev.input);
+			const pending = isPendingAskUserToolStatus(ev.status);
+			if (questions && pending) {
+				setToolAskUserRequest({
+					toolCallId: ev.toolCallId,
+					sessionId: ev.sessionId,
+					questions,
+				});
+				return;
+			}
+			if (questions && !pending) {
+				setToolAskUserRequest((prev) =>
+					prev?.toolCallId === ev.toolCallId ? null : prev,
+				);
+			}
 		},
 		[isChatOwnedSession, updateSessionLines],
 	);
@@ -1117,6 +1189,9 @@ export function useAgentPanel({
 			const uModels = await listenAgentModels((ev) => {
 				applyModelsEvent(ev);
 			});
+			const uCollab = await listenAgentCollaboration((ev) => {
+				applyCollaborationEvent(ev);
+			});
 			const uEffort = await listenAgentEffort((ev) => {
 				applyEffortEvent(ev);
 			});
@@ -1151,6 +1226,7 @@ export function useAgentPanel({
 				uUsage();
 				uCommands();
 				uModels();
+				uCollab();
 				uEffort();
 				uFast();
 				u2();
@@ -1164,6 +1240,7 @@ export function useAgentPanel({
 				uUsage,
 				uCommands,
 				uModels,
+				uCollab,
 				uEffort,
 				uFast,
 				u2,
@@ -1177,6 +1254,7 @@ export function useAgentPanel({
 			for (const u of unsubs) u();
 		};
 	}, [
+		applyCollaborationEvent,
 		applyEffortEvent,
 		applyFastModeEvent,
 		applyModelsEvent,
@@ -1567,6 +1645,26 @@ export function useAgentPanel({
 		}
 	};
 
+	const selectedCollaborationName = useMemo(() => {
+		if (!collaborationModeId) return null;
+		return (
+			collaborationOptions.find((mode) => mode.id === collaborationModeId)
+				?.name ?? collaborationModeId
+		);
+	}, [collaborationModeId, collaborationOptions]);
+
+	const pickCollaborationMode = useCallback(
+		(id: string) => {
+			const next = id.trim();
+			if (!next || !collaborationOptions.some((mode) => mode.id === next))
+				return;
+			setCollaborationModeId(next);
+			if (!selectedAgentId) return;
+			saveCollaborationPref(selectedAgentId, next);
+		},
+		[collaborationOptions, selectedAgentId],
+	);
+
 	const selectedSkills = useMemo(
 		() =>
 			selectedSkillIds
@@ -1606,6 +1704,8 @@ export function useAgentPanel({
 			agentId,
 			vaultPath: requestVaultPath,
 			modelId: next,
+			collaborationModeId:
+				loadCollaborationPref(agentId) ?? collaborationModeId ?? undefined,
 			generation,
 			stillValid: () =>
 				selectedAgentIdRef.current === agentId &&
@@ -1690,6 +1790,13 @@ export function useAgentPanel({
 	// Forward ACP permission requests (ask mode) to the user for an explicit decision.
 	const [permissionRequest, setPermissionRequest] =
 		useState<PermissionRequest | null>(null);
+	// Codex Plan-mode request_user_input → form elicitation.
+	const [elicitationRequest, setElicitationRequest] =
+		useState<ElicitationRequest | null>(null);
+	// Grok `_x.ai/ask_user_question` extension method.
+	const [askUserRequest, setAskUserRequest] = useState<AskUserRequest | null>(
+		null,
+	);
 
 	const permissionRequestRef = useRef(permissionRequest);
 	permissionRequestRef.current = permissionRequest;
@@ -1699,6 +1806,44 @@ export function useAgentPanel({
 		void respondPermission(req.requestId, null);
 		setPermissionRequest(null);
 	});
+
+	const elicitationRequestRef = useRef(elicitationRequest);
+	elicitationRequestRef.current = elicitationRequest;
+	useOverlayRegistration(
+		"agent-elicitation",
+		elicitationRequest !== null,
+		() => {
+			const req = elicitationRequestRef.current;
+			if (!req) return;
+			void respondElicitation({
+				requestId: req.requestId,
+				action: "cancel",
+			});
+			setElicitationRequest(null);
+		},
+	);
+
+	const askUserRequestRef = useRef(askUserRequest);
+	askUserRequestRef.current = askUserRequest;
+	useOverlayRegistration("agent-ask-user", askUserRequest !== null, () => {
+		const req = askUserRequestRef.current;
+		if (!req) return;
+		void respondAskUser({
+			requestId: req.requestId,
+			action: "cancel",
+		});
+		setAskUserRequest(null);
+	});
+
+	const toolAskUserRequestRef = useRef(toolAskUserRequest);
+	toolAskUserRequestRef.current = toolAskUserRequest;
+	useOverlayRegistration(
+		"agent-tool-ask-user",
+		toolAskUserRequest !== null,
+		() => {
+			setToolAskUserRequest(null);
+		},
+	);
 
 	useEffect(() => {
 		if (!isTauri()) return;
@@ -1710,6 +1855,50 @@ export function useAgentPanel({
 			unsub = await listen<PermissionRequest>(
 				"agent:permission-request",
 				({ payload }) => setPermissionRequest(payload),
+			);
+		})();
+		return () => {
+			cancelled = true;
+			unsub?.();
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!isTauri()) return;
+		let unsub: (() => void) | undefined;
+		let cancelled = false;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsub = await listen<ElicitationRequest>(
+				"agent:elicitation-request",
+				({ payload }) => {
+					// Prefer host elicitation over tool-card promote.
+					setToolAskUserRequest(null);
+					setElicitationRequest(payload);
+				},
+			);
+		})();
+		return () => {
+			cancelled = true;
+			unsub?.();
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!isTauri()) return;
+		let unsub: (() => void) | undefined;
+		let cancelled = false;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsub = await listen<AskUserRequest>(
+				"agent:ask-user-request",
+				({ payload }) => {
+					// Grok ext is the authoritative respond path; drop tool-promote duplicate.
+					setToolAskUserRequest(null);
+					setAskUserRequest(payload);
+				},
 			);
 		})();
 		return () => {
@@ -1988,6 +2177,11 @@ export function useAgentPanel({
 				workflow: workflow ?? "free",
 				target: workflowTarget,
 				modelId: resolvedModelId,
+				collaborationModeId:
+					collaborationModeId &&
+					collaborationOptions.some((mode) => mode.id === collaborationModeId)
+						? collaborationModeId
+						: undefined,
 				reasoningEffort: reasoningEffort ?? undefined,
 				fastMode: fastAvailable ? fastEnabled : undefined,
 				skillIds: resolvedSkillIds,
@@ -2331,6 +2525,41 @@ export function useAgentPanel({
 		return send(textRaw, { workflow, images });
 	};
 
+	/**
+	 * Answer a tool-shaped ask-user form (OpenCode `question`, Claude AskUserQuestion, …).
+	 *
+	 * The agent turn is usually still `running` (blocked on the tool). Normal
+	 * composer submit would only enqueue and never drain until the run ends —
+	 * a deadlock. Cancel the stuck turn so the answer can send immediately
+	 * (same net effect as enqueue + stop, without the extra click).
+	 * Grok ext / elicitation use dedicated respond paths and do not need this.
+	 */
+	const answerToolAskUser = async (answer: string): Promise<boolean> => {
+		if (switchingRef.current || submittingRef.current) return false;
+		resetPromptHistoryBrowse();
+		const text = answer.trim();
+		if (!text) return false;
+
+		setToolAskUserRequest(null);
+
+		if (!activeTabIsRunning) {
+			return send(text);
+		}
+
+		// Queue first so cancel → idle drains it; then free the blocked run.
+		const enqueued = enqueueMessage(text);
+		if (!enqueued) return false;
+		const sessionId = activeTabId;
+		if (!sessionId || !isTauri()) return true;
+		try {
+			await cancelAgentRun(sessionId);
+		} catch (error) {
+			// Leave the queued answer; user can still stop the run manually.
+			setLines((prev) => [...prev, errorChatLine(errorText(error))]);
+		}
+		return true;
+	};
+
 	const removeQueuedMessage = useCallback((id: string) => {
 		setMessageQueue((prev) => {
 			const next = prev.filter((item) => item.id !== id);
@@ -2507,6 +2736,10 @@ export function useAgentPanel({
 		if (!sessionId || !isTauri()) return;
 		try {
 			await cancelAgentRun(sessionId);
+			// Drop promoted tool-ask form for this turn.
+			setToolAskUserRequest((prev) =>
+				prev?.sessionId === sessionId ? null : prev,
+			);
 		} catch (error) {
 			setLines((prev) => [...prev, errorChatLine(errorText(error))]);
 		}
@@ -3234,6 +3467,10 @@ export function useAgentPanel({
 		warming,
 		pickModel,
 		toggleFavorite,
+		collaborationOptions,
+		collaborationModeId,
+		selectedCollaborationName,
+		pickCollaborationMode,
 		effortOptionsInDisplayOrder,
 		reasoningEffort,
 		setReasoningEffort,
@@ -3246,6 +3483,16 @@ export function useAgentPanel({
 		// Permission
 		permissionRequest,
 		setPermissionRequest,
+		// Form elicitation (request_user_input)
+		elicitationRequest,
+		setElicitationRequest,
+		// Grok ask-user extension
+		askUserRequest,
+		setAskUserRequest,
+		// Tool-shaped ask promoted to composer
+		toolAskUserRequest,
+		setToolAskUserRequest,
+		answerToolAskUser,
 		// Refs used by composer submit race guards
 		switchingRef,
 		submittingRef,

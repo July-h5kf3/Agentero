@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/popover";
 import type {
 	AgentEffortChoice,
+	AgentModeChoice,
 	AgentModelChoice,
 	AgentSkill,
 	PromptImage,
@@ -313,7 +314,7 @@ export function AgentComposer({
 	slashActiveIndex,
 	onAttachSlashCommand,
 	onSlashActiveIndexChange,
-	// Model / effort / usage / fast
+	// Model / collaboration (session mode) / effort / usage / fast
 	modelSelectorOpen,
 	onModelSelectorOpenChange,
 	models,
@@ -324,6 +325,10 @@ export function AgentComposer({
 	warming,
 	onPickModel,
 	onToggleFavorite,
+	collaborationOptions,
+	collaborationModeId,
+	selectedCollaborationName,
+	onPickCollaborationMode,
 	effortOptionsInDisplayOrder,
 	reasoningEffort,
 	onReasoningEffortChange,
@@ -397,6 +402,10 @@ export function AgentComposer({
 	warming: boolean;
 	onPickModel: (id: string) => void;
 	onToggleFavorite: (id: string) => void;
+	collaborationOptions: AgentModeChoice[];
+	collaborationModeId: string | null;
+	selectedCollaborationName: string | null;
+	onPickCollaborationMode: (id: string) => void;
 	effortOptionsInDisplayOrder: AgentEffortChoice[];
 	reasoningEffort: string | null;
 	onReasoningEffortChange: (id: string) => void;
@@ -475,6 +484,7 @@ export function AgentComposer({
 	return (
 		<div
 			className={cn(
+				// Only the prompt shell is height-bound (resize handle is above this in the panel).
 				"flex shrink-0 flex-col overflow-hidden border-t bg-muted/10",
 				compact ? "gap-1.5 p-2" : "gap-2 p-3",
 			)}
@@ -1180,6 +1190,42 @@ export function AgentComposer({
 									</ModelSelectorContent>
 								</ModelSelector>
 							)}
+							{!compact && collaborationOptions.length > 0 ? (
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<PromptInputButton
+											type="button"
+											className="h-7 max-w-[min(10rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
+											tooltip={t("composer.collaborationTooltip")}
+										>
+											<span className="truncate">
+												{t("composer.collaboration.label")}:{" "}
+												{selectedCollaborationName ??
+													collaborationModeId ??
+													t("composer.collaboration.label")}
+											</span>
+											<ChevronDown className="size-3 shrink-0 opacity-70" />
+										</PromptInputButton>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="start" className="min-w-36 p-1">
+										{collaborationOptions.map((mode) => (
+											<DropdownMenuItem
+												key={mode.id}
+												className={cn(
+													"flex items-center justify-between gap-2 rounded-md",
+													collaborationModeId === mode.id && "bg-muted",
+												)}
+												onSelect={() => onPickCollaborationMode(mode.id)}
+											>
+												<span className="truncate">{mode.name}</span>
+												{collaborationModeId === mode.id ? (
+													<CheckIcon className="size-3.5 shrink-0 text-muted-foreground" />
+												) : null}
+											</DropdownMenuItem>
+										))}
+									</DropdownMenuContent>
+								</DropdownMenu>
+							) : null}
 							{!compact && effortOptionsInDisplayOrder.length > 0 ? (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>

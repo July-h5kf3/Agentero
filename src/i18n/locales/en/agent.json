@@ -17,6 +17,11 @@
 			"rejectAlways": "Always reject"
 		}
 	},
+	"elicitation": {
+		"title": "Agent needs your input",
+		"submit": "Submit answers",
+		"cancel": "Cancel"
+	},
 	"missing": " (missing)",
 	"switchAgent": "Switch ACP agent",
 	"suggestions": {
@@ -92,6 +97,10 @@
 		"mentionEmptyFolder": "No items in this folder",
 		"fast": "Fast",
 		"fastToggle": "Toggle Fast mode",
+		"collaborationTooltip": "Session mode",
+		"collaboration": {
+			"label": "Mode"
+		},
 		"effortTooltip": "Select reasoning effort",
 		"effort": {
 			"label": "Effort",
@@ -123,8 +132,18 @@
 		"failed": "Tool failed"
 	},
 	"askUserQuestion": {
-		"submit": "Submit answers",
-		"submitted": "Answers submitted"
+		"submit": "Submit",
+		"submitted": "Submitted",
+		"cancel": "Cancel",
+		"prev": "Back",
+		"next": "Next",
+		"progress": "{{current}} / {{total}}",
+		"freeTextPlaceholder": "Type your answer",
+		"pendingInComposer": "Answer in the questionnaire below",
+		"keyboardHint": "↑↓ options · Space select · Enter confirm",
+		"keyboardHintMulti": "↑↓ options · Space select · Enter next · ←→ pages",
+		"collapse": "Collapse questionnaire",
+		"expand": "Expand questionnaire"
 	},
 	"citation": {
 		"vaultPath": "Vault path referenced by agent"

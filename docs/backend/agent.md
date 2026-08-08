@@ -47,6 +47,8 @@ commands / config 仍可在 load 期间转发。
 | `agent_list_sessions` / `agent_load_session` | 会话历史 |
 | `agent_list_skills` | Vault skill 列表 |
 | `agent_respond_permission` | 回答权限请求 |
+| `agent_respond_elicitation` | 回答 form elicitation（Codex `request_user_input`） |
+| `agent_respond_ask_user` | 回答 Grok `_x.ai/ask_user_question` |
 | `agent_run_tool_lifecycle` | 静默安装/升级 catalog CLI（及 Claude/Codex ACP 适配器）；本机 lifecycle 串行执行，Windows 使用唯一临时 `.bat` 并按 UTF-8/GBK 解码错误输出；见 [api.md](api.md) 与 [#225](https://github.com/poco-ai/Agentero/issues/225) |
 | `agent_tool_lifecycle_supported` / `agent_tool_install_commands` | 是否支持静默安装；平台手动安装文案 |
 
@@ -65,6 +67,31 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 | `ask` | `agent:permission-request` → 用户选择 → `agent_respond_permission` |
 | `auto` | 自动批准策略项 |
 
+## Elicitation（不稳定协议）
+
+- Host 依赖 `agent-client-protocol` feature `unstable_elicitation`。
+- `initialize` 声明 `elicitation.form`，否则 codex-acp 对 `request_user_input` 直接返回空 answers。
+- 收到 `elicitation/create` → 事件 `agent:elicitation-request` → 前端表单 → `agent_respond_elicitation`。
+
+## 结构化提问（多 harness）
+
+ACP **没有**统一的 ask-user tool 规范：各 harness 的字段名、挂载点（tool / elicitation / ext method）都不一样。Agentero 作为 ACP Client 做三件事：
+
+1. **打开交互能力**：`initialize` 声明 `elicitation.form`（依赖 crate feature `unstable_elicitation`）；否则 Codex 等对 `request_user_input` 会直接空答。
+2. **Client adapter 归一**：把不同 rawInput / 事件解析成同一套 `AskUserQuestion` 页（`parseAskUserQuestions` 等），前端只渲染一张表。
+3. **Harness 特例**：OpenCode spawn 时注入 `OPENCODE_ENABLE_QUESTION_TOOL=1`；Grok 的 `_x.ai/ask_user_question` 由 Host JSON-RPC 处理（`ask_user.rs`），再经 `agent:ask-user-request` / `agent_respond_ask_user` 与前端对齐；tool 镜像与 ext 去重。
+
+| Harness | 形态 | 回答通路 |
+|---|---|---|
+| Codex | tool `variant: AskUserQuestion` 或 elicitation form | tool → 提升到 **底部问卷** → 下一用户轮；elicitation → `agent_respond_elicitation` |
+| Claude | tool `questions[]`（含 Other 伴生页合并） | 同 tool 提升 → 下一用户轮 |
+| OpenCode | tool `question` → `questions[]` | 同 tool 提升；spawn **默认 env** `OPENCODE_ENABLE_QUESTION_TOOL=1`；turn 阻塞时 cancel+drain 立刻送出答案 |
+| Grok | ext method `_x.ai/ask_user_question` | Host → `agent:ask-user-request` → `agent_respond_ask_user`；与 tool 镜像去重 |
+
+**UI 约定**：可交互表单只在 **`AgentAskUserSurface`（底部问卷）**；与 free-text composer **互斥**；transcript tool 卡不嵌选项。优先级 elicitation > Grok ext > tool 提升。
+
+详见 [frontend/agent.md](../frontend/agent.md)。
+
 ## 工作流与 Skill
 
 - workflow：`summary` / `qa` / `related_work` 等（面板 chips 映射）。
@@ -79,6 +106,7 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 - `session/new`（及 config 更新）中的 `SessionConfigOption`（category=Model 或 name 回退）解析为 `agent:models`。
 - 若 `current_value` 不在 selector 选项中（第三方网关 / cc-switch 等只改默认 model、目录仍是官方列表），Host **注入**该 current id，避免 UI 丢失。
 - `preferred_model_id`（warm / run_once）在与 current 不同时 **始终尝试** `session/set_config_option`，不要求 id 已在上报列表中；失败仅 debug 日志，不阻断会话。
+- Codex `collaboration_mode`（Default / Plan 等）解析为 `agent:collaboration`；`collaboration_mode_id` 在选项内且与 current 不同时尝试 `session/set_config_option`。UI 称「模式」。Plan 才能用 `request_user_input`。不解析 / 不暴露 ACP `category: mode` 沙箱档。
 
 ## User-Agent（中转站亲和）
 

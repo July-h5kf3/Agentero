@@ -41,16 +41,37 @@ export type ToolUiState = {
 	output?: unknown;
 };
 
-/** A selectable answer supplied by an ACP AskUserQuestion tool call. */
+/** A selectable answer supplied by an ACP AskUserQuestion / form elicitation. */
 export type AskUserQuestionOption = {
 	label: string;
 	description?: string;
+	/** Stable value for elicitation content (defaults to label). */
+	value?: string;
 };
 
-/** A question supplied by an ACP AskUserQuestion tool call. */
+/** A question supplied by AskUserQuestion tool or form elicitation. */
 export type AskUserQuestion = {
+	/** Optional field id (elicitation schema property name). */
+	id?: string;
+	/** Short tab/header label (Claude `header`, OpenCode `header`). */
+	header?: string;
 	question: string;
+	/** Empty options and no allowOther → free-text only. */
 	options: AskUserQuestionOption[];
+	/** When false, free-text / other fields may be left blank. Default true. */
+	required?: boolean;
+	/**
+	 * Show a free-text "Other" input on the same page as options
+	 * (Codex companion field / Claude always-on / OpenCode `custom`).
+	 */
+	allowOther?: boolean;
+	/** Elicitation content key for free-text Other (e.g. `q1__other`). */
+	otherFieldId?: string;
+	/**
+	 * Allow selecting multiple option labels (Claude `multiSelect`,
+	 * OpenCode `multiple`, Grok `multiSelect`). Answers join with ", ".
+	 */
+	multiSelect?: boolean;
 };
 
 /**
@@ -426,6 +447,24 @@ export function mapToolStatus(
 	}
 }
 
+/** True while an ask-user tool still needs a user decision (bottom surface owns the form). */
+export function isPendingAskUserToolStatus(
+	status: string | null | undefined,
+): boolean {
+	const mapped = mapToolStatus(status);
+	return mapped === "pending" || mapped === "in_progress";
+}
+
+/**
+ * Pending tool-shaped ask-user request promoted from transcript → composer.
+ * OpenCode `question` / Claude AskUserQuestion / Codex tool variant, etc.
+ */
+export type ToolAskUserRequest = {
+	toolCallId: string;
+	sessionId: string;
+	questions: AskUserQuestion[];
+};
+
 export function toolPartState(
 	status: ToolUiState["status"],
 ): ToolUIPart["state"] {
@@ -446,8 +485,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Extract the documented Codex AskUserQuestion shape from raw ACP tool input.
- * Other tool calls deliberately return null so they retain the generic JSON UI.
+ * Detect structured "ask user" tool input from multiple agent harnesses.
+ *
+ * Shapes (none are ACP-standard tool schemas — client adapters only):
+ * - **Codex tool**: `{ variant: "AskUserQuestion", questions: [{ question, options }] }`
+ * - **Claude Code**: `{ questions: [{ question, header?, multiSelect?, options }] }`
+ * - **OpenCode `question`**: `{ questions: [{ question, header, options, multiple?, custom? }] }`
+ * - **Grok (when mirrored as tool rawInput)**: same questions array + `multiSelect`
+ *
+ * Unrelated tools return null so they keep the generic JSON UI.
+ * Prefer form elicitation / `x.ai/ask_user_question` when the agent uses those paths.
  */
 export function parseAskUserQuestions(
 	input: unknown,
@@ -460,29 +507,174 @@ export function parseAskUserQuestions(
 			return null;
 		}
 	}
-	if (!isRecord(payload) || payload.variant !== "AskUserQuestion") return null;
+	if (!isRecord(payload)) return null;
+
+	const isCodexVariant = payload.variant === "AskUserQuestion";
+	// Reject clearly non-question tools that happen to nest a questions key
+	// under other primary parameters (heuristic: only Codex variant OR
+	// top-level questions array is the dominant payload).
+	if (!isCodexVariant) {
+		if (payload.variant != null && payload.variant !== "AskUserQuestion") {
+			return null;
+		}
+		// Common non-question tool keys — if present with real work payload, skip.
+		if (
+			payload.command != null ||
+			payload.cmd != null ||
+			payload.filePath != null ||
+			payload.filepath != null ||
+			payload.path != null ||
+			payload.pattern != null ||
+			payload.url != null
+		) {
+			return null;
+		}
+	}
+
 	if (!Array.isArray(payload.questions)) return null;
 
-	const questions = payload.questions.flatMap((value) => {
-		if (!isRecord(value) || typeof value.question !== "string") return [];
-		const question = value.question.trim();
-		if (!question || !Array.isArray(value.options)) return [];
-		const options = value.options.flatMap((option) => {
-			if (!isRecord(option) || typeof option.label !== "string") return [];
+	const parsed = payload.questions.flatMap((value) => {
+		const one = parseOneAskUserQuestion(value, {
+			// Claude always offers Other; OpenCode `custom` defaults true;
+			// Codex tool path typically has fixed options only.
+			defaultAllowOther: !isCodexVariant,
+		});
+		return one ? [one] : [];
+	});
+	if (parsed.length === 0) return null;
+
+	// Claude (and some models) emit free-text as a *separate* questions[] entry
+	// after a multiple-choice page. Fold those into the previous page's Other.
+	const questions = foldFreeTextOnlyIntoPrevious(parsed);
+	return questions.length > 0 ? questions : null;
+}
+
+/** Labels that mean "type your own" — UI already has a free-text field. */
+function isSyntheticOtherOptionLabel(label: string): boolean {
+	const t = label.trim();
+	if (!t) return true;
+	// Exact-ish: Other / 其他 / Type your own answer / …
+	if (/^other(\b|[[:punct:]\s]|$)/i.test(t)) return true;
+	if (/^其他(\b|[[:punct:]\s]|$)/.test(t)) return true;
+	if (
+		/^(type|enter|write)\s+(your\s+)?(own\s+)?(answer|response|text)/i.test(t)
+	)
+		return true;
+	if (/^(自定义|自行输入|输入你的|自由输入)/.test(t)) return true;
+	if (/^or type\b/i.test(t)) return true;
+	return false;
+}
+
+/** Free-text page that is an Other companion, not a real standalone question. */
+function isOtherCompanionAskPage(q: AskUserQuestion): boolean {
+	if (q.options.length > 0) return false;
+	const blob = `${q.header ?? ""} ${q.question}`.toLowerCase();
+	if (
+		/type your own answer|instead of choosing an option|choosing an option above|or type your own|enter your own|please type your own/i.test(
+			blob,
+		)
+	) {
+		return true;
+	}
+	if (isSyntheticOtherOptionLabel(q.question)) return true;
+	if (q.header && isSyntheticOtherOptionLabel(q.header)) return true;
+	return false;
+}
+
+/**
+ * Merge Other free-text companion pages into the previous multi-choice page.
+ * Does **not** fold legitimate free-text questions (e.g. "Anything else?").
+ */
+function foldFreeTextOnlyIntoPrevious(
+	questions: AskUserQuestion[],
+): AskUserQuestion[] {
+	const out: AskUserQuestion[] = [];
+	for (const q of questions) {
+		const prev = out[out.length - 1];
+		if (isOtherCompanionAskPage(q) && prev && prev.options.length > 0) {
+			out[out.length - 1] = {
+				...prev,
+				allowOther: true,
+				// Keep companion field id for elicitation content mapping.
+				otherFieldId: prev.otherFieldId ?? q.id ?? q.otherFieldId,
+			};
+			continue;
+		}
+		out.push(q);
+	}
+	return out;
+}
+
+function parseOneAskUserQuestion(
+	value: unknown,
+	opts: { defaultAllowOther: boolean },
+): AskUserQuestion | null {
+	if (!isRecord(value) || typeof value.question !== "string") return null;
+	const question = value.question.trim();
+	if (!question) return null;
+
+	const header =
+		typeof value.header === "string"
+			? value.header.trim() || undefined
+			: undefined;
+
+	const multiSelect =
+		value.multiSelect === true ||
+		value.multiple === true ||
+		value.multi_select === true;
+
+	// OpenCode: `custom` (default true). Explicit false disables free-text.
+	// Claude: always Other. Codex tool: default false unless we see signals.
+	let allowOther = opts.defaultAllowOther;
+	if (typeof value.custom === "boolean") {
+		allowOther = value.custom;
+	} else if (value.allowOther === true || value.allow_other === true) {
+		allowOther = true;
+	}
+
+	const options: AskUserQuestionOption[] = [];
+	if (Array.isArray(value.options)) {
+		for (const option of value.options) {
+			if (!isRecord(option) || typeof option.label !== "string") continue;
 			const label = option.label.trim();
-			if (!label) return [];
+			if (!label) continue;
+			// Skip synthetic "Other" chips — we render free-text ourselves.
+			// Still set allowOther so the free-text field appears.
+			if (isSyntheticOtherOptionLabel(label)) {
+				allowOther = true;
+				continue;
+			}
 			const description =
 				typeof option.description === "string"
 					? option.description.trim() || undefined
 					: undefined;
-			return [{ label, description }];
-		});
-		return options.length ? [{ question, options }] : [];
-	});
+			const preview =
+				typeof option.preview === "string"
+					? option.preview.trim() || undefined
+					: undefined;
+			options.push({
+				label,
+				description: description ?? preview,
+			});
+		}
+	}
 
-	return questions.length === payload.questions.length && questions.length > 0
-		? questions
-		: null;
+	// Need either selectable options or free-text capability.
+	if (options.length === 0 && !allowOther) return null;
+
+	const id =
+		typeof value.id === "string" && value.id.trim()
+			? value.id.trim()
+			: undefined;
+
+	return {
+		...(id ? { id } : {}),
+		...(header ? { header } : {}),
+		question,
+		options,
+		allowOther: options.length === 0 ? true : allowOther,
+		...(multiSelect ? { multiSelect: true } : {}),
+	};
 }
 
 /** Format selected options as a concise, self-contained follow-up turn. */
@@ -496,6 +688,227 @@ export function formatAskUserAnswers(
 				`Question: ${question.question}\nAnswer: ${answers[index]}`,
 		)
 		.join("\n\n");
+}
+
+type ElicitationFieldInput = {
+	id: string;
+	title: string;
+	description?: string | null;
+	required?: boolean;
+	kind: string;
+	options: Array<{
+		value: string;
+		title: string;
+		description?: string | null;
+	}>;
+	isOtherAnswer?: boolean;
+	parentFieldId?: string | null;
+};
+
+/** Codex companion free-text field: `questionId__other` or `questionId__other2`. */
+function parseOtherFieldParentId(fieldId: string): string | null {
+	const match = fieldId.match(/^(.*)__other\d*$/i);
+	return match?.[1] ?? null;
+}
+
+function isTextishElicitationField(field: ElicitationFieldInput): boolean {
+	if (field.kind === "text") return true;
+	if (field.kind === "select" || field.kind === "boolean") return false;
+	return field.options.length === 0;
+}
+
+/**
+ * Codex / Claude free-text "Other" companion (often lacks __other id or meta).
+ * Example description: "Type your own answer instead of choosing an option above (optional)."
+ */
+function isOtherCompanionElicitationField(
+	field: ElicitationFieldInput,
+): boolean {
+	if (field.isOtherAnswer) return true;
+	if (!isTextishElicitationField(field)) return false;
+	if (parseOtherFieldParentId(field.id)) return true;
+	const blob = `${field.title ?? ""} ${field.description ?? ""}`.toLowerCase();
+	if (
+		/type your own answer|instead of choosing an option|choosing an option above|or type your own|enter your own/i.test(
+			blob,
+		)
+	) {
+		return true;
+	}
+	if (/^(other|其他)(\b|[[:punct:]\s]|$)/i.test(field.title.trim())) {
+		return true;
+	}
+	if (/可选|optional/.test(blob) && /own answer|自定义|自行/.test(blob)) {
+		return true;
+	}
+	return false;
+}
+
+function mapFieldOptions(
+	field: ElicitationFieldInput,
+): AskUserQuestionOption[] {
+	if (field.kind !== "select" && field.kind !== "boolean") return [];
+	const options: AskUserQuestionOption[] = [];
+	for (const option of field.options) {
+		const label = (option.title || option.value).trim();
+		if (!label) continue;
+		// Skip synthetic Other chips — free-text field is separate.
+		if (isSyntheticOtherOptionLabel(label)) continue;
+		options.push({
+			label,
+			description: option.description?.trim() || undefined,
+			value: option.value,
+		});
+	}
+	return options;
+}
+
+/**
+ * Map Grok Host `agent:ask-user-request` DTOs into AskUserQuestion pages.
+ */
+export function questionsFromAskUserDtos(
+	items: Array<{
+		question: string;
+		options: Array<{ label: string; description?: string | null }>;
+		multiSelect?: boolean;
+		allowOther?: boolean;
+	}>,
+): AskUserQuestion[] {
+	return items.flatMap((item) => {
+		const question = item.question.trim();
+		if (!question) return [];
+		const options = item.options.flatMap((option) => {
+			const label = option.label.trim();
+			if (!label) return [];
+			const description =
+				typeof option.description === "string"
+					? option.description.trim() || undefined
+					: undefined;
+			return [{ label, description }];
+		});
+		const allowOther = item.allowOther !== false;
+		if (options.length === 0 && !allowOther) return [];
+		return [
+			{
+				question,
+				options,
+				allowOther: options.length === 0 ? true : allowOther,
+				...(item.multiSelect ? { multiSelect: true } : {}),
+			},
+		];
+	});
+}
+
+/**
+ * Map ACP form elicitation fields into AskUserQuestion pages.
+ * Codex / Claude split each Q into select + optional free-text Other — merge into one page.
+ *
+ * Parent linkage (any one is enough):
+ * 1. meta `isOtherAnswer` + `parentFieldId` / `questionId`
+ * 2. field id `questionId__other`
+ * 3. content heuristic ("Type your own answer instead of…") → attach to previous select
+ * 4. leftover free-text-only pages folded into previous select page
+ */
+export function questionsFromElicitationFields(
+	fields: ElicitationFieldInput[],
+): AskUserQuestion[] {
+	const otherByParent = new Map<string, ElicitationFieldInput>();
+	const consumedOtherIds = new Set<string>();
+
+	// Pass 1: explicit parent (meta or __other id).
+	for (const field of fields) {
+		if (!isTextishElicitationField(field) && !field.isOtherAnswer) continue;
+		const parentFromMeta =
+			field.isOtherAnswer && field.parentFieldId?.trim()
+				? field.parentFieldId.trim()
+				: field.parentFieldId?.trim() || null;
+		const parentFromId = parseOtherFieldParentId(field.id);
+		const parentId = parentFromMeta || parentFromId;
+		if (!parentId) continue;
+		// Prefer first companion per parent; ignore extras.
+		if (otherByParent.has(parentId)) continue;
+		otherByParent.set(parentId, field);
+		consumedOtherIds.add(field.id);
+	}
+
+	// Pass 2: content-based Other without meta — pair with nearest preceding select.
+	for (let i = 0; i < fields.length; i++) {
+		const field = fields[i];
+		if (!field || consumedOtherIds.has(field.id)) continue;
+		if (!isOtherCompanionElicitationField(field)) continue;
+		let parent: ElicitationFieldInput | undefined;
+		for (let j = i - 1; j >= 0; j--) {
+			const cand = fields[j];
+			if (!cand || consumedOtherIds.has(cand.id)) continue;
+			if (mapFieldOptions(cand).length > 0) {
+				parent = cand;
+				break;
+			}
+		}
+		if (!parent) continue;
+		if (otherByParent.has(parent.id)) continue;
+		otherByParent.set(parent.id, field);
+		consumedOtherIds.add(field.id);
+	}
+
+	const out: AskUserQuestion[] = [];
+	for (const field of fields) {
+		if (consumedOtherIds.has(field.id)) continue;
+		const options = mapFieldOptions(field);
+		const other = otherByParent.get(field.id);
+		// Prefer title for select labels; description is often the long question.
+		// For free-text companions wrongly left as mains, description is boilerplate — skip later fold.
+		const question = (field.description || field.title).trim();
+		if (!question && options.length === 0 && !other) continue;
+
+		const freeTextOnly = options.length === 0 && !other;
+		// Don't use Other boilerplate as a standalone page title if we can fold later.
+		const displayQuestion =
+			freeTextOnly && isOtherCompanionElicitationField(field)
+				? (field.title || question).trim()
+				: question || field.title.trim();
+		if (!displayQuestion && options.length === 0) continue;
+
+		out.push({
+			id: field.id,
+			question: displayQuestion || field.id,
+			options,
+			required: field.required !== false && !freeTextOnly,
+			allowOther: Boolean(other) || freeTextOnly,
+			otherFieldId: other?.id ?? (freeTextOnly ? field.id : undefined),
+		});
+	}
+
+	// Pass 3: any free-text-only page still after a select page → merge as Other.
+	return foldFreeTextOnlyIntoPrevious(out);
+}
+
+/**
+ * Build elicitation content map.
+ * Option pick → primary field id; free-text Other → otherFieldId (Codex preference).
+ */
+export function elicitationContentFromAnswers(
+	questions: AskUserQuestion[],
+	answers: string[],
+): Record<string, string> {
+	const content: Record<string, string> = {};
+	for (let i = 0; i < questions.length; i++) {
+		const q = questions[i];
+		const answer = answers[i]?.trim();
+		if (!q || !answer) continue;
+		const matched = q.options.find((option) => option.label === answer);
+		if (matched && q.id) {
+			content[q.id] = matched.value ?? matched.label;
+			continue;
+		}
+		// Free-text / Other (not matching an option label).
+		if (q.otherFieldId) {
+			content[q.otherFieldId] = answer;
+		} else if (q.id) {
+			content[q.id] = answer;
+		}
+	}
+	return content;
 }
 
 export type ToolPatch = {

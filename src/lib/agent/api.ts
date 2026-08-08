@@ -249,6 +249,21 @@ export type AgentFastModeEvent = {
 	enabled: boolean;
 };
 
+export type AgentModeChoice = {
+	id: string;
+	name: string;
+	description?: string | null;
+};
+
+/** Codex collaboration mode (Default / Plan) via config id collaboration_mode. */
+export type AgentCollaborationEvent = {
+	sessionId: string;
+	agentId: string;
+	configId: string;
+	currentId: string;
+	modes: AgentModeChoice[];
+};
+
 export type AgentFailedEvent = {
 	sessionId: string;
 	error: string;
@@ -259,6 +274,64 @@ export type PermissionOption = {
 	name: string;
 	/** allow_once | allow_always | reject_once | reject_always | other */
 	kind: string;
+};
+
+/** One option for a form elicitation select field. */
+export type ElicitationOption = {
+	value: string;
+	title: string;
+	description?: string | null;
+};
+
+/** One field from ACP form elicitation (`elicitation/create`). */
+export type ElicitationField = {
+	id: string;
+	title: string;
+	description?: string | null;
+	required: boolean;
+	/** select | text | boolean | number | other */
+	kind: string;
+	options: ElicitationOption[];
+	/** Codex free-text companion for the same logical question ("Other"). */
+	isOtherAnswer?: boolean;
+	/** Parent select field id when isOtherAnswer. */
+	parentFieldId?: string | null;
+};
+
+/** ACP form elicitation request (Codex request_user_input). */
+export type ElicitationRequest = {
+	requestId: string;
+	sessionId: string;
+	message: string;
+	toolCallId?: string | null;
+	fields: ElicitationField[];
+};
+
+/** One option in a Grok `_x.ai/ask_user_question` (or similar) request. */
+export type AskUserOptionDto = {
+	label: string;
+	description?: string | null;
+};
+
+/** One question in a Grok ask-user extension request. */
+export type AskUserQuestionDto = {
+	question: string;
+	options: AskUserOptionDto[];
+	multiSelect: boolean;
+	allowOther: boolean;
+};
+
+/**
+ * Grok Build ACP extension `_x.ai/ask_user_question` (Host → UI).
+ * Not form elicitation; answers go back via `agent_respond_ask_user`.
+ */
+export type AskUserRequest = {
+	requestId: string;
+	sessionId: string;
+	toolCallId?: string | null;
+	/** default | plan */
+	mode: string;
+	questions: AskUserQuestionDto[];
 };
 
 /** ACP permission request forwarded to the user in "ask" mode. */
@@ -403,6 +476,8 @@ export async function runOnce(request: {
 	target?: string;
 	/** ACP model config value id (from agent:models). */
 	modelId?: string;
+	/** Collaboration mode id (from agent:collaboration), e.g. default / plan. */
+	collaborationModeId?: string;
 	/** ACP reasoning-effort value id (from agent:effort). */
 	reasoningEffort?: string;
 	/** ACP fast-mode preference (from agent:fast-mode). */
@@ -448,6 +523,7 @@ export async function runOnce(request: {
 			workflow: request.workflow,
 			target: request.target,
 			modelId: request.modelId,
+			collaborationModeId: request.collaborationModeId,
 			reasoningEffort: request.reasoningEffort,
 			fastMode: request.fastMode,
 			skillIds: request.skillIds ?? [],
@@ -501,6 +577,36 @@ export async function respondPermission(
 	});
 }
 
+/** Answer a pending ACP form elicitation. */
+export async function respondElicitation(request: {
+	requestId: string;
+	action: "accept" | "decline" | "cancel";
+	content?: Record<string, string>;
+}): Promise<void> {
+	await invokeAgentApi<{ resolved: boolean }>("agent_respond_elicitation", {
+		request: {
+			requestId: request.requestId,
+			action: request.action,
+			content: request.content ?? null,
+		},
+	});
+}
+
+/** Answer a pending Grok `_x.ai/ask_user_question` extension request. */
+export async function respondAskUser(request: {
+	requestId: string;
+	action: "accept" | "cancel";
+	answers?: string[];
+}): Promise<void> {
+	await invokeAgentApi<{ resolved: boolean }>("agent_respond_ask_user", {
+		request: {
+			requestId: request.requestId,
+			action: request.action,
+			answers: request.answers ?? null,
+		},
+	});
+}
+
 export type WarmResult = {
 	agentId: string;
 	ok: boolean;
@@ -515,12 +621,14 @@ export async function warmAgent(request: {
 	agentId?: string;
 	vaultPath?: string;
 	modelId?: string;
+	collaborationModeId?: string;
 }): Promise<WarmResult> {
 	return invokeAgentApi("agent_warm", {
 		request: {
 			agentId: request.agentId,
 			vaultPath: request.vaultPath,
 			modelId: request.modelId,
+			collaborationModeId: request.collaborationModeId,
 		},
 	});
 }
@@ -594,6 +702,12 @@ export async function listenAgentFastMode(
 	return listenAgentEvent("agent:fast-mode", handler);
 }
 
+export async function listenAgentCollaboration(
+	handler: (e: AgentCollaborationEvent) => void,
+): Promise<UnlistenFn> {
+	return listenAgentEvent("agent:collaboration", handler);
+}
+
 const MODEL_PREF_KEY = "agentero-agent-model-pref";
 
 /** Persist last chosen model id per agent. */
@@ -607,6 +721,30 @@ export function saveModelPref(agentId: string, modelId: string): void {
 	const map = readJsonStorage<Record<string, string>>(MODEL_PREF_KEY, {});
 	map[agentId] = modelId;
 	writeJsonStorage(MODEL_PREF_KEY, map);
+}
+
+const COLLABORATION_PREF_KEY = "agentero-agent-collaboration-pref";
+
+/** Persist last chosen collaboration mode (default / plan) per agent. */
+export function loadCollaborationPref(agentId: string | null): string | null {
+	if (!agentId) return null;
+	const map = readJsonStorage<Record<string, string>>(
+		COLLABORATION_PREF_KEY,
+		{},
+	);
+	return typeof map[agentId] === "string" ? map[agentId] : null;
+}
+
+export function saveCollaborationPref(
+	agentId: string,
+	collaborationModeId: string,
+): void {
+	const map = readJsonStorage<Record<string, string>>(
+		COLLABORATION_PREF_KEY,
+		{},
+	);
+	map[agentId] = collaborationModeId;
+	writeJsonStorage(COLLABORATION_PREF_KEY, map);
 }
 
 const MODEL_FAVORITES_KEY = "agentero-agent-model-favorites";

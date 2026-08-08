@@ -52,11 +52,14 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 | `agent:plan` | ACP 执行计划 | `{ sessionId, entries: { content, status, priority }[] }` |
 | `agent:usage` | 上下文 token 用量 | `{ sessionId, used, size }` |
 | `agent:models` | Agent 上报可用模型 | `{ sessionId, agentId, configId, currentId, models: { id, name, group? }[] }`；`currentId` 若不在 selector 目录中会被 Host 注入到 `models`（第三方 / 网关默认模型） |
+| `agent:collaboration` | 会话模式（UI「模式」；Codex `collaboration_mode` Default/Plan） | `{ sessionId, agentId, configId, currentId, modes: { id, name, description? }[] }`（无上报则不 emit；UI 仅显示 name） |
 | `agent:effort` | ACP 上报 reasoning effort 选项 | `{ sessionId, agentId, configId, currentId, efforts: { id, name, description? }[] }` |
 | `agent:fast-mode` | ACP 上报 Fast 开关状态 | `{ sessionId, agentId, configId, enabled }` |
 | `agent:completed` | Agent 回答完成 | `{ sessionId, messageId, content, reasoning?, sources, stopReason? }` |
 | `agent:failed` | Agent 调用失败 | `{ sessionId, error }` |
 | `agent:permission-request` | 权限「每次询问」档：ACP 权限请求转交用户 | `{ requestId, sessionId, title, kind?, paths, options: { optionId, name, kind }[] }` |
+| `agent:elicitation-request` | form elicitation（Codex request_user_input） | `{ requestId, sessionId, message, toolCallId?, fields: { id, title, description?, required, kind, options[] }[] }` |
+| `agent:ask-user-request` | Grok `_x.ai/ask_user_question` | `{ requestId, sessionId, toolCallId?, mode, questions: { question, options[{label,description?}], multiSelect, allowOther }[] }` |
 | `background-task:progress` | 下载/解析任务进度 | `{ taskId, phase, downloadedBytes, totalBytes?, progress? }`；下载阶段的字节进度由前端聚合为总体进度（PDF 映射到 0–50%，TeX 映射到 50–100%），解析阶段显示为处理中，任务完成时为 100% |
 
 #### `agent_warm`
@@ -70,6 +73,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   agentId?: string;
   vaultPath?: string;
   modelId?: string; // preferred ACP model config value
+  collaborationModeId?: string; // preferred session mode (default / plan)
 }
 ```
 
@@ -1345,6 +1349,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   workflow?: string;
   target?: string;
   modelId?: string;
+  collaborationModeId?: string; // 会话模式 default / plan（Plan 下可用 request_user_input）
   reasoningEffort?: string; // 仅写入当前 ACP 会话声明的 thought_level 选项
   fastMode?: boolean; // 仅写入当前 ACP 会话声明的 fast model_config 选项
   skillIds?: string[]; // 已发现的本机 SKILL.md id，最多 5 个

@@ -1,5 +1,5 @@
 import { CopyIcon, Pencil } from "lucide-react";
-import { type RefObject, useState } from "react";
+import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	ChatAttachedImages,
@@ -73,7 +73,7 @@ import {
 	agentTextFromParts,
 	type ChatLine,
 	copyText,
-	formatAskUserAnswers,
+	isPendingAskUserToolStatus,
 	parseAskUserQuestions,
 	SUGGESTION_KEYS,
 	SUGGESTION_WORKFLOW,
@@ -82,83 +82,14 @@ import {
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 
-function AskUserQuestionTool({
-	input,
-	disabled,
-	onAnswer,
-}: {
-	input: unknown;
-	disabled: boolean;
-	onAnswer: (answer: string) => Promise<boolean>;
-}) {
+/** Compact note: interactive form is docked below, not inside the tool card. */
+function AskUserToolPendingNote() {
 	const { t } = useTranslation("agent");
-	const questions = parseAskUserQuestions(input);
-	const [answers, setAnswers] = useState<string[]>([]);
-	const [sending, setSending] = useState(false);
-	const [submitted, setSubmitted] = useState(false);
-
-	if (!questions) return null;
-	const ready =
-		answers.length === questions.length && answers.every((answer) => answer);
-
 	return (
 		<ToolContent>
-			<div className="space-y-4">
-				{questions.map((question, questionIndex) => (
-					<div key={question.question} className="space-y-2">
-						<p className="text-sm leading-5">{question.question}</p>
-						<div className="flex flex-col gap-1.5">
-							{question.options.map((option) => {
-								const selected = answers[questionIndex] === option.label;
-								return (
-									<Suggestion
-										key={option.label}
-										suggestion={option.label}
-										aria-pressed={selected}
-										disabled={disabled || sending || submitted}
-										variant={selected ? "secondary" : "outline"}
-										className="h-auto w-full justify-start whitespace-normal rounded-md px-3 py-2 text-left"
-										onClick={(answer) =>
-											setAnswers((current) => {
-												const next = [...current];
-												next[questionIndex] = answer;
-												return next;
-											})
-										}
-									>
-										<span className="flex min-w-0 flex-col items-start gap-0.5">
-											<span>{option.label}</span>
-											{option.description ? (
-												<span className="text-muted-foreground text-xs">
-													{option.description}
-												</span>
-											) : null}
-										</span>
-									</Suggestion>
-								);
-							})}
-						</div>
-					</div>
-				))}
-				<Button
-					type="button"
-					size="sm"
-					disabled={!ready || disabled || sending || submitted}
-					onClick={() => {
-						setSending(true);
-						void onAnswer(formatAskUserAnswers(questions, answers)).then(
-							(sent) => {
-								setSending(false);
-								setSubmitted(sent);
-							},
-						);
-					}}
-				>
-					{submitted
-						? t("askUserQuestion.submitted")
-						: t("askUserQuestion.submit")}
-				</Button>
-			</div>
+			<p className="text-xs text-muted-foreground">
+				{t("askUserQuestion.pendingInComposer")}
+			</p>
 		</ToolContent>
 	);
 }
@@ -181,7 +112,6 @@ export function ChatTranscript({
 	onResendEdited,
 	onStartEditing,
 	onSendSuggestion,
-	onAnswerQuestion,
 	onOpenSource,
 }: {
 	lines: ChatLine[];
@@ -208,7 +138,6 @@ export function ChatTranscript({
 	onResendEdited: (lineId: string) => void;
 	onStartEditing: (lineId: string, text: string) => void;
 	onSendSuggestion: (label: string, workflow?: string) => void;
-	onAnswerQuestion: (answer: string) => Promise<boolean>;
 	/** Open a vault path / paper (or external URL) from Sources / inline citation. */
 	onOpenSource?: (source: string) => void;
 }) {
@@ -463,28 +392,21 @@ export function ChatTranscript({
 														const askUserQuestion = parseAskUserQuestions(
 															tool.input,
 														);
+														// Interactive form is owned by the composer; transcript
+														// only shows a compact tool row (and a short pending note).
+														const askPending =
+															Boolean(askUserQuestion) &&
+															isPendingAskUserToolStatus(tool.status);
 														return (
-															<Tool
-																key={partKey}
-																defaultOpen={Boolean(askUserQuestion)}
-															>
+															<Tool key={partKey} defaultOpen={askPending}>
 																<ToolHeader
 																	title={tool.title || t("tool.defaultTitle")}
 																	type={`tool-${tool.kind}`}
 																	state={state}
 																/>
-																{askUserQuestion ? (
-																	<AskUserQuestionTool
-																		input={tool.input}
-																		disabled={
-																			switching ||
-																			submitting ||
-																			(tool.status !== "pending" &&
-																				tool.status !== "in_progress")
-																		}
-																		onAnswer={onAnswerQuestion}
-																	/>
-																) : (
+																{askPending ? (
+																	<AskUserToolPendingNote />
+																) : askUserQuestion ? null : (
 																	<ToolContent>
 																		{tool.input !== undefined ? (
 																			<ToolInput input={tool.input} />

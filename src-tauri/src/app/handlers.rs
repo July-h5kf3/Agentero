@@ -29,6 +29,8 @@ macro_rules! common_commands {
             crate::features::agent::commands::agent_cancel_run,
             crate::features::agent::background_commands::background_task_cancel,
             crate::features::agent::commands::agent_respond_permission,
+            crate::features::agent::commands::agent_respond_elicitation,
+            crate::features::agent::commands::agent_respond_ask_user,
             crate::features::wiki::commands::graph_get_backlinks,
             crate::features::wiki::commands::wiki_get_outgoing,
             crate::features::wiki::commands::wiki_resolve,

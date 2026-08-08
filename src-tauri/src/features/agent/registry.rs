@@ -21,13 +21,14 @@ impl AgentRegistry {
     pub fn load() -> Self {
         let path = config_path();
         let mut state = read_state(&path).unwrap_or_default();
-        let migrated = migrate_legacy_codex_agents(&mut state);
+        let migrated_codex = migrate_legacy_codex_agents(&mut state);
+        let migrated_env = migrate_catalog_env_defaults(&mut state);
         state.enabled = true;
-        if migrated {
+        if migrated_codex || migrated_env {
             if let Err(error) = persist(&path, &state) {
                 log::error!(
                     target: "agentero::agent",
-                    "failed to persist Codex registration migration: {error}"
+                    "failed to persist agent registration migration: {error}"
                 );
             }
         }
@@ -210,7 +211,17 @@ impl AgentRegistry {
                     || (a.command == info.command && a.args == info.args)
             }) {
                 let needs_refresh = existing.command != info.command || existing.args != info.args;
-                if !needs_refresh {
+                // Fill missing catalog env keys (e.g. OPENCODE_ENABLE_QUESTION_TOOL)
+                // without overwriting user values.
+                let mut merged_env = existing.env.clone();
+                let mut env_changed = false;
+                for (key, value) in &env {
+                    if !merged_env.contains_key(key) {
+                        merged_env.insert(key.clone(), value.clone());
+                        env_changed = true;
+                    }
+                }
+                if !needs_refresh && !env_changed {
                     if set_default {
                         self.set_default(Some(existing.id.clone()))?;
                         return self.get(&existing.id);
@@ -224,7 +235,7 @@ impl AgentRegistry {
                     template: Some(template_from_id(template_id)),
                     command: info.command,
                     args: info.args,
-                    env,
+                    env: merged_env,
                     set_default,
                 })?;
                 return self.get(&agent.id);
@@ -483,10 +494,35 @@ impl AgentRegistry {
     }
 }
 
+/// Default env injected when registering a catalog template (or refreshing it).
 fn catalog_env(
-    _info: &crate::features::agent::models::AgentTemplateInfo,
+    info: &crate::features::agent::models::AgentTemplateInfo,
 ) -> HashMap<String, String> {
-    HashMap::new()
+    let mut env = HashMap::new();
+    // OpenCode ACP disables the built-in `question` tool unless this is set
+    // (`OPENCODE_CLIENT=acp` + enableQuestionTool gate in OpenCode itself).
+    if info.id == AgentTemplate::Opencode.as_str() {
+        env.insert("OPENCODE_ENABLE_QUESTION_TOOL".to_string(), "1".to_string());
+    }
+    env
+}
+
+/// Merge missing catalog env keys into existing registrations (never overwrite).
+fn migrate_catalog_env_defaults(state: &mut AgentRegistryState) -> bool {
+    let mut changed = false;
+    for agent in &mut state.agents {
+        let template_id = agent.template.as_str();
+        let Some(info) = template_info(template_id) else {
+            continue;
+        };
+        for (key, value) in catalog_env(&info) {
+            if let std::collections::hash_map::Entry::Vacant(e) = agent.env.entry(key) {
+                e.insert(value);
+                changed = true;
+            }
+        }
+    }
+    changed
 }
 
 fn migrate_legacy_codex_agents(state: &mut AgentRegistryState) -> bool {

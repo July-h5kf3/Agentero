@@ -1,13 +1,18 @@
 use crate::core::error::AppError;
+use crate::features::agent::ask_user::{
+    cancelled_response, grok_response_from_answers, questions_to_dto, AskUserAnswer, AskUserGate,
+    AskUserRequestEvent, GrokAskUserRequest,
+};
 use crate::features::agent::discover::{path_entries, resolve_command};
+use crate::features::agent::elicitation::{ElicitationAnswer, ElicitationGate};
 use crate::features::agent::events::AgentEventEmitter;
 use crate::features::agent::models::{
     AcpHistoryLine, AcpHistoryPart, AcpHistoryTool, AcpListSessionsResult, AcpLoadSessionResult,
-    AcpSessionCapabilities, AcpSessionInfo, AgentCommand, AgentCommandInput, AgentCommandsEvent,
-    AgentDescriptor, AgentEffortChoice, AgentEffortEvent, AgentFailedEvent, AgentFastModeEvent,
-    AgentModelChoice, AgentModelsEvent, AgentPlanEntry, AgentPlanEvent, AgentResultPayload,
-    AgentStreamEvent, AgentStreamKind, AgentTemplate, AgentToolEvent, AgentUsageEvent, ProbeResult,
-    PromptImage, WarmResult,
+    AcpSessionCapabilities, AcpSessionInfo, AgentCollaborationEvent, AgentCommand,
+    AgentCommandInput, AgentCommandsEvent, AgentDescriptor, AgentEffortChoice, AgentEffortEvent,
+    AgentFailedEvent, AgentFastModeEvent, AgentModeChoice, AgentModelChoice, AgentModelsEvent,
+    AgentPlanEntry, AgentPlanEvent, AgentResultPayload, AgentStreamEvent, AgentStreamKind,
+    AgentTemplate, AgentToolEvent, AgentUsageEvent, ProbeResult, PromptImage, WarmResult,
 };
 use crate::features::agent::permission::PermissionGate;
 use crate::features::agent::prompts::{build_prompt, extract_sources};
@@ -15,23 +20,34 @@ use crate::features::agent::skills::{
     load_skill_instructions, skill_activation_prefix, skill_mention_style,
 };
 use agent_client_protocol::schema::v1::{
-    AvailableCommandInput, CancelNotification, ContentBlock, EnvVariable, ImageContent,
-    InitializeRequest, ListSessionsRequest, LoadSessionRequest, McpServer, McpServerStdio,
-    NewSessionRequest, PermissionOptionKind, PlanEntryPriority, PlanEntryStatus, PromptRequest,
-    RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
-    ResumeSessionRequest, SelectedPermissionOutcome, SessionConfigId, SessionConfigKind,
-    SessionConfigOption, SessionConfigOptionCategory, SessionConfigOptionValue,
+    AvailableCommandInput, CancelNotification, ClientCapabilities, ContentBlock,
+    CreateElicitationRequest, CreateElicitationResponse, ElicitationAcceptAction,
+    ElicitationAction, ElicitationCapabilities, ElicitationContentValue,
+    ElicitationFormCapabilities, ElicitationMode, ElicitationPropertySchema, ElicitationScope,
+    EnvVariable, ImageContent, InitializeRequest, ListSessionsRequest, LoadSessionRequest,
+    McpServer, McpServerStdio, NewSessionRequest, PermissionOptionKind, PlanEntryPriority,
+    PlanEntryStatus, PromptRequest, RequestPermissionOutcome, RequestPermissionRequest,
+    RequestPermissionResponse, ResumeSessionRequest, SelectedPermissionOutcome, SessionConfigId,
+    SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory, SessionConfigOptionValue,
     SessionConfigSelectOptions, SessionId, SessionNotification, SessionUpdate,
     SetSessionConfigOptionRequest, TextContent, ToolCallStatus, ToolKind,
 };
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{util, AcpAgent, Agent, ConnectionTo};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
 use uuid::Uuid;
+
+/// Advertise form elicitation so codex-acp bridges `request_user_input` to the client.
+fn client_initialize_request() -> InitializeRequest {
+    InitializeRequest::new(ProtocolVersion::V1).client_capabilities(
+        ClientCapabilities::new()
+            .elicitation(ElicitationCapabilities::new().form(ElicitationFormCapabilities::new())),
+    )
+}
 
 fn to_acp_agent_local(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
     let command = resolve_command(&desc.command).unwrap_or_else(|| PathBuf::from(&desc.command));
@@ -378,6 +394,81 @@ fn is_fast_option(opt: &SessionConfigOption) -> bool {
     ) && (opt.id.0.as_ref() == "fast-mode" || opt.name.to_ascii_lowercase().contains("fast"))
 }
 
+fn is_collaboration_option(opt: &SessionConfigOption) -> bool {
+    // Codex codex-acp: id + category "collaboration_mode" (Default / Plan).
+    if matches!(
+        opt.id.0.as_ref(),
+        "collaboration_mode" | "collaboration-mode"
+    ) {
+        return true;
+    }
+    match opt.category.as_ref() {
+        Some(SessionConfigOptionCategory::Other(cat)) => {
+            cat == "collaboration_mode" || cat == "collaboration-mode"
+        }
+        _ => {
+            opt.name.eq_ignore_ascii_case("collaboration mode")
+                || opt.name.eq_ignore_ascii_case("collaboration")
+        }
+    }
+}
+
+fn collect_mode_choices_from_select(
+    sel: &agent_client_protocol::schema::v1::SessionConfigSelect,
+) -> Vec<AgentModeChoice> {
+    let mut modes = Vec::new();
+    match &sel.options {
+        SessionConfigSelectOptions::Ungrouped(list) => {
+            for o in list {
+                modes.push(AgentModeChoice {
+                    id: o.value.to_string(),
+                    name: o.name.clone(),
+                    description: o.description.clone(),
+                });
+            }
+        }
+        SessionConfigSelectOptions::Grouped(groups) => {
+            for g in groups {
+                for o in &g.options {
+                    modes.push(AgentModeChoice {
+                        id: o.value.to_string(),
+                        name: o.name.clone(),
+                        description: o.description.clone(),
+                    });
+                }
+            }
+        }
+        _ => {}
+    }
+    modes
+}
+
+/// Extract collaboration mode (Codex Default / Plan) from ACP config options.
+fn collaboration_from_config_options(
+    session_id: &str,
+    agent_id: &str,
+    opts: &[SessionConfigOption],
+) -> Option<AgentCollaborationEvent> {
+    let opt = opts.iter().find(|opt| is_collaboration_option(opt))?;
+    let SessionConfigKind::Select(sel) = &opt.kind else {
+        return None;
+    };
+    let modes = collect_mode_choices_from_select(sel)
+        .into_iter()
+        .filter(|m| !m.id.trim().is_empty() && !m.name.trim().is_empty())
+        .collect::<Vec<_>>();
+    if modes.is_empty() {
+        return None;
+    }
+    Some(AgentCollaborationEvent {
+        session_id: session_id.to_string(),
+        agent_id: agent_id.to_string(),
+        config_id: opt.id.to_string(),
+        current_id: sel.current_value.to_string(),
+        modes,
+    })
+}
+
 fn effort_from_config_options(
     session_id: &str,
     agent_id: &str,
@@ -434,6 +525,9 @@ fn emit_session_config_options(
 ) {
     if let Some(ev) = models_from_config_options(session_id, agent_id, opts) {
         let _ = app.emit("agent:models", ev);
+    }
+    if let Some(ev) = collaboration_from_config_options(session_id, agent_id, opts) {
+        let _ = app.emit("agent:collaboration", ev);
     }
     if let Some(ev) = effort_from_config_options(session_id, agent_id, opts) {
         let _ = app.emit("agent:effort", ev);
@@ -610,6 +704,309 @@ fn option_kind_label(kind: &PermissionOptionKind) -> &'static str {
     }
 }
 
+/// One form field derived from an elicitation schema property (for UI).
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ElicitationFieldView {
+    id: String,
+    title: String,
+    description: Option<String>,
+    required: bool,
+    /// select | text | boolean | number | other
+    kind: String,
+    options: Vec<ElicitationOptionView>,
+    /// Codex companion free-text for "Other" (same logical question).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    is_other_answer: bool,
+    /// Parent question field id when `is_other_answer`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent_field_id: Option<String>,
+}
+
+fn codex_meta_flag(meta: &Option<agent_client_protocol::schema::v1::Meta>, key: &str) -> bool {
+    meta.as_ref()
+        .and_then(|m| m.get("codex"))
+        .and_then(|c| c.get(key))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+fn codex_meta_string(
+    meta: &Option<agent_client_protocol::schema::v1::Meta>,
+    key: &str,
+) -> Option<String> {
+    meta.as_ref()
+        .and_then(|m| m.get("codex"))
+        .and_then(|c| c.get(key))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ElicitationOptionView {
+    value: String,
+    title: String,
+    description: Option<String>,
+}
+
+/// Payload for `agent:elicitation-request`.
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ElicitationRequestEvent {
+    request_id: String,
+    /// Agentero runtime session id (correlates with the active chat run).
+    session_id: String,
+    message: String,
+    /// Optional ACP provider tool call id when the elicitation is scoped to a tool.
+    tool_call_id: Option<String>,
+    fields: Vec<ElicitationFieldView>,
+}
+
+fn elicitation_fields_from_request(
+    request: &CreateElicitationRequest,
+) -> Vec<ElicitationFieldView> {
+    let ElicitationMode::Form(form) = &request.mode else {
+        return Vec::new();
+    };
+    let required: HashSet<&str> = form
+        .requested_schema
+        .required
+        .as_ref()
+        .map(|r| r.iter().map(String::as_str).collect())
+        .unwrap_or_default();
+
+    form.requested_schema
+        .properties
+        .iter()
+        .map(|(id, prop)| {
+            let is_required = required.contains(id.as_str());
+            match prop {
+                ElicitationPropertySchema::String(s) => {
+                    let options = if let Some(one_of) = &s.one_of {
+                        one_of
+                            .iter()
+                            .map(|o| ElicitationOptionView {
+                                value: o.value.clone(),
+                                title: o.title.clone(),
+                                description: o.description.clone(),
+                            })
+                            .collect()
+                    } else if let Some(enums) = &s.enum_values {
+                        enums
+                            .iter()
+                            .map(|v| ElicitationOptionView {
+                                value: v.clone(),
+                                title: v.clone(),
+                                description: None,
+                            })
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
+                    let kind = if options.is_empty() {
+                        "text".to_string()
+                    } else {
+                        "select".to_string()
+                    };
+                    let is_other_answer = codex_meta_flag(&s.meta, "isOtherAnswer")
+                        || codex_meta_flag(&s.meta, "is_other_answer");
+                    // codex-acp uses questionId; some adapters use parentFieldId / parentId.
+                    let parent_field_id = codex_meta_string(&s.meta, "questionId")
+                        .or_else(|| codex_meta_string(&s.meta, "parentFieldId"))
+                        .or_else(|| codex_meta_string(&s.meta, "parent_field_id"))
+                        .or_else(|| codex_meta_string(&s.meta, "parentId"));
+                    ElicitationFieldView {
+                        id: id.clone(),
+                        title: s.title.clone().unwrap_or_else(|| id.clone()),
+                        description: s.description.clone(),
+                        required: is_required,
+                        kind,
+                        options,
+                        is_other_answer,
+                        parent_field_id,
+                    }
+                }
+                ElicitationPropertySchema::Boolean(b) => ElicitationFieldView {
+                    id: id.clone(),
+                    title: b.title.clone().unwrap_or_else(|| id.clone()),
+                    description: b.description.clone(),
+                    required: is_required,
+                    kind: "boolean".to_string(),
+                    options: vec![
+                        ElicitationOptionView {
+                            value: "true".into(),
+                            title: "Yes".into(),
+                            description: None,
+                        },
+                        ElicitationOptionView {
+                            value: "false".into(),
+                            title: "No".into(),
+                            description: None,
+                        },
+                    ],
+                    is_other_answer: false,
+                    parent_field_id: None,
+                },
+                ElicitationPropertySchema::Number(n) => ElicitationFieldView {
+                    id: id.clone(),
+                    title: n.title.clone().unwrap_or_else(|| id.clone()),
+                    description: n.description.clone(),
+                    required: is_required,
+                    kind: "number".to_string(),
+                    options: Vec::new(),
+                    is_other_answer: false,
+                    parent_field_id: None,
+                },
+                ElicitationPropertySchema::Integer(n) => ElicitationFieldView {
+                    id: id.clone(),
+                    title: n.title.clone().unwrap_or_else(|| id.clone()),
+                    description: n.description.clone(),
+                    required: is_required,
+                    kind: "number".to_string(),
+                    options: Vec::new(),
+                    is_other_answer: false,
+                    parent_field_id: None,
+                },
+                ElicitationPropertySchema::Array(a) => ElicitationFieldView {
+                    id: id.clone(),
+                    title: a.title.clone().unwrap_or_else(|| id.clone()),
+                    description: a.description.clone(),
+                    required: is_required,
+                    kind: "text".to_string(),
+                    options: Vec::new(),
+                    is_other_answer: false,
+                    parent_field_id: None,
+                },
+                ElicitationPropertySchema::Other(_) | _ => ElicitationFieldView {
+                    id: id.clone(),
+                    title: id.clone(),
+                    description: None,
+                    required: is_required,
+                    kind: "other".to_string(),
+                    options: Vec::new(),
+                    is_other_answer: false,
+                    parent_field_id: None,
+                },
+            }
+        })
+        .collect()
+}
+
+fn session_id_from_elicitation(request: &CreateElicitationRequest) -> Option<String> {
+    match request.mode.scope() {
+        ElicitationScope::Session(s) => Some(s.session_id.to_string()),
+        ElicitationScope::Request(_) | _ => None,
+    }
+}
+
+fn tool_call_id_from_elicitation(request: &CreateElicitationRequest) -> Option<String> {
+    match request.mode.scope() {
+        ElicitationScope::Session(s) => s.tool_call_id.as_ref().map(|id| id.to_string()),
+        ElicitationScope::Request(_) | _ => None,
+    }
+}
+
+fn elicitation_response_from_answer(answer: ElicitationAnswer) -> CreateElicitationResponse {
+    match answer {
+        ElicitationAnswer::Accept(fields) => {
+            let content: BTreeMap<String, ElicitationContentValue> = fields
+                .into_iter()
+                .map(|(k, v)| (k, ElicitationContentValue::String(v)))
+                .collect();
+            CreateElicitationResponse::new(ElicitationAction::Accept(
+                ElicitationAcceptAction::new().content(content),
+            ))
+        }
+        ElicitationAnswer::Decline => CreateElicitationResponse::new(ElicitationAction::Decline),
+        ElicitationAnswer::Cancel => CreateElicitationResponse::new(ElicitationAction::Cancel),
+    }
+}
+
+/// Forward Grok `_x.ai/ask_user_question` to the frontend; timeout → cancel.
+async fn await_grok_ask_user(
+    app: &AgentEventEmitter,
+    gate: &AskUserGate,
+    runtime_session_id: &str,
+    request: &GrokAskUserRequest,
+) -> serde_json::Value {
+    let params = &request.0;
+    let questions = questions_to_dto(&params.questions);
+    if questions.is_empty() {
+        log::warn!(
+            target: "agentero::agent",
+            "grok ask_user_question with no valid questions; cancelling"
+        );
+        return cancelled_response();
+    }
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let mode = match params.mode.as_deref() {
+        Some("plan") => "plan".to_string(),
+        _ => "default".to_string(),
+    };
+    let rx = gate.register(&request_id);
+    let _ = app.emit(
+        "agent:ask-user-request",
+        AskUserRequestEvent {
+            request_id: request_id.clone(),
+            session_id: runtime_session_id.to_string(),
+            tool_call_id: Some(params.tool_call_id.clone()).filter(|s| !s.is_empty()),
+            mode,
+            questions,
+        },
+    );
+
+    let answer = tokio::time::timeout(std::time::Duration::from_secs(300), rx).await;
+    match answer {
+        Ok(Ok(AskUserAnswer::Accepted { answers })) => {
+            grok_response_from_answers(&params.questions, &answers)
+        }
+        _ => cancelled_response(),
+    }
+}
+
+/// Forward form elicitation to the frontend; timeout → cancel.
+async fn await_user_elicitation(
+    app: &AgentEventEmitter,
+    gate: &ElicitationGate,
+    runtime_session_id: &str,
+    request: &CreateElicitationRequest,
+) -> CreateElicitationResponse {
+    // URL elicitations: surface message only; user can open URL externally later.
+    if matches!(request.mode, ElicitationMode::Url(_)) {
+        log::debug!(
+            target: "agentero::agent",
+            "elicitation url mode not fully implemented; cancelling"
+        );
+        return CreateElicitationResponse::new(ElicitationAction::Cancel);
+    }
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let fields = elicitation_fields_from_request(request);
+    let provider_session = session_id_from_elicitation(request);
+    let tool_call_id = tool_call_id_from_elicitation(request);
+
+    let rx = gate.register(&request_id);
+    let _ = app.emit(
+        "agent:elicitation-request",
+        ElicitationRequestEvent {
+            request_id: request_id.clone(),
+            // Prefer Agentero runtime id so the chat panel can match the open run.
+            session_id: runtime_session_id.to_string(),
+            message: request.message.clone(),
+            tool_call_id: tool_call_id.or(provider_session),
+            fields,
+        },
+    );
+
+    let answer = tokio::time::timeout(std::time::Duration::from_secs(300), rx).await;
+    match answer {
+        Ok(Ok(user)) => elicitation_response_from_answer(user),
+        _ => CreateElicitationResponse::new(ElicitationAction::Cancel),
+    }
+}
+
 /// Ask mode: forward the request to the frontend and await the user's choice.
 /// Falls back to cancelling when the user does not answer within the timeout.
 async fn await_user_permission(
@@ -712,7 +1109,7 @@ pub async fn probe_agent(
             let captured = captured_clone;
             move |connection: ConnectionTo<Agent>| async move {
                 let init = connection
-                    .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                    .send_request(client_initialize_request())
                     .block_task()
                     .await
                     .map_err(|e| acp_err(format!("initialize failed: {e}")))?;
@@ -803,11 +1200,14 @@ pub async fn run_once(
     target: Option<String>,
     vault_path: Option<String>,
     preferred_model_id: Option<String>,
+    preferred_collaboration_mode_id: Option<String>,
     preferred_reasoning_effort: Option<String>,
     fast_mode: Option<bool>,
     skill_ids: Vec<String>,
     permission_policy: PermissionPolicy,
     permission_gate: PermissionGate,
+    elicitation_gate: ElicitationGate,
+    ask_user_gate: AskUserGate,
     response_language: Option<String>,
     personal_prompt: Option<String>,
     mut cancellation: watch::Receiver<bool>,
@@ -988,10 +1388,45 @@ pub async fn run_once(
             },
             agent_client_protocol::on_receive_request!(),
         )
+        .on_receive_request(
+            {
+                let app_for_elicit = app_for_conn.clone();
+                let session_for_elicit = session_for_conn.clone();
+                let elicitation_gate = elicitation_gate.clone();
+                async move |request: CreateElicitationRequest, responder, _cx| {
+                    let response = await_user_elicitation(
+                        &app_for_elicit,
+                        &elicitation_gate,
+                        &session_for_elicit,
+                        &request,
+                    )
+                    .await;
+                    let _ = responder.respond(response);
+                    Ok(())
+                }
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
+            {
+                let app_for_ask = app_for_conn.clone();
+                let session_for_ask = session_for_conn.clone();
+                let ask_user_gate = ask_user_gate.clone();
+                async move |request: GrokAskUserRequest, responder, _cx| {
+                    let response =
+                        await_grok_ask_user(&app_for_ask, &ask_user_gate, &session_for_ask, &request)
+                            .await;
+                    let _ = responder.respond(response);
+                    Ok(())
+                }
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
         .connect_with(acp, {
             let full_prompt = full_prompt.clone();
             let prompt_images = prompt_images.clone();
             let preferred_model = preferred_model_id.clone();
+            let preferred_collaboration = preferred_collaboration_mode_id.clone();
             let preferred_effort = preferred_reasoning_effort.clone();
             let app_for_models = app_for_conn.clone();
             let session_for_models = session_for_conn.clone();
@@ -1005,7 +1440,7 @@ pub async fn run_once(
                     result = timed_acp_request(
                         "initialize",
                         connection
-                            .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                            .send_request(client_initialize_request())
                             .block_task(),
                     ) => result?,
                     () = wait_for_cancellation(&mut cancellation) => {
@@ -1171,6 +1606,32 @@ pub async fn run_once(
                                         e
                                     );
                                 }
+                            }
+                        }
+                    }
+                }
+                if let Some(pref) = preferred_collaboration.clone() {
+                    if let Some(ev) = collaboration_from_config_options(
+                        &session_for_models,
+                        &agent_id_for_models,
+                        &config_options,
+                    ) {
+                        if pref != ev.current_id && ev.modes.iter().any(|mode| mode.id == pref) {
+                            let response = tokio::select! {
+                                result = timed_acp_request(
+                                    "set collaboration mode",
+                                    connection
+                                        .send_request(SetSessionConfigOptionRequest::new(
+                                            acp_session_id.clone(),
+                                            SessionConfigId::new(ev.config_id.as_str()),
+                                            SessionConfigOptionValue::value_id(pref),
+                                        ))
+                                        .block_task(),
+                                ) => result.ok(),
+                                () = wait_for_cancellation(&mut cancellation) => return_cancelled!(),
+                            };
+                            if let Some(response) = response {
+                                config_options = response.config_options;
                             }
                         }
                     }
@@ -1365,6 +1826,7 @@ pub async fn warm_agent(
     desc: AgentDescriptor,
     vault_path: Option<String>,
     preferred_model_id: Option<String>,
+    preferred_collaboration_mode_id: Option<String>,
     remote: Option<crate::features::remote::RemoteAgentTarget>,
 ) -> WarmResult {
     let agent_id = desc.id.clone();
@@ -1401,6 +1863,7 @@ pub async fn warm_agent(
     let agent_for_notif = agent_id.clone();
 
     let preferred = preferred_model_id.clone();
+    let preferred_collaboration = preferred_collaboration_mode_id.clone();
     let app_for_conn = app.clone();
     let session_for_conn = session_id.clone();
     let agent_for_conn = agent_id.clone();
@@ -1452,12 +1915,13 @@ pub async fn warm_agent(
         )
         .connect_with(acp, {
             let preferred = preferred.clone();
+            let preferred_collaboration = preferred_collaboration.clone();
             let models_for_conn = models_for_conn.clone();
             move |connection: ConnectionTo<Agent>| async move {
                 timed_acp_request(
                     "initialize",
                     connection
-                        .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                        .send_request(client_initialize_request())
                         .block_task(),
                 )
                 .await?;
@@ -1501,6 +1965,41 @@ pub async fn warm_agent(
                                         "agent={} warm set model failed (listed={}): pref={} err={}",
                                         agent_for_conn,
                                         listed,
+                                        pref,
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some(pref) = preferred_collaboration.clone() {
+                    if let Some(ev) = collaboration_from_config_options(
+                        &session_for_conn,
+                        &agent_for_conn,
+                        &config_options,
+                    ) {
+                        if pref != ev.current_id && ev.modes.iter().any(|mode| mode.id == pref) {
+                            match timed_acp_request(
+                                "set collaboration mode",
+                                connection
+                                    .send_request(SetSessionConfigOptionRequest::new(
+                                        acp_session_id.clone(),
+                                        SessionConfigId::new(ev.config_id.as_str()),
+                                        SessionConfigOptionValue::value_id(pref.clone()),
+                                    ))
+                                    .block_task(),
+                            )
+                            .await
+                            {
+                                Ok(response) => {
+                                    config_options = response.config_options;
+                                }
+                                Err(e) => {
+                                    log::debug!(
+                                        target: "agentero::agent",
+                                        "agent={} warm set collaboration mode failed: pref={} err={}",
+                                        agent_for_conn,
                                         pref,
                                         e
                                     );
@@ -1579,7 +2078,7 @@ pub async fn list_acp_sessions(
                 let init = timed_acp_request(
                     "initialize",
                     connection
-                        .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                        .send_request(client_initialize_request())
                         .block_task(),
                 )
                 .await?;
@@ -1921,7 +2420,7 @@ pub async fn load_acp_session(
                 timed_acp_request(
                     "initialize",
                     connection
-                        .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                        .send_request(client_initialize_request())
                         .block_task(),
                 )
                 .await?;
@@ -1990,11 +2489,82 @@ mod cancelled_payload_tests {
 #[cfg(test)]
 mod config_option_tests {
     use super::{
-        effort_from_config_options, fast_mode_from_config_options, models_from_config_options,
+        collaboration_from_config_options, effort_from_config_options,
+        fast_mode_from_config_options, models_from_config_options,
     };
     use agent_client_protocol::schema::v1::{
         SessionConfigOption, SessionConfigOptionCategory, SessionConfigSelectOption,
     };
+
+    #[test]
+    fn ignores_permission_sandbox_mode_category() {
+        let options = vec![SessionConfigOption::select(
+            "mode",
+            "Session mode",
+            "read-only",
+            vec![
+                SessionConfigSelectOption::new("read-only", "Read-only").description("No writes"),
+                SessionConfigSelectOption::new("agent", "Agent"),
+            ],
+        )
+        .category(SessionConfigOptionCategory::Mode)];
+
+        // Host does not surface ACP category:mode (sandbox); only collaboration_mode.
+        assert!(collaboration_from_config_options("session", "codex", &options).is_none());
+    }
+
+    #[test]
+    fn extracts_codex_collaboration_mode() {
+        let options = vec![
+            SessionConfigOption::select(
+                "mode",
+                "Session mode",
+                "read-only",
+                vec![
+                    SessionConfigSelectOption::new("read-only", "Read-only"),
+                    SessionConfigSelectOption::new("agent", "Agent"),
+                ],
+            )
+            .category(SessionConfigOptionCategory::Mode),
+            SessionConfigOption::select(
+                "collaboration_mode",
+                "Collaboration mode",
+                "default",
+                vec![
+                    SessionConfigSelectOption::new("default", "Default"),
+                    SessionConfigSelectOption::new("plan", "Plan")
+                        .description("Plan before making changes"),
+                ],
+            )
+            .category(SessionConfigOptionCategory::Other(
+                "collaboration_mode".into(),
+            )),
+        ];
+
+        let collab = collaboration_from_config_options("session", "codex", &options)
+            .expect("collaboration mode should be exposed");
+        assert_eq!(collab.config_id, "collaboration_mode");
+        assert_eq!(collab.current_id, "default");
+        assert_eq!(collab.modes.len(), 2);
+        assert_eq!(collab.modes[1].id, "plan");
+        assert_eq!(collab.modes[1].name, "Plan");
+    }
+
+    #[test]
+    fn does_not_treat_fast_mode_as_session_mode() {
+        let options = vec![SessionConfigOption::select(
+            "fast-mode",
+            "Fast mode",
+            "on",
+            vec![
+                SessionConfigSelectOption::new("off", "Off"),
+                SessionConfigSelectOption::new("on", "On"),
+            ],
+        )
+        .category(SessionConfigOptionCategory::ModelConfig)];
+
+        assert!(collaboration_from_config_options("session", "codex", &options).is_none());
+    }
 
     #[test]
     fn extracts_codex_reasoning_effort_from_thought_level() {

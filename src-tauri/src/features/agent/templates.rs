@@ -23,7 +23,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
         AgentTemplateInfo {
             id: AgentTemplate::Opencode.as_str().to_string(),
             name: "OpenCode".to_string(),
-            description: "Multi-provider coding agent with native ACP (`opencode acp`)."
+            description: "Multi-provider coding agent with native ACP (`opencode acp`). Enables the question tool via OPENCODE_ENABLE_QUESTION_TOOL."
                 .to_string(),
             command: "opencode".to_string(),
             args: vec!["acp".to_string()],

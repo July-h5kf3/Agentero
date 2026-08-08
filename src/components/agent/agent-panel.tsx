@@ -3,6 +3,10 @@ import type {
 	PointerEvent as ReactPointerEvent,
 } from "react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+	AgentAskUserSurface,
+	isAskUserSurfaceActive,
+} from "@/components/agent/agent-ask-user-surface";
 import { AgentComposer } from "@/components/agent/agent-composer";
 import { SidebarHistoryTrailing } from "@/components/agent/agent-history";
 import { AgentPermissionDialog } from "@/components/agent/agent-permission-dialog";
@@ -216,6 +220,10 @@ export const AgentPanel = memo(function AgentPanel({
 		warming,
 		pickModel,
 		toggleFavorite,
+		collaborationOptions,
+		collaborationModeId,
+		selectedCollaborationName,
+		pickCollaborationMode,
 		effortOptionsInDisplayOrder,
 		reasoningEffort,
 		setReasoningEffort,
@@ -227,9 +235,23 @@ export const AgentPanel = memo(function AgentPanel({
 		cancelCurrentRun,
 		permissionRequest,
 		setPermissionRequest,
+		elicitationRequest,
+		setElicitationRequest,
+		askUserRequest,
+		setAskUserRequest,
+		toolAskUserRequest,
+		setToolAskUserRequest,
+		answerToolAskUser,
 		switchingRef,
 		submittingRef,
 	} = panel;
+
+	// Questionnaire and free-text composer are mutually exclusive.
+	const askUserActive = isAskUserSurfaceActive({
+		elicitationRequest,
+		askUserRequest,
+		toolAskUserRequest,
+	});
 
 	const sendSuggestion = (label: string, workflow?: string) => {
 		void submitComposer(label, workflow);
@@ -284,109 +306,132 @@ export const AgentPanel = memo(function AgentPanel({
 						onResendEdited={(lineId) => void resendEditedMessage(lineId)}
 						onStartEditing={startEditingMessage}
 						onSendSuggestion={sendSuggestion}
-						onAnswerQuestion={submitComposer}
 						onOpenSource={onOpenSource}
 					/>
 
-					<button
-						type="button"
-						aria-label={t("composer.resizeHandle")}
-						title={t("composer.resizeHandle")}
-						className="group relative h-2 shrink-0 cursor-row-resize touch-none bg-muted/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-						onPointerDown={onComposerResizePointerDown}
-						onKeyDown={onComposerResizeKeyDown}
-					>
-						<div className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 h-px w-12 rounded-full bg-border transition-colors group-hover:bg-foreground/35 group-active:bg-foreground/45" />
-					</button>
-
-					<AgentComposer
-						autoFocus={autoFocus}
-						heightPx={composerHeightPx}
-						compact={composerCompact}
-						linesLength={lines.length}
-						activeTabIsRunning={activeTabIsRunning}
-						switching={switching}
-						submitting={submitting}
-						composerText={composerText}
-						onComposerTextChange={(text) => {
-							onComposerTextChangeFromUser(text);
-							setComposerMenuDismissed(false);
-							setMentionActiveIndex(0);
-							setSkillActiveIndex(0);
-							setSlashActiveIndex(0);
-						}}
-						onSubmit={async (text, images) => {
-							if (switchingRef.current || submittingRef.current) {
-								// Keep PromptInput attachments when the submit is rejected.
-								throw new Error("composer busy");
-							}
-							const ok = await submitComposer(text, undefined, images);
-							if (!ok) {
-								// Preserve pasted/picked images when send early-returns (e.g. no agent).
-								throw new Error("composer submit rejected");
-							}
-						}}
-						onComposerKeyDown={handleComposerMenuKeyDown}
-						onComposerDragOver={handleComposerDragOver}
-						onComposerDrop={handleComposerDrop}
-						onDismissComposerMenu={() => setComposerMenuDismissed(true)}
-						messageQueue={messageQueue}
-						onRemoveQueuedMessage={removeQueuedMessage}
-						currentFilePath={currentFilePath}
-						currentFileLabel={currentFileLabel}
-						mentionChipPaths={mentionChipPaths}
-						selectionChips={selectionChips}
-						onRemoveSelection={removeSelection}
-						visualDrafts={visualDrafts}
-						onRemoveVisualDraft={removeVisualDraft}
-						directoryPathSet={directoryPathSet}
-						paperPathSet={paperPathSet}
-						labelForPath={labelForPath}
-						onRemoveContextPath={removeContextPath}
-						selectedSkills={selectedSkills}
-						onRemoveSkill={(skillId) =>
-							setSelectedSkillIds((prev) => prev.filter((id) => id !== skillId))
-						}
-						showMentionMenu={showMentionMenu}
-						mentionBrowseRoot={mentionBrowseRoot}
-						mentionOptions={mentionOptions}
-						mentionActiveIndex={mentionActiveIndex}
-						mentionCandidates={mentionCandidates}
-						onLeaveMentionFolder={leaveMentionFolder}
-						onEnterMentionFolder={enterMentionFolder}
-						onAttachMention={attachMention}
-						onMentionActiveIndexChange={setMentionActiveIndex}
-						showSkillMenu={showSkillMenu}
-						skillOptions={skillOptions}
-						skillActiveIndex={skillActiveIndex}
-						onAttachSkill={attachSkill}
-						onSkillActiveIndexChange={setSkillActiveIndex}
-						showSlashMenu={showSlashMenu}
-						slashOptions={slashOptions}
-						slashActiveIndex={slashActiveIndex}
-						onAttachSlashCommand={attachSlashCommand}
-						onSlashActiveIndexChange={setSlashActiveIndex}
-						modelSelectorOpen={modelSelectorOpen}
-						onModelSelectorOpenChange={setModelSelectorOpen}
-						models={models}
-						groupedModels={groupedModels}
-						modelId={modelId}
-						selectedModelName={selectedModelName}
-						favoriteIds={favoriteIds}
-						warming={warming}
-						onPickModel={pickModel}
-						onToggleFavorite={toggleFavorite}
-						effortOptionsInDisplayOrder={effortOptionsInDisplayOrder}
-						reasoningEffort={reasoningEffort}
-						onReasoningEffortChange={setReasoningEffort}
-						formatEffort={formatEffort}
-						activeUsage={activeUsage}
-						fastAvailable={fastAvailable}
-						fastEnabled={fastEnabled}
-						onFastEnabledToggle={() => setFastEnabled((current) => !current)}
-						onCancelRun={() => void cancelCurrentRun()}
-						onSendSuggestion={sendSuggestion}
+					{/* Questionnaire replaces the composer until submit/cancel. */}
+					<AgentAskUserSurface
+						elicitationRequest={elicitationRequest}
+						onElicitationResolved={() => setElicitationRequest(null)}
+						askUserRequest={askUserRequest}
+						onAskUserResolved={() => setAskUserRequest(null)}
+						toolAskUserRequest={toolAskUserRequest}
+						onToolAskUserResolved={() => setToolAskUserRequest(null)}
+						onAnswerToolAskUser={answerToolAskUser}
+						disabled={switching}
 					/>
+
+					{!askUserActive ? (
+						<>
+							<button
+								type="button"
+								aria-label={t("composer.resizeHandle")}
+								title={t("composer.resizeHandle")}
+								className="group relative h-2 shrink-0 cursor-row-resize touch-none bg-muted/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+								onPointerDown={onComposerResizePointerDown}
+								onKeyDown={onComposerResizeKeyDown}
+							>
+								<div className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 h-px w-12 rounded-full bg-border transition-colors group-hover:bg-foreground/35 group-active:bg-foreground/45" />
+							</button>
+
+							<AgentComposer
+								autoFocus={autoFocus}
+								heightPx={composerHeightPx}
+								compact={composerCompact}
+								linesLength={lines.length}
+								activeTabIsRunning={activeTabIsRunning}
+								switching={switching}
+								submitting={submitting}
+								composerText={composerText}
+								onComposerTextChange={(text) => {
+									onComposerTextChangeFromUser(text);
+									setComposerMenuDismissed(false);
+									setMentionActiveIndex(0);
+									setSkillActiveIndex(0);
+									setSlashActiveIndex(0);
+								}}
+								onSubmit={async (text, images) => {
+									if (switchingRef.current || submittingRef.current) {
+										// Keep PromptInput attachments when the submit is rejected.
+										throw new Error("composer busy");
+									}
+									const ok = await submitComposer(text, undefined, images);
+									if (!ok) {
+										// Preserve pasted/picked images when send early-returns (e.g. no agent).
+										throw new Error("composer submit rejected");
+									}
+								}}
+								onComposerKeyDown={handleComposerMenuKeyDown}
+								onComposerDragOver={handleComposerDragOver}
+								onComposerDrop={handleComposerDrop}
+								onDismissComposerMenu={() => setComposerMenuDismissed(true)}
+								messageQueue={messageQueue}
+								onRemoveQueuedMessage={removeQueuedMessage}
+								currentFilePath={currentFilePath}
+								currentFileLabel={currentFileLabel}
+								mentionChipPaths={mentionChipPaths}
+								selectionChips={selectionChips}
+								onRemoveSelection={removeSelection}
+								visualDrafts={visualDrafts}
+								onRemoveVisualDraft={removeVisualDraft}
+								directoryPathSet={directoryPathSet}
+								paperPathSet={paperPathSet}
+								labelForPath={labelForPath}
+								onRemoveContextPath={removeContextPath}
+								selectedSkills={selectedSkills}
+								onRemoveSkill={(skillId) =>
+									setSelectedSkillIds((prev) =>
+										prev.filter((id) => id !== skillId),
+									)
+								}
+								showMentionMenu={showMentionMenu}
+								mentionBrowseRoot={mentionBrowseRoot}
+								mentionOptions={mentionOptions}
+								mentionActiveIndex={mentionActiveIndex}
+								mentionCandidates={mentionCandidates}
+								onLeaveMentionFolder={leaveMentionFolder}
+								onEnterMentionFolder={enterMentionFolder}
+								onAttachMention={attachMention}
+								onMentionActiveIndexChange={setMentionActiveIndex}
+								showSkillMenu={showSkillMenu}
+								skillOptions={skillOptions}
+								skillActiveIndex={skillActiveIndex}
+								onAttachSkill={attachSkill}
+								onSkillActiveIndexChange={setSkillActiveIndex}
+								showSlashMenu={showSlashMenu}
+								slashOptions={slashOptions}
+								slashActiveIndex={slashActiveIndex}
+								onAttachSlashCommand={attachSlashCommand}
+								onSlashActiveIndexChange={setSlashActiveIndex}
+								modelSelectorOpen={modelSelectorOpen}
+								onModelSelectorOpenChange={setModelSelectorOpen}
+								models={models}
+								groupedModels={groupedModels}
+								modelId={modelId}
+								selectedModelName={selectedModelName}
+								favoriteIds={favoriteIds}
+								warming={warming}
+								onPickModel={pickModel}
+								onToggleFavorite={toggleFavorite}
+								collaborationOptions={collaborationOptions}
+								collaborationModeId={collaborationModeId}
+								selectedCollaborationName={selectedCollaborationName}
+								onPickCollaborationMode={pickCollaborationMode}
+								effortOptionsInDisplayOrder={effortOptionsInDisplayOrder}
+								reasoningEffort={reasoningEffort}
+								onReasoningEffortChange={setReasoningEffort}
+								formatEffort={formatEffort}
+								activeUsage={activeUsage}
+								fastAvailable={fastAvailable}
+								fastEnabled={fastEnabled}
+								onFastEnabledToggle={() =>
+									setFastEnabled((current) => !current)
+								}
+								onCancelRun={() => void cancelCurrentRun()}
+								onSendSuggestion={sendSuggestion}
+							/>
+						</>
+					) : null}
 				</div>
 			</div>
 
