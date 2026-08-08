@@ -88,6 +88,10 @@ jobs:
           test -d "$dest/include"
           echo "PDFIUM_LIB_PATH=$dest/lib" >> "$GITHUB_ENV"
           echo "PDFIUM_INCLUDE_PATH=$dest/include" >> "$GITHUB_ENV"
+      - name: Stub bundled CLI for Tauri externalBin
+        # tauri.conf.json lists binaries/agentero-cli; build-script requires the
+        # triple-suffixed file to exist even for lib/tests (not only app bundle).
+        run: node scripts/prepare-bundled-cli.mjs --stub
       - name: Run Rust checks
         run: |
           set -euo pipefail

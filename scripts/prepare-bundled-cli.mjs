@@ -36,20 +36,32 @@ const outDir = path.join(root, "src-tauri", "binaries");
 fs.mkdirSync(outDir, { recursive: true });
 const dest = path.join(outDir, `agentero-cli-${triple}${ext}`);
 
-if (stub) {
-	// Non-empty so path existence checks pass; Host still rejects stubs that
-	// cannot report --version before offering Install in Settings.
+/** Non-empty placeholder so Tauri build-script accepts `externalBin`. */
+function writeStub(target) {
 	const body = isWin
 		? "@echo off\r\necho agentero-cli stub\r\nexit /b 1\r\n"
 		: "#!/bin/sh\necho 'agentero-cli stub' >&2\nexit 1\n";
-	fs.writeFileSync(dest, body);
+	fs.writeFileSync(target, body);
 	try {
-		fs.chmodSync(dest, 0o755);
+		fs.chmodSync(target, 0o755);
 	} catch {
 		// windows
 	}
+}
+
+if (stub) {
+	// Host still rejects stubs that cannot report --version before Install.
+	writeStub(dest);
 	console.log(`[prepare-bundled-cli] stub → ${dest}`);
 	process.exit(0);
+}
+
+// Fresh trees have no externalBin artifact; Tauri build-script fails while
+// compiling agentero_lib (dependency of agentero-cli). Seed a stub first,
+// then overwrite with the real binary after cargo build.
+if (!fs.existsSync(dest) || fs.statSync(dest).size === 0) {
+	writeStub(dest);
+	console.log(`[prepare-bundled-cli] seeded stub for compile → ${dest}`);
 }
 
 const profile = release ? "release" : "debug";

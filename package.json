@@ -20,6 +20,7 @@
 		"tauri": "tauri",
 		"cli:bundle": "node scripts/prepare-bundled-cli.mjs",
 		"cli:bundle:release": "node scripts/prepare-bundled-cli.mjs --release",
+		"cli:bundle:stub": "node scripts/prepare-bundled-cli.mjs --stub",
 		"lint": "pnpm run lint:ts && pnpm run lint:rs",
 		"lint:ts": "biome check .",
 		"lint:rs": "cargo clippy --workspace --all-targets -- -D warnings",

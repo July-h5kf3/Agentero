@@ -310,11 +310,9 @@ fn find_gui_binary() -> Option<PathBuf> {
                 candidates.push(ancestor.join("target/release/agentero"));
                 #[cfg(target_os = "macos")]
                 {
-                    candidates.push(
-                        ancestor.join("src-tauri/target/release/bundle/macos/Agentero.app"),
-                    );
                     candidates
-                        .push(ancestor.join("target/release/bundle/macos/Agentero.app"));
+                        .push(ancestor.join("src-tauri/target/release/bundle/macos/Agentero.app"));
+                    candidates.push(ancestor.join("target/release/bundle/macos/Agentero.app"));
                 }
             }
         }
