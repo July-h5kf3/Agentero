@@ -47,7 +47,7 @@ commands / config 仍可在 load 期间转发。
 | `agent_list_sessions` / `agent_load_session` | 会话历史 |
 | `agent_list_skills` | Vault skill 列表 |
 | `agent_respond_permission` | 回答权限请求 |
-| `agent_run_tool_lifecycle` | 静默安装/升级 catalog CLI（及 Claude/Codex ACP 适配器）；见 [api.md](api.md) 与 [#225](https://github.com/poco-ai/Agentero/issues/225) |
+| `agent_run_tool_lifecycle` | 静默安装/升级 catalog CLI（及 Claude/Codex ACP 适配器）；本机 lifecycle 串行执行，Windows 使用唯一临时 `.bat` 并按 UTF-8/GBK 解码错误输出；见 [api.md](api.md) 与 [#225](https://github.com/poco-ai/Agentero/issues/225) |
 | `agent_tool_lifecycle_supported` / `agent_tool_install_commands` | 是否支持静默安装；平台手动安装文案 |
 
 ACP slash command 不是独立的 `session/compact` RPC。Host 转发 Agent 广播的
