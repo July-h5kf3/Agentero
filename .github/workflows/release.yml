@@ -396,13 +396,15 @@ jobs:
 
           STAGE="agentero-cli-${VERSION}-${HOST}"
           mkdir -p "$STAGE"
+          # Cargo bin is `agentero-cli` (no collision with GUI `agentero`);
+          # archive still exposes the user-facing name `agentero`.
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            cp "target/release/agentero.exe" "$STAGE/agentero.exe"
+            cp "target/release/agentero-cli.exe" "$STAGE/agentero.exe"
             powershell.exe -NoProfile -Command \
               "Compress-Archive -Path '${STAGE}/agentero.exe' -DestinationPath '${OUT_DIR}/${STAGE}.zip' -Force"
             echo "CLI_ASSET=${OUT_DIR}/${STAGE}.zip" >> "$GITHUB_ENV"
           else
-            cp "target/release/agentero" "$STAGE/agentero"
+            cp "target/release/agentero-cli" "$STAGE/agentero"
             chmod +x "$STAGE/agentero"
             tar -C "$STAGE" -czf "${OUT_DIR}/${STAGE}.tar.gz" agentero
             echo "CLI_ASSET=${OUT_DIR}/${STAGE}.tar.gz" >> "$GITHUB_ENV"

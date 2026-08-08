@@ -170,6 +170,10 @@ pub fn run() {
                 let list: Vec<String> = urls.into_iter().map(|u| u.to_string()).collect();
                 crate::features::open_request::handle_deep_link_urls(app.handle(), &list);
             }
+            // Dev / direct spawn: CLI may pass agentero://… as argv when the
+            // OS scheme is not registered (common with `tauri dev`).
+            let argv: Vec<String> = std::env::args().collect();
+            crate::features::open_request::handle_argv_urls(app.handle(), &argv);
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 let list: Vec<String> = event.urls().into_iter().map(|u| u.to_string()).collect();

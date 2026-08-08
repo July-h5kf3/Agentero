@@ -8,7 +8,8 @@ use std::path::Path;
 use tempfile::tempdir;
 
 fn agentero() -> assert_cmd::Command {
-    cargo_bin_cmd!("agentero")
+    // Cargo bin name is `agentero-cli` (avoids colliding with the GUI bin).
+    cargo_bin_cmd!("agentero-cli")
 }
 
 fn create_vault(dir: &Path) {

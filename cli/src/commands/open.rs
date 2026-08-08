@@ -1,9 +1,14 @@
 //! Open a local directory as a Vault in the desktop App via deep link.
+//!
+//! Prefer `agentero://open?path=…` (works when the desktop app has registered
+//! the scheme — release installers / macOS bundle). Fall back to launching the
+//! GUI binary with the URL as an argv (dev + second-instance single-instance).
 
 use crate::error::CliError;
 use crate::resolve::GlobalOpts;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// Build the desktop deep-link URL for `agentero open <path>`.
 pub fn open_deep_link_url(absolute_path: &Path) -> String {
@@ -73,12 +78,37 @@ pub fn run(path: &Path, globals: &GlobalOpts) -> Result<Value, CliError> {
         std::env::var("AGENTERO_OPEN_DRY_RUN").as_deref(),
         Ok("1") | Ok("true") | Ok("TRUE")
     );
+    let mut method = "deep-link";
     if !dry {
-        open_system_url(&url)?;
+        match open_system_url(&url) {
+            Ok(()) => {}
+            Err(deep_err) => {
+                // Dev / unregistered scheme: launch the GUI binary with the URL.
+                match launch_gui_with_url(&url) {
+                    Ok(gui) => {
+                        method = "gui-argv";
+                        log::info!(
+                            target: "agentero::op",
+                            "open via GUI binary {} (deep-link failed: {deep_err})",
+                            gui.display()
+                        );
+                    }
+                    Err(gui_err) => {
+                        return Err(CliError::message(format!(
+                            "could not open desktop App.\n\
+                             deep-link: {deep_err}\n\
+                             gui launch: {gui_err}\n\
+                             Tips: install/run the desktop app once, or in dev keep `pnpm tauri dev` running."
+                        )));
+                    }
+                }
+            }
+        }
     }
     Ok(json!({
         "path": abs.to_string_lossy(),
         "url": url,
+        "method": method,
         "dryRun": dry,
         "lines": [if dry {
             format!("would open {}", globals.style.path(&abs.to_string_lossy()))
@@ -94,7 +124,6 @@ fn open_system_url(url: &str) -> Result<(), CliError> {
     #[cfg(target_os = "linux")]
     let (program, args): (&str, Vec<&str>) = ("xdg-open", vec![url]);
     #[cfg(target_os = "windows")]
-    // `start` treats the first quoted arg as a window title.
     let (program, args): (&str, Vec<&str>) = ("cmd", vec!["/C", "start", "", url]);
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
@@ -105,17 +134,122 @@ fn open_system_url(url: &str) -> Result<(), CliError> {
     }
     #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     {
-        let status = std::process::Command::new(program)
+        let status = Command::new(program)
             .args(&args)
             .status()
             .map_err(|e| CliError::message(format!("failed to invoke {program}: {e}")))?;
         if !status.success() {
             return Err(CliError::message(format!(
-                "{program} exited with {status}; is Agentero installed and registered for agentero:// ?"
+                "{program} failed ({status}); scheme agentero:// not registered"
             )));
         }
         Ok(())
     }
+}
+
+/// Spawn (or second-instance) the desktop GUI with a deep-link URL on argv.
+fn launch_gui_with_url(url: &str) -> Result<PathBuf, CliError> {
+    let gui = find_gui_binary().ok_or_else(|| {
+        CliError::message(
+            "desktop binary not found (looked for Agentero.app and target/{debug,release}/agentero)",
+        )
+    })?;
+
+    #[cfg(target_os = "macos")]
+    {
+        // Prefer `open -a` when the path is an .app bundle.
+        if gui.extension().is_some_and(|e| e == "app")
+            || gui
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().ends_with(".app"))
+        {
+            let status = Command::new("open")
+                .args(["-a", &gui.to_string_lossy(), "--args", url])
+                .status()
+                .map_err(|e| CliError::message(format!("open -a failed: {e}")))?;
+            if status.success() {
+                return Ok(gui);
+            }
+        }
+        // If path is the inner MacOS executable, open its .app parent when possible.
+        if let Some(app) = gui
+            .ancestors()
+            .find(|p| p.extension().is_some_and(|e| e == "app"))
+        {
+            let status = Command::new("open")
+                .args(["-a", &app.to_string_lossy(), "--args", url])
+                .status()
+                .map_err(|e| CliError::message(format!("open -a failed: {e}")))?;
+            if status.success() {
+                return Ok(app.to_path_buf());
+            }
+        }
+    }
+
+    // Direct spawn (dev binary or when open -a is unavailable). Detached so the CLI exits.
+    let child = Command::new(&gui)
+        .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| {
+            CliError::message(format!(
+                "failed to spawn desktop binary {}: {e}",
+                gui.display()
+            ))
+        })?;
+    // Don't wait — single-instance plugin will forward if already running.
+    let _ = child.id();
+    Ok(gui)
+}
+
+fn find_gui_binary() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    // Same directory as this CLI binary (dev: target/debug/agentero-cli → agentero).
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("agentero"));
+            #[cfg(windows)]
+            candidates.push(dir.join("agentero.exe"));
+            // Bundled app layout
+            candidates.push(dir.join("Agentero"));
+            #[cfg(target_os = "macos")]
+            {
+                // …/Contents/MacOS/agentero-cli is wrong; GUI is sibling agentero
+                // or …/Agentero.app/Contents/MacOS/Agentero
+                if let Some(contents) = dir.parent() {
+                    if contents.file_name().is_some_and(|n| n == "MacOS") {
+                        candidates.push(dir.join("Agentero"));
+                        candidates.push(dir.join("agentero"));
+                    }
+                }
+            }
+            for ancestor in dir.ancestors().take(6) {
+                candidates.push(ancestor.join("target/debug/agentero"));
+                candidates.push(ancestor.join("target/release/agentero"));
+                #[cfg(target_os = "macos")]
+                {
+                    candidates.push(
+                        ancestor.join("src-tauri/target/release/bundle/macos/Agentero.app"),
+                    );
+                    candidates
+                        .push(ancestor.join("target/release/bundle/macos/Agentero.app"));
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        candidates.push(PathBuf::from("/Applications/Agentero.app"));
+        if let Some(home) = dirs::home_dir() {
+            candidates.push(home.join("Applications/Agentero.app"));
+        }
+    }
+
+    candidates.into_iter().find(|p| p.exists())
 }
 
 #[cfg(test)]

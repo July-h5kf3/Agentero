@@ -3,6 +3,9 @@
 //! The desktop package may ship `agentero-cli` next to the GUI binary (Tauri
 //! `externalBin`). Settings offers an explicit install into a user bin dir
 //! without editing shell rc files.
+//!
+//! Dev note: the cargo bin is named `agentero-cli` so it never collides with
+//! the GUI binary `agentero` in `target/{debug,release}/`.
 
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::install_dirs::{ABS_BIN_DIRS, HOME_BIN_DIRS};
@@ -23,6 +26,9 @@ const BUNDLED_CLI_NAME: &str = if cfg!(windows) {
 } else {
     "agentero-cli"
 };
+
+/// Reject empty externalBin stubs (0-byte placeholders from prepare --stub).
+const MIN_CLI_BYTES: u64 = 1;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,42 +64,76 @@ fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// Locate the bundled CLI next to the GUI executable (Tauri externalBin layout).
+fn is_plausible_cli_file(path: &Path) -> bool {
+    let Ok(meta) = fs::metadata(path) else {
+        return false;
+    };
+    // Size alone is not enough (dev shell scripts are small); empty stubs are.
+    meta.is_file() && meta.len() >= MIN_CLI_BYTES
+}
+
+/// True when the file looks real and can report a version.
+fn is_runnable_cli(path: &Path) -> bool {
+    is_plausible_cli_file(path) && read_cli_version(path).is_some()
+}
+
+/// Locate a real, version-reporting bundled CLI (never empty stubs).
 pub fn resolve_bundled_cli<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
-    if let Ok(exe) = app.path().executable_dir() {
-        candidates.push(exe.join(BUNDLED_CLI_NAME));
-        // macOS: sometimes resources live under Contents/MacOS already via executable_dir.
-        candidates.push(exe.join("binaries").join(BUNDLED_CLI_NAME));
+    if let Ok(exe_dir) = app.path().executable_dir() {
+        candidates.push(exe_dir.join(BUNDLED_CLI_NAME));
+        candidates.push(exe_dir.join("binaries").join(BUNDLED_CLI_NAME));
     }
     if let Ok(res) = app.path().resource_dir() {
         candidates.push(res.join(BUNDLED_CLI_NAME));
         candidates.push(res.join("binaries").join(BUNDLED_CLI_NAME));
-        // macOS Contents/Resources vs MacOS
         if let Some(parent) = res.parent() {
             candidates.push(parent.join("MacOS").join(BUNDLED_CLI_NAME));
         }
     }
-    // Dev: workspace release / debug binary named `agentero`
-    if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
-        let root = PathBuf::from(manifest);
-        let workspace = root.parent().unwrap_or(&root);
-        candidates.push(workspace.join("target/debug/agentero"));
-        candidates.push(workspace.join("target/release/agentero"));
-        candidates.push(
-            root.join("../target/debug/agentero")
-                .canonicalize()
-                .unwrap_or_else(|_| root.join("../target/debug/agentero")),
-        );
-        candidates.push(
-            root.join("../target/release/agentero")
-                .canonicalize()
-                .unwrap_or_else(|_| root.join("../target/release/agentero")),
-        );
+
+    // Runtime discovery from the running GUI binary (dev + release).
+    // `CARGO_MANIFEST_DIR` is only set at compile time, not when the app runs.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join(BUNDLED_CLI_NAME));
+            // target/debug/agentero (GUI) → sibling agentero-cli
+            candidates.push(dir.join(BUNDLED_CLI_NAME));
+            // Walk up looking for workspace target/{debug,release}/agentero-cli
+            for ancestor in dir.ancestors().take(6) {
+                candidates.push(ancestor.join("target/debug").join(BUNDLED_CLI_NAME));
+                candidates.push(ancestor.join("target/release").join(BUNDLED_CLI_NAME));
+                if ancestor.ends_with("debug") || ancestor.ends_with("release") {
+                    candidates.push(ancestor.join(BUNDLED_CLI_NAME));
+                }
+            }
+        }
     }
 
-    candidates.into_iter().find(|p| p.is_file())
+    // src-tauri/binaries/agentero-cli-$TRIPLE from prepare-bundled-cli.mjs
+    if let Ok(cwd) = std::env::current_dir() {
+        for ancestor in cwd.ancestors().take(6) {
+            let bin_dir = ancestor.join("src-tauri/binaries");
+            if let Ok(rd) = fs::read_dir(&bin_dir) {
+                for entry in rd.flatten() {
+                    let name = entry.file_name();
+                    let s = name.to_string_lossy();
+                    if s.starts_with("agentero-cli-") {
+                        candidates.push(entry.path());
+                    }
+                }
+            }
+        }
+    }
+
+    // First candidate that reports a version (never empty stubs).
+    for path in candidates {
+        if is_runnable_cli(&path) {
+            return path.canonicalize().ok().or(Some(path));
+        }
+    }
+    None
 }
 
 fn read_cli_version(bin: &Path) -> Option<String> {
@@ -102,12 +142,17 @@ fn read_cli_version(bin: &Path) -> Option<String> {
         return None;
     }
     let text = String::from_utf8_lossy(&output.stdout);
-    // `agentero 0.5.1` or similar
+    // clap: `agentero-cli 0.5.1` or `agentero 0.5.1`
     let line = text.lines().next()?.trim();
+    if line.is_empty() {
+        return None;
+    }
+    // Prefer the last whitespace-separated token that looks like a version.
     let ver = line
         .split_whitespace()
-        .last()
-        .unwrap_or(line)
+        .rev()
+        .find(|t| t.chars().next().is_some_and(|c| c.is_ascii_digit()))
+        .unwrap_or_else(|| line.split_whitespace().last().unwrap_or(line))
         .trim()
         .to_string();
     if ver.is_empty() {
@@ -182,7 +227,6 @@ fn shim_points_to(shim: &Path, bundled: Option<&Path>) -> bool {
             return a == b;
         }
     }
-    // Windows .cmd shim or copied binary: compare contents / path heuristics.
     if let (Ok(a), Ok(b)) = (shim.canonicalize(), bundled.canonicalize()) {
         if a == b {
             return true;
@@ -221,7 +265,7 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
     let mut message = None;
     if bundled.is_none() {
         message = Some(
-            "Bundled CLI not found in this build. Use a desktop installer release, or install agentero-cli separately."
+            "Bundled CLI not found. In dev: run `pnpm cli:bundle` (or `cargo build -p agentero-cli`), then reinstall from Settings."
                 .into(),
         );
     } else if installed && !preferred_bin_on_path {
@@ -259,6 +303,18 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
 }
 
 fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> {
+    if !is_plausible_cli_file(bundled) {
+        return Err(AppError::message(format!(
+            "bundled CLI is missing or empty: {}",
+            bundled.display()
+        )));
+    }
+    if read_cli_version(bundled).is_none() {
+        return Err(AppError::message(format!(
+            "bundled CLI does not run (`--version` failed): {}. Rebuild with `pnpm cli:bundle`.",
+            bundled.display()
+        )));
+    }
     if let Some(parent) = shim.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -281,7 +337,6 @@ fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> {
                 bundled.display()
             ))
         })?;
-        // Ensure executable bit on bundled if needed
         #[allow(clippy::permissions_set_readonly_false)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -298,7 +353,6 @@ fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> {
     }
     #[cfg(windows)]
     {
-        // .cmd shim that invokes the absolute bundled path.
         let body = format!(
             "@echo off\r\n\"{}\" %*\r\n",
             bundled.display().to_string().replace('"', "")
@@ -340,7 +394,7 @@ pub fn cli_install_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstal
         Some(p) => p,
         None => {
             return map_err(AppError::message(
-                "Bundled CLI not found. Install a full desktop build or build agentero-cli.",
+                "Bundled CLI not found. In dev run `pnpm cli:bundle`, then try Install again. Release builds include the CLI.",
             ));
         }
     };
@@ -407,27 +461,53 @@ mod tests {
     }
 
     #[test]
+    fn rejects_empty_files_as_cli() {
+        let dir = test_dir("tiny");
+        let tiny = dir.join(BUNDLED_CLI_NAME);
+        fs::write(&tiny, b"").unwrap();
+        assert!(!is_plausible_cli_file(&tiny));
+        assert!(!is_runnable_cli(&tiny));
+        fs::write(&tiny, b"x").unwrap();
+        assert!(is_plausible_cli_file(&tiny));
+        // Still not runnable without a working --version.
+        assert!(!is_runnable_cli(&tiny));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn install_refuses_non_managed_file() {
         let dir = test_dir("refuse");
         let foreign = dir.join(SHIM_NAME);
         let bundled = dir.join(BUNDLED_CLI_NAME);
         fs::write(&foreign, b"not-agentero").unwrap();
-        fs::write(&bundled, b"bundled").unwrap();
+        // Passes size check but --version fails → install_shim errors first.
+        fs::write(&bundled, b"not-a-real-binary").unwrap();
         let err = install_shim(&bundled, &foreign).unwrap_err();
-        assert!(err.to_string().contains("refusing to overwrite"));
+        assert!(
+            err.to_string().contains("does not run") || err.to_string().contains("refusing"),
+            "{err}"
+        );
         assert_eq!(fs::read(&foreign).unwrap(), b"not-agentero");
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[cfg(unix)]
     #[test]
-    fn install_replaces_managed_symlink() {
+    fn install_replaces_managed_symlink_when_version_ok() {
         let dir = test_dir("replace");
         let bundled_old = dir.join("agentero-cli-old");
         let bundled_new = dir.join(BUNDLED_CLI_NAME);
         let shim = dir.join(SHIM_NAME);
-        fs::write(&bundled_old, b"old").unwrap();
-        fs::write(&bundled_new, b"new").unwrap();
+        // Shell scripts that implement --version.
+        let script = "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'agentero-cli 9.9.9'; exit 0; fi\nexit 0\n";
+        fs::write(&bundled_old, script).unwrap();
+        fs::write(&bundled_new, script).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        for p in [&bundled_old, &bundled_new] {
+            let mut perms = fs::metadata(p).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(p, perms).unwrap();
+        }
         std::os::unix::fs::symlink(&bundled_old, &shim).unwrap();
         install_shim(&bundled_new, &shim).unwrap();
         let target = fs::read_link(&shim).unwrap();
