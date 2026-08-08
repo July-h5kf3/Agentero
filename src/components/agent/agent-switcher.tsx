@@ -9,6 +9,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { AgentOption } from "@/lib/agent/chat-state";
+import { AgentLogo } from "./agent-logo";
 
 export function AgentSwitcher({
 	options,
@@ -38,6 +39,7 @@ export function AgentSwitcher({
 					aria-label={t("switchAgent")}
 					title={t("switchAgent")}
 				>
+					{selected ? <AgentLogo template={selected.template} /> : null}
 					<span className="truncate">{selected?.name ?? t("defaultName")}</span>
 					<ChevronDown className="size-3 shrink-0 opacity-70" />
 				</Button>
@@ -76,7 +78,10 @@ export function AgentSwitcher({
 								className="flex items-center justify-between gap-2"
 								onSelect={() => onSelect(opt)}
 							>
-								<span className="min-w-0 truncate">{opt.name}</span>
+								<span className="flex min-w-0 items-center gap-2">
+									<AgentLogo template={opt.template} />
+									<span className="min-w-0 truncate">{opt.name}</span>
+								</span>
 								{isActive ? (
 									<Check className="size-3.5 shrink-0 opacity-80" />
 								) : null}
