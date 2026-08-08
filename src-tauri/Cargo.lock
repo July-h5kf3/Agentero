@@ -69,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "agentero"
-version = "0.1.0"
+version = "0.5.1"
 dependencies = [
  "agent-client-protocol",
  "chrono",
