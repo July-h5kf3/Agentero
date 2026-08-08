@@ -28,11 +28,28 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 - **新建对话 / 历史恢复**：新建草稿不会清空刚离开的本地 transcript；历史项同时存在 Agentero runtime id 与 ACP provider id 时，`session/load` / 后续续聊只使用 `providerSessionId`；连续续聊产生的新 runtime 行会按 provider id 合并回同一个历史项；加载结果通过一次原子 store 更新写入并激活，避免列表刷新后出现空白会话。详见 [Codex 历史恢复误用 runtime id](../bug_fix/codex-history-runtime-session-id.md)。
 - Slash 命令完全来自当前 ACP session 的 `available_commands_update`；Agentero 不再注册本地 action/template。映射时剥离名称前导 `/` 与 `$`（部分 Agent 把 skill 以 `$name` 形式广播），再以 `/name` 填入 Composer，并在当前 provider session 中原样发送。
 - **模型选择（含第三方）**：列表来自 ACP `agent:models`；若 Agent 当前模型或用户偏好不在固定目录中（如 Codex + 中转 / cc-switch DeepSeek），仍会并入可选列表，并支持在搜索框输入任意 model id 作为自定义模型（`warm` / `run_once` 会尝试 `SetSessionConfigOption`，即使 id 未出现在上报目录中）。偏好按 agent 持久化。
+- **协作模式 vs 权限模式（capability-driven）**：两套独立 config，不可混用。
+  - **协作**（Codex `collaboration_mode`）：Default / Plan；Plan 下才开放 `request_user_input`。事件 `agent:collaboration`；`warm` / `run_once` 携带 `collaborationModeId`。
+  - **权限**（ACP `category: mode`）：Read-only / Agent 等沙箱档。事件 `agent:modes`；携带 `modeId`。
+  - Composer 有上报时分别显示「协作」「权限」下拉；偏好各自按 agent 持久化。
 
 ## 权限 UI
 
 全局模式（设置）：`restricted` / `ask` / `auto`。  
 `ask` 时弹权限对话框 → `agent_respond_permission`。
+
+## 表单 Elicitation / AskUserQuestion（同一 UI）
+
+两者都是「Agent 向用户结构化提问」，**共用** `AskUserQuestionForm`（AI Elements `Suggestion` 选项芯片）：
+
+| 来源 | 协议 | UI 位置 |
+|---|---|---|
+| Tool `variant: AskUserQuestion` | `agent:tool` | Transcript 内 `Tool` 卡 |
+| Codex `request_user_input` | `elicitation/create` → `agent:elicitation-request` | **Composer 输入框上方** |
+
+多题为 **翻页**：一页一题，上一题 / 下一题，末题显示「提交」；选项点击后自动进下一题。单题仅「提交」。
+
+Client 声明 `elicitation.form`；用户提交 → `agent_respond_elicitation`（accept + content）或 cancel。映射：`questionsFromElicitationFields` / `elicitationContentFromAnswers`。
 
 ## 精读（paper-reader）
 

@@ -47,6 +47,7 @@ commands / config 仍可在 load 期间转发。
 | `agent_list_sessions` / `agent_load_session` | 会话历史 |
 | `agent_list_skills` | Vault skill 列表 |
 | `agent_respond_permission` | 回答权限请求 |
+| `agent_respond_elicitation` | 回答 form elicitation（Codex `request_user_input`） |
 | `agent_run_tool_lifecycle` | 静默安装/升级 catalog CLI（及 Claude/Codex ACP 适配器）；见 [api.md](api.md) 与 [#225](https://github.com/poco-ai/Agentero/issues/225) |
 | `agent_tool_lifecycle_supported` / `agent_tool_install_commands` | 是否支持静默安装；平台手动安装文案 |
 
@@ -65,6 +66,12 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 | `ask` | `agent:permission-request` → 用户选择 → `agent_respond_permission` |
 | `auto` | 自动批准策略项 |
 
+## Elicitation（不稳定协议）
+
+- Host 依赖 `agent-client-protocol` feature `unstable_elicitation`。
+- `initialize` 声明 `elicitation.form`，否则 codex-acp 对 `request_user_input` 直接返回空 answers。
+- 收到 `elicitation/create` → 事件 `agent:elicitation-request` → 前端表单 → `agent_respond_elicitation`。
+
 ## 工作流与 Skill
 
 - workflow：`summary` / `qa` / `related_work` 等（面板 chips 映射）。
@@ -79,6 +86,8 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 - `session/new`（及 config 更新）中的 `SessionConfigOption`（category=Model 或 name 回退）解析为 `agent:models`。
 - 若 `current_value` 不在 selector 选项中（第三方网关 / cc-switch 等只改默认 model、目录仍是官方列表），Host **注入**该 current id，避免 UI 丢失。
 - `preferred_model_id`（warm / run_once）在与 current 不同时 **始终尝试** `session/set_config_option`，不要求 id 已在上报列表中；失败仅 debug 日志，不阻断会话。
+- `category: mode`（或 id `mode` / `session_mode`）解析为 `agent:modes`（权限/沙箱，如 Read-only）；`mode_id` 在选项内且与 current 不同时尝试 `session/set_config_option`。
+- Codex `collaboration_mode`（category `collaboration_mode`，Default / Plan）解析为 `agent:collaboration`；`collaboration_mode_id` 同理写入。与权限 mode **分开**——Plan 才能用 `request_user_input`。
 
 ## User-Agent（中转站亲和）
 
