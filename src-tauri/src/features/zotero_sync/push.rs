@@ -74,6 +74,7 @@ pub fn push_notes(
     let total = candidates.len();
     let tx = conn.unchecked_transaction()?;
     let mut failures: Vec<String> = Vec::new();
+    let mut pushed = 0usize;
     for (idx, cand) in candidates.iter().enumerate() {
         progress(idx, total);
         let notes_md =
@@ -81,10 +82,16 @@ pub fn push_notes(
         if notes_md.trim().is_empty() {
             continue;
         }
-        let html =
-            codec::wrap_sync_html(&cand.paper_id, &codec::markdown_to_zotero_html(&notes_md));
-        if let Err(e) = upsert_marked_note(&tx, cand.zotero_item_id, &cand.paper_id, &html) {
-            failures.push(format!("{}: {e}", cand.path));
+        // Shell-only notes (title + abstract, no reading notes yet) clean down
+        // to nothing — never create an empty Zotero note for them.
+        let inner = codec::markdown_to_zotero_html(&notes_md);
+        if inner.trim().is_empty() {
+            continue;
+        }
+        let html = codec::wrap_sync_html(&cand.paper_id, &inner);
+        match upsert_marked_note(&tx, cand.zotero_item_id, &cand.paper_id, &html) {
+            Ok(()) => pushed += 1,
+            Err(e) => failures.push(format!("{}: {e}", cand.path)),
         }
     }
 
@@ -101,7 +108,7 @@ pub fn push_notes(
         .map_err(|e| AppError::message(format!("commit zotero writes: {e}")))?;
     progress(total, total);
     Ok(PushReport {
-        pushed: total,
+        pushed,
         backup_path: Some(backup.to_string_lossy().to_string()),
     })
 }

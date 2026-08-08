@@ -75,30 +75,64 @@ pub fn markdown_to_zotero_html(md: &str) -> String {
 }
 
 /// Drop the paper shell — the title heading + abstract blockquote that Zotero
-/// already stores as item fields. The shell always sits before the first `---`
-/// separator written by the shell/append logic, so drop everything up to and
-/// including that first separator. When there is no separator there is no
-/// reading-note content yet, so leave the text untouched (never lose content).
+/// already stores as item fields. Prefer the first `---` separator written by
+/// the shell/append logic as the shell boundary; when there is none, strip the
+/// intact shell shape (leading `# ` title + the blockquote right after it).
+/// Anything that does not match the shell shape is left untouched.
 fn strip_shell(md: &str) -> String {
-    // Locate the first line that is exactly `---`.
+    // Case 1: first `---` line outside code fences ends the shell.
     let mut offset = 0usize;
+    let mut in_fence = false;
     for line in md.split_inclusive('\n') {
-        if line.trim() == "---" {
+        let trimmed = line.trim();
+        let is_fence = trimmed.starts_with("```") || trimmed.starts_with("~~~");
+        if !in_fence && !is_fence && trimmed == "---" {
             let after = offset + line.len();
             return md[after..].trim_start_matches(['\r', '\n']).to_string();
         }
+        if is_fence {
+            in_fence = !in_fence;
+        }
         offset += line.len();
+    }
+    // Case 2: no separator — strip the intact shell (leading title heading and
+    // the abstract blockquote directly following it). Never touch anything
+    // that does not start with the title heading.
+    let lines: Vec<&str> = md.split_inclusive('\n').collect();
+    let mut i = 0;
+    while i < lines.len() && lines[i].trim().is_empty() {
+        i += 1;
+    }
+    if i < lines.len() && lines[i].trim_start().starts_with("# ") {
+        i += 1;
+        while i < lines.len() && lines[i].trim().is_empty() {
+            i += 1;
+        }
+        if i < lines.len() && lines[i].trim_start().starts_with('>') {
+            while i < lines.len() && lines[i].trim_start().starts_with('>') {
+                i += 1;
+            }
+        }
+        let consumed: usize = lines[..i].iter().map(|l| l.len()).sum();
+        return md[consumed..].trim_start_matches(['\r', '\n']).to_string();
     }
     md.to_string()
 }
 
 /// Remove standalone `---` horizontal-rule lines (Agentero's internal note
 /// separators) so they do not become `<hr />` clutter in the Zotero note.
+/// Lines inside code fences are preserved.
 fn strip_hr_separators(md: &str) -> String {
     let mut out = String::with_capacity(md.len());
+    let mut in_fence = false;
     for line in md.split_inclusive('\n') {
-        if line.trim() == "---" {
+        let trimmed = line.trim();
+        let is_fence = trimmed.starts_with("```") || trimmed.starts_with("~~~");
+        if !in_fence && !is_fence && trimmed == "---" {
             continue;
+        }
+        if is_fence {
+            in_fence = !in_fence;
         }
         out.push_str(line);
     }
@@ -194,6 +228,7 @@ fn convert_callouts(md: &str) -> String {
 }
 
 /// `[[Target|Label]]` → `Label`; `[[Target#Heading]]` / `[[Target]]` → `Target`.
+/// Embed syntax `![[file]]` loses its dangling `!` too.
 fn convert_wikilinks(md: &str) -> String {
     let mut out = String::with_capacity(md.len());
     let mut rest = md;
@@ -202,6 +237,10 @@ fn convert_wikilinks(md: &str) -> String {
         let after = &rest[start + 2..];
         match after.find("]]") {
             Some(end) => {
+                // `![[embed]]` → drop the embed prefix's `!` as well.
+                if out.ends_with('!') {
+                    out.pop();
+                }
                 let inner = &after[..end];
                 let display = inner
                     .split('|')
@@ -287,7 +326,8 @@ mod tests {
         let html = markdown_to_zotero_html(md);
         assert!(!html.contains("aliases"), "got: {html}");
         assert!(!html.contains("<hr"), "got: {html}");
-        assert!(html.contains("<h1>Title</h1>"), "got: {html}");
+        // The leading title heading is shell (Zotero has a title field).
+        assert!(!html.contains("<h1>Title</h1>"), "got: {html}");
         assert!(html.contains("body"), "got: {html}");
     }
 
@@ -338,5 +378,93 @@ mod tests {
         assert!(!html.contains('\u{200b}'), "got: {html}");
         assert!(!html.contains('\u{feff}'), "got: {html}");
         assert!(html.contains("note withzero-widthspaces"), "got: {html}");
+    }
+
+    #[test]
+    fn realistic_notes_md_end_to_end() {
+        let md = "---\naliases: [Attention, 注意力]\ntags: [nlp]\n---\n\n\
+# Attention Is All You Need\n\n\
+> 提出了 Transformer 架构。\n\n\
+---\n\n\
+> [!note] 精读\n> 自注意力避免了循环。\n\n\
+参见 [[BERT]] 与 ![[fig1.png]]。\n\n\
+---\n\n\
+第二段笔记\u{200b}。";
+        let html = markdown_to_zotero_html(md);
+        // Shell and separators gone.
+        assert!(!html.contains("Attention Is All You Need"), "got: {html}");
+        assert!(!html.contains("提出了 Transformer"), "got: {html}");
+        assert!(!html.contains("aliases"), "got: {html}");
+        assert!(!html.contains("<hr"), "got: {html}");
+        // Content kept and cleaned.
+        assert!(html.contains("<strong>Note</strong>"), "got: {html}");
+        assert!(html.contains("自注意力避免了循环"), "got: {html}");
+        assert!(html.contains("BERT"), "got: {html}");
+        assert!(!html.contains("[["), "got: {html}");
+        assert!(!html.contains("!fig1"), "got: {html}");
+        assert!(html.contains("fig1.png"), "got: {html}");
+        assert!(!html.contains('\u{200b}'), "got: {html}");
+        assert!(html.contains("第二段笔记。"), "got: {html}");
+    }
+
+    #[test]
+    fn crlf_line_endings() {
+        let md = "---\r\naliases: [a]\r\n---\r\n\r\n# T\r\n\r\n> abs\r\n\r\n---\r\n\r\nnote body";
+        let html = markdown_to_zotero_html(md);
+        assert!(!html.contains("aliases"), "got: {html}");
+        assert!(!html.contains("<h1>T</h1>"), "got: {html}");
+        assert!(!html.contains("abs"), "got: {html}");
+        assert!(html.contains("note body"), "got: {html}");
+    }
+
+    #[test]
+    fn code_fence_protects_separators() {
+        // `---` inside a fenced code block must survive both the shell strip and
+        // the hr removal.
+        let md = "# T\n\n> abs\n\n```yaml\nkey: value\n---\nother: 1\n```\n\nafter fence";
+        let html = markdown_to_zotero_html(md);
+        // Shell stripped via the intact-shell fallback (no real separator).
+        assert!(!html.contains("<h1>T</h1>"), "got: {html}");
+        assert!(!html.contains("abs"), "got: {html}");
+        // Code block content incl. its `---` survives.
+        assert!(html.contains("key: value"), "got: {html}");
+        assert!(html.contains("---"), "got: {html}");
+        assert!(html.contains("other: 1"), "got: {html}");
+        assert!(html.contains("after fence"), "got: {html}");
+    }
+
+    #[test]
+    fn no_separator_strips_intact_shell_only() {
+        // User typed notes directly after the abstract (no `---` yet).
+        let md = "# Title\n\n> the abstract\n\nmy handwritten note";
+        let html = markdown_to_zotero_html(md);
+        assert!(!html.contains("<h1>Title</h1>"), "got: {html}");
+        assert!(!html.contains("the abstract"), "got: {html}");
+        assert!(html.contains("my handwritten note"), "got: {html}");
+    }
+
+    #[test]
+    fn broken_shell_is_left_alone() {
+        // User deleted the title: do not strip their leading blockquote.
+        let md = "> my quote\n\nrest";
+        let html = markdown_to_zotero_html(md);
+        assert!(html.contains("my quote"), "got: {html}");
+        assert!(html.contains("rest"), "got: {html}");
+    }
+
+    #[test]
+    fn shell_only_cleans_to_empty() {
+        // Fresh paper, no reading notes: push skips empty inner html.
+        let md = "---\naliases: [x]\n---\n\n# Title\n\n> abstract only";
+        let html = markdown_to_zotero_html(md);
+        assert!(html.trim().is_empty(), "got: {html}");
+    }
+
+    #[test]
+    fn embed_keeps_filename_without_bang() {
+        let html = markdown_to_zotero_html("see ![[figure-2.png]] here");
+        assert!(html.contains("figure-2.png"), "got: {html}");
+        assert!(!html.contains("!figure"), "got: {html}");
+        assert!(!html.contains("[["), "got: {html}");
     }
 }
