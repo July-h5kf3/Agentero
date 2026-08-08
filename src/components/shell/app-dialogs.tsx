@@ -9,6 +9,7 @@ import { ExternalRenameDialog } from "@/components/dialogs/external-rename-dialo
 import { RenamePathDialog } from "@/components/dialogs/rename-path-dialog";
 import { SkillImportDialog } from "@/components/dialogs/skill-import-dialog";
 import { ZoteroMigrateDialog } from "@/components/dialogs/zotero-migrate-dialog";
+import { ZoteroSyncDialog } from "@/components/dialogs/zotero-sync-dialog";
 import { ImportLocalPdfDialog } from "@/components/library/import-local-pdf-dialog";
 import { MovePapersDialog } from "@/components/library/move-papers-dialog";
 import { paletteCommands } from "@/components/shell/palette-commands";
@@ -24,7 +25,11 @@ import {
 	importPdfDialogOpenChange,
 } from "@/lib/paper/import-actions";
 import { setMovePaths } from "@/lib/paper/library-store";
-import { setCommandOpen, setZoteroOpen } from "@/lib/shell/ui-store";
+import {
+	setCommandOpen,
+	setZoteroOpen,
+	setZoteroSyncOpen,
+} from "@/lib/shell/ui-store";
 import { joinVaultPath } from "@/lib/vault";
 import { movePathsTo, refreshAll } from "@/lib/vault/actions";
 import { openPaper, openVaultRel } from "@/lib/workspace/actions";
@@ -33,6 +38,7 @@ export function AppDialogs() {
 	const vaultPath = useVaultStore((s) => s.vaultPath);
 	const tree = useVaultStore((s) => s.tree);
 	const zoteroOpen = useUiStore((s) => s.zoteroOpen);
+	const zoteroSyncOpen = useUiStore((s) => s.zoteroSyncOpen);
 	const commandOpen = useUiStore((s) => s.commandOpen);
 	const commandMode = useUiStore((s) => s.commandMode);
 	const libraryPapers = useLibraryStore((s) => s.papers);
@@ -46,6 +52,12 @@ export function AppDialogs() {
 			<ZoteroMigrateDialog
 				open={zoteroOpen}
 				onOpenChange={setZoteroOpen}
+				vaultPath={vaultPath}
+				onDone={refreshAll}
+			/>
+			<ZoteroSyncDialog
+				open={zoteroSyncOpen}
+				onOpenChange={setZoteroSyncOpen}
 				vaultPath={vaultPath}
 				onDone={refreshAll}
 			/>

@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	connectorEnabled: false,
 	connectorPort: 23119,
+	zoteroSyncDir: "",
 	batchImportConcurrency: 5,
 	telemetryEnabled: true,
 	theme: "system",

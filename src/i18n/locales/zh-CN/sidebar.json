@@ -163,6 +163,34 @@
 		"tutorial": "查看导入教程",
 		"desktopOnly": "Zotero 迁移需要桌面应用。"
 	},
+	"zoteroSync": {
+		"button": "与 Zotero 同步",
+		"title": "与 Zotero 同步",
+		"chooseFolder": "选择 Zotero 数据文件夹…",
+		"detecting": "正在查找你的 Zotero 库…",
+		"pullMetadata": "拉取元数据（仅填补空字段）",
+		"pullNotes": "拉取 Zotero 笔记",
+		"pullAnnotations": "拉取 PDF 批注",
+		"pushNotes": "将 NOTES.md 推送回 Zotero",
+		"pushWarning": "推送会直接写入 zotero.sqlite：请先关闭 Zotero；写前自动在 agentero-backups/ 创建带时间戳的备份。推送的笔记在本地 Zotero 可见，但需在 Zotero 内编辑过才会被其云同步上传。",
+		"phase": {
+			"read": "正在读取 Zotero 库…",
+			"pull": "正在拉取变更到知识库…",
+			"push": "正在推送笔记到 Zotero…"
+		},
+		"run": "同步",
+		"done": "完成",
+		"cancel": "取消",
+		"summaryTitle": "同步完成",
+		"summaryLinked": "{{count}} 篇文献在知识库与 Zotero 间匹配",
+		"summaryMetadata": "为 {{count}} 篇文献填补了元数据",
+		"summaryNotesPulled": "为 {{count}} 篇文献补充了笔记",
+		"summaryAnnotationsPulled": "为 {{count}} 篇文献补充了批注",
+		"summaryNotesPushed": "已推送 {{count}} 篇笔记到 Zotero",
+		"summaryUnlinked": "{{count}} 个 Zotero 条目没有对应论文（可用迁移导入）",
+		"summaryErrors": "{{count}} 项失败",
+		"conflictsTitle": "{{count}} 个冲突（已跳过，请手动处理）"
+	},
 	"lookup": {
 		"magicWand": "按标识符添加论文",
 		"placeholder": "输入论文或 Skill 链接",

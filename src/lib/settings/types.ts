@@ -109,6 +109,11 @@ export type AppSettings = {
 	connectorEnabled: boolean;
 	connectorPort: number;
 	/**
+	 * Zotero data directory (contains `zotero.sqlite` + `storage/`) used by
+	 * bidirectional sync. Empty = auto-detect `~/Zotero` or pick in the dialog.
+	 */
+	zoteroSyncDir: string;
+	/**
 	 * Max concurrent identifier imports in a single magic-wand batch.
 	 * Clamped to 1–10; higher values download more papers in parallel but
 	 * increase rate-limit risk.

@@ -9,6 +9,7 @@ import {
 	FolderOpen,
 	FolderPlus,
 	Loader2,
+	RefreshCw,
 	Server,
 	Upload,
 	WandSparkles,
@@ -81,6 +82,8 @@ export type VaultSidebarHeaderProps = {
 	onOpenRemoteVault?: (args: OpenRemoteVaultArgs) => void | Promise<void>;
 	/** Migrate from Zotero (icon in magic-wand popover, right of bibliography import). */
 	onMigrateZotero?: () => void;
+	/** Bidirectional Zotero sync (icon in magic-wand popover, right of migrate). */
+	onSyncZotero?: () => void;
 };
 
 export const VaultSidebarHeader = memo(function VaultSidebarHeader({
@@ -102,6 +105,7 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 	onCreateVault,
 	onOpenRemoteVault,
 	onMigrateZotero,
+	onSyncZotero,
 }: VaultSidebarHeaderProps) {
 	const { t } = useTranslation(["sidebar", "shortcuts", "app"]);
 	const [wandOpen, setWandOpen] = useState(false);
@@ -315,6 +319,28 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 													</TooltipTrigger>
 													<TooltipContent side="bottom">
 														{t("zoteroMigrate.button")}
+													</TooltipContent>
+												</Tooltip>
+											) : null}
+											{onSyncZotero ? (
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon-xs"
+															disabled={actionsDisabled}
+															aria-label={t("zoteroSync.button")}
+															onClick={() => {
+																setWandOpen(false);
+																onSyncZotero();
+															}}
+														>
+															<RefreshCw className="size-3.5" />
+														</Button>
+													</TooltipTrigger>
+													<TooltipContent side="bottom">
+														{t("zoteroSync.button")}
 													</TooltipContent>
 												</Tooltip>
 											) : null}

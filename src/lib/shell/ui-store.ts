@@ -73,6 +73,8 @@ type UiStore = {
 	lookupOpenSignal: number;
 	/** Zotero one-click migration dialog. */
 	zoteroOpen: boolean;
+	/** Zotero bidirectional sync dialog. */
+	zoteroSyncOpen: boolean;
 	commandOpen: boolean;
 	commandMode: PaletteMode;
 	settingsOpen: boolean;
@@ -89,6 +91,7 @@ export const uiStore = createStore<UiStore>(() => ({
 	featurePoppedOut: {},
 	lookupOpenSignal: 0,
 	zoteroOpen: false,
+	zoteroSyncOpen: false,
 	commandOpen: false,
 	commandMode: "go",
 	settingsOpen: false,
@@ -118,6 +121,10 @@ export function bumpLookupOpenSignal(): void {
 
 export function setZoteroOpen(open: boolean): void {
 	uiStore.setState({ zoteroOpen: open });
+}
+
+export function setZoteroSyncOpen(open: boolean): void {
+	uiStore.setState({ zoteroSyncOpen: open });
 }
 
 export function setCommandOpen(open: boolean): void {

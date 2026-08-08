@@ -36,7 +36,7 @@ import {
 	readPaper,
 } from "@/lib/paper/library-actions";
 import { requestMovePaths } from "@/lib/paper/library-store";
-import { setZoteroOpen } from "@/lib/shell/ui-store";
+import { setZoteroOpen, setZoteroSyncOpen } from "@/lib/shell/ui-store";
 import { vaultDisplayName } from "@/lib/vault";
 import {
 	cancelCreate,
@@ -74,6 +74,7 @@ const onOpenRemoteVaultClick = (args: {
 	remotePath: string;
 }) => void openRemoteVault(args);
 const onMigrateZotero = () => setZoteroOpen(true);
+const onSyncZotero = () => setZoteroSyncOpen(true);
 const onConfirmCreate = (name: string) => void confirmCreate(name);
 const onDeletePath = (path: string) => void trashPathsAndNotify([path]);
 const onDeletePaths = (paths: string[]) => void trashPathsAndNotify(paths);
@@ -161,6 +162,7 @@ export function VaultSidebar() {
 					onCreateVault={onCreateVaultClick}
 					onOpenRemoteVault={onOpenRemoteVaultClick}
 					onMigrateZotero={onMigrateZotero}
+					onSyncZotero={onSyncZotero}
 				/>
 			</div>
 			<div className="flex min-h-0 flex-1 flex-col px-1">

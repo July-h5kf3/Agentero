@@ -163,6 +163,34 @@
 		"tutorial": "View import tutorial",
 		"desktopOnly": "Zotero migration requires the desktop app."
 	},
+	"zoteroSync": {
+		"button": "Sync with Zotero",
+		"title": "Sync with Zotero",
+		"chooseFolder": "Choose Zotero data folder…",
+		"detecting": "Looking for your Zotero library…",
+		"pullMetadata": "Pull metadata (fill empty fields)",
+		"pullNotes": "Pull Zotero notes",
+		"pullAnnotations": "Pull PDF annotations",
+		"pushNotes": "Push NOTES.md back to Zotero",
+		"pushWarning": "Pushing writes directly to zotero.sqlite. Close Zotero first; a timestamped backup is created in agentero-backups/. Pushed notes appear in local Zotero, but Zotero cloud sync only picks them up after you edit them inside Zotero.",
+		"phase": {
+			"read": "Reading Zotero library…",
+			"pull": "Pulling changes into the vault…",
+			"push": "Pushing notes to Zotero…"
+		},
+		"run": "Sync",
+		"done": "Done",
+		"cancel": "Cancel",
+		"summaryTitle": "Sync complete",
+		"summaryLinked": "{{count}} papers matched between vault and Zotero",
+		"summaryMetadata": "Metadata filled for {{count}} papers",
+		"summaryNotesPulled": "Notes added to {{count}} papers",
+		"summaryAnnotationsPulled": "Annotations added to {{count}} papers",
+		"summaryNotesPushed": "{{count}} notes pushed to Zotero",
+		"summaryUnlinked": "{{count}} Zotero items have no vault paper (use migration to import them)",
+		"summaryErrors": "{{count}} failed",
+		"conflictsTitle": "{{count}} conflicts (skipped — resolve manually)"
+	},
 	"lookup": {
 		"magicWand": "Add by identifier",
 		"placeholder": "arXiv / DOI, GitHub Skill URL, or npx skills add…",
