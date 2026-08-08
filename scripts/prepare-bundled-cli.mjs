@@ -34,9 +34,18 @@ function hostTriple() {
 }
 
 const triple = process.env.TAURI_ENV_TARGET_TRIPLE || hostTriple();
+const tauriPlatform = process.env.TAURI_ENV_PLATFORM || "";
+// Mobile never ships the headless CLI (remote client only). Building it under
+// iOS/Android env also pollutes native toolchains (e.g. tesseract/cmake).
+const isMobile =
+	tauriPlatform === "android" ||
+	tauriPlatform === "ios" ||
+	/-android|-ios\b/.test(triple);
 const outDir = path.join(root, "src-tauri", "binaries");
 fs.mkdirSync(outDir, { recursive: true });
-const dest = path.join(outDir, `agentero-cli-${triple}${ext}`);
+// Mobile triples use the host executable extension rules poorly; always omit .exe.
+const destExt = isMobile ? "" : ext;
+const dest = path.join(outDir, `agentero-cli-${triple}${destExt}`);
 
 /** Non-empty placeholder so Tauri build-script accepts `externalBin`. */
 function writeStub(target) {
@@ -70,6 +79,16 @@ if (stub) {
 	// Host still rejects stubs that cannot report --version before Install.
 	writeStub(dest);
 	console.log(`[prepare-bundled-cli] stub → ${dest}`);
+	process.exit(0);
+}
+
+// Mobile platform configs clear externalBin; if this script still runs (e.g.
+// shared beforeBuildCommand), never compile the desktop CLI under mobile env.
+if (isMobile) {
+	writeStub(dest);
+	console.log(
+		`[prepare-bundled-cli] mobile (${tauriPlatform || triple}): stub only → ${dest}`,
+	);
 	process.exit(0);
 }
 
