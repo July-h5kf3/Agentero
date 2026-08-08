@@ -24,6 +24,7 @@ import { useSessionComposerState } from "@/hooks/use-session-composer-state";
 import {
 	type AgentEffortChoice,
 	type AgentListResponse,
+	type AgentModeChoice,
 	type AgentModelChoice,
 	type AgentPlanEvent,
 	type AgentResultPayload,
@@ -32,31 +33,39 @@ import {
 	type AgentToolEvent,
 	type CatalogScanResponse,
 	cancelAgentRun,
+	type ElicitationRequest,
 	ensureCatalogAgent,
 	listAgentSkills,
 	listAgents,
+	listenAgentCollaboration,
 	listenAgentCommands,
 	listenAgentCompleted,
 	listenAgentEffort,
 	listenAgentFailed,
 	listenAgentFastMode,
 	listenAgentModels,
+	listenAgentModes,
 	listenAgentPlan,
 	listenAgentStream,
 	listenAgentTool,
 	listenAgentUsage,
 	listSessions,
+	loadCollaborationPref,
 	loadModelCatalog,
 	loadModelFavorites,
 	loadModelPref,
+	loadModePref,
 	loadSession,
 	type PermissionRequest,
 	type PromptImage,
+	respondElicitation,
 	respondPermission,
 	runOnce,
+	saveCollaborationPref,
 	saveModelCatalog,
 	saveModelFavorites,
 	saveModelPref,
+	saveModePref,
 	scanCatalog,
 	setDefaultAgent,
 	warmAgent,
@@ -294,6 +303,14 @@ export function useAgentPanel({
 	const [agentListenersReady, setAgentListenersReady] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const [skills, setSkills] = useState<AgentSkill[]>([]);
+	const [modeOptions, setModeOptions] = useState<AgentModeChoice[]>([]);
+	const [modeId, setModeId] = useState<string | null>(null);
+	const [collaborationOptions, setCollaborationOptions] = useState<
+		AgentModeChoice[]
+	>([]);
+	const [collaborationModeId, setCollaborationModeId] = useState<string | null>(
+		null,
+	);
 	const [effortOptions, setEffortOptions] = useState<AgentEffortChoice[]>([]);
 	const [reasoningEffort, setReasoningEffort] = useState<string | null>(null);
 	const [fastAvailable, setFastAvailable] = useState(false);
@@ -410,6 +427,56 @@ export function useAgentPanel({
 				// Nested setState: keep free-form selection visible in the picker.
 				setModels(ensureModelsInclude(catalogModels, [next, prevId]));
 				return next;
+			});
+		},
+		[],
+	);
+
+	const applyModesEvent = useCallback(
+		(ev: { agentId: string; currentId: string; modes: AgentModeChoice[] }) => {
+			const cur = selectedAgentIdRef.current;
+			if (cur && cur !== ev.agentId) return;
+			if (!ev.modes.length) {
+				setModeOptions([]);
+				setModeId(null);
+				return;
+			}
+			const pref = loadModePref(ev.agentId)?.trim() || null;
+			const current = ev.currentId?.trim() || null;
+			const validPref =
+				pref && ev.modes.some((mode) => mode.id === pref) ? pref : null;
+			setModeOptions(ev.modes);
+			setModeId((prev) => {
+				const prevId = prev?.trim() || null;
+				if (prevId && ev.modes.some((mode) => mode.id === prevId)) {
+					return prevId;
+				}
+				return validPref || current || ev.modes[0]?.id || null;
+			});
+		},
+		[],
+	);
+
+	const applyCollaborationEvent = useCallback(
+		(ev: { agentId: string; currentId: string; modes: AgentModeChoice[] }) => {
+			const cur = selectedAgentIdRef.current;
+			if (cur && cur !== ev.agentId) return;
+			if (!ev.modes.length) {
+				setCollaborationOptions([]);
+				setCollaborationModeId(null);
+				return;
+			}
+			const pref = loadCollaborationPref(ev.agentId)?.trim() || null;
+			const current = ev.currentId?.trim() || null;
+			const validPref =
+				pref && ev.modes.some((mode) => mode.id === pref) ? pref : null;
+			setCollaborationOptions(ev.modes);
+			setCollaborationModeId((prev) => {
+				const prevId = prev?.trim() || null;
+				if (prevId && ev.modes.some((mode) => mode.id === prevId)) {
+					return prevId;
+				}
+				return validPref || current || ev.modes[0]?.id || null;
 			});
 		},
 		[],
@@ -581,6 +648,10 @@ export function useAgentPanel({
 			setModels([]);
 			setModelId(null);
 			setFavoriteIds([]);
+			setModeOptions([]);
+			setModeId(null);
+			setCollaborationOptions([]);
+			setCollaborationModeId(null);
 			setEffortOptions([]);
 			setReasoningEffort(null);
 			setFastAvailable(false);
@@ -589,6 +660,10 @@ export function useAgentPanel({
 			setUsageBySession({});
 			return;
 		}
+		setModeOptions([]);
+		setModeId(loadModePref(selectedAgentId));
+		setCollaborationOptions([]);
+		setCollaborationModeId(loadCollaborationPref(selectedAgentId));
 		setEffortOptions([]);
 		setReasoningEffort(null);
 		setFastAvailable(false);
@@ -627,6 +702,8 @@ export function useAgentPanel({
 			agentId: string;
 			vaultPath: string | null;
 			modelId?: string;
+			modeId?: string;
+			collaborationModeId?: string;
 			generation: number;
 			/** Apply models/usage only when still the intended warm target. */
 			stillValid: () => boolean;
@@ -643,6 +720,8 @@ export function useAgentPanel({
 					agentId: args.agentId,
 					vaultPath: args.vaultPath ?? undefined,
 					modelId: args.modelId,
+					modeId: args.modeId,
+					collaborationModeId: args.collaborationModeId,
 				});
 				if (args.generation !== warmGenRef.current || !args.stillValid()) {
 					return;
@@ -678,6 +757,8 @@ export function useAgentPanel({
 			agentId,
 			vaultPath: requestVaultPath,
 			modelId: loadModelPref(agentId) ?? undefined,
+			modeId: loadModePref(agentId) ?? undefined,
+			collaborationModeId: loadCollaborationPref(agentId) ?? undefined,
 			generation: gen,
 			stillValid: () =>
 				!cancelled &&
@@ -1117,6 +1198,12 @@ export function useAgentPanel({
 			const uModels = await listenAgentModels((ev) => {
 				applyModelsEvent(ev);
 			});
+			const uModes = await listenAgentModes((ev) => {
+				applyModesEvent(ev);
+			});
+			const uCollab = await listenAgentCollaboration((ev) => {
+				applyCollaborationEvent(ev);
+			});
 			const uEffort = await listenAgentEffort((ev) => {
 				applyEffortEvent(ev);
 			});
@@ -1151,6 +1238,8 @@ export function useAgentPanel({
 				uUsage();
 				uCommands();
 				uModels();
+				uModes();
+				uCollab();
 				uEffort();
 				uFast();
 				u2();
@@ -1164,6 +1253,8 @@ export function useAgentPanel({
 				uUsage,
 				uCommands,
 				uModels,
+				uModes,
+				uCollab,
 				uEffort,
 				uFast,
 				u2,
@@ -1177,8 +1268,10 @@ export function useAgentPanel({
 			for (const u of unsubs) u();
 		};
 	}, [
+		applyCollaborationEvent,
 		applyEffortEvent,
 		applyFastModeEvent,
+		applyModesEvent,
 		applyModelsEvent,
 		applyPlanEvent,
 		applyStreamEvent,
@@ -1567,6 +1660,42 @@ export function useAgentPanel({
 		}
 	};
 
+	const selectedModeName = useMemo(() => {
+		if (!modeId) return null;
+		return modeOptions.find((mode) => mode.id === modeId)?.name ?? modeId;
+	}, [modeId, modeOptions]);
+
+	const selectedCollaborationName = useMemo(() => {
+		if (!collaborationModeId) return null;
+		return (
+			collaborationOptions.find((mode) => mode.id === collaborationModeId)
+				?.name ?? collaborationModeId
+		);
+	}, [collaborationModeId, collaborationOptions]);
+
+	const pickMode = useCallback(
+		(id: string) => {
+			const next = id.trim();
+			if (!next || !modeOptions.some((mode) => mode.id === next)) return;
+			setModeId(next);
+			if (!selectedAgentId) return;
+			saveModePref(selectedAgentId, next);
+		},
+		[modeOptions, selectedAgentId],
+	);
+
+	const pickCollaborationMode = useCallback(
+		(id: string) => {
+			const next = id.trim();
+			if (!next || !collaborationOptions.some((mode) => mode.id === next))
+				return;
+			setCollaborationModeId(next);
+			if (!selectedAgentId) return;
+			saveCollaborationPref(selectedAgentId, next);
+		},
+		[collaborationOptions, selectedAgentId],
+	);
+
 	const selectedSkills = useMemo(
 		() =>
 			selectedSkillIds
@@ -1606,6 +1735,9 @@ export function useAgentPanel({
 			agentId,
 			vaultPath: requestVaultPath,
 			modelId: next,
+			modeId: loadModePref(agentId) ?? modeId ?? undefined,
+			collaborationModeId:
+				loadCollaborationPref(agentId) ?? collaborationModeId ?? undefined,
 			generation,
 			stillValid: () =>
 				selectedAgentIdRef.current === agentId &&
@@ -1690,6 +1822,9 @@ export function useAgentPanel({
 	// Forward ACP permission requests (ask mode) to the user for an explicit decision.
 	const [permissionRequest, setPermissionRequest] =
 		useState<PermissionRequest | null>(null);
+	// Codex Plan-mode request_user_input → form elicitation.
+	const [elicitationRequest, setElicitationRequest] =
+		useState<ElicitationRequest | null>(null);
 
 	const permissionRequestRef = useRef(permissionRequest);
 	permissionRequestRef.current = permissionRequest;
@@ -1699,6 +1834,22 @@ export function useAgentPanel({
 		void respondPermission(req.requestId, null);
 		setPermissionRequest(null);
 	});
+
+	const elicitationRequestRef = useRef(elicitationRequest);
+	elicitationRequestRef.current = elicitationRequest;
+	useOverlayRegistration(
+		"agent-elicitation",
+		elicitationRequest !== null,
+		() => {
+			const req = elicitationRequestRef.current;
+			if (!req) return;
+			void respondElicitation({
+				requestId: req.requestId,
+				action: "cancel",
+			});
+			setElicitationRequest(null);
+		},
+	);
 
 	useEffect(() => {
 		if (!isTauri()) return;
@@ -1710,6 +1861,24 @@ export function useAgentPanel({
 			unsub = await listen<PermissionRequest>(
 				"agent:permission-request",
 				({ payload }) => setPermissionRequest(payload),
+			);
+		})();
+		return () => {
+			cancelled = true;
+			unsub?.();
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!isTauri()) return;
+		let unsub: (() => void) | undefined;
+		let cancelled = false;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsub = await listen<ElicitationRequest>(
+				"agent:elicitation-request",
+				({ payload }) => setElicitationRequest(payload),
 			);
 		})();
 		return () => {
@@ -1988,6 +2157,15 @@ export function useAgentPanel({
 				workflow: workflow ?? "free",
 				target: workflowTarget,
 				modelId: resolvedModelId,
+				modeId:
+					modeId && modeOptions.some((mode) => mode.id === modeId)
+						? modeId
+						: undefined,
+				collaborationModeId:
+					collaborationModeId &&
+					collaborationOptions.some((mode) => mode.id === collaborationModeId)
+						? collaborationModeId
+						: undefined,
 				reasoningEffort: reasoningEffort ?? undefined,
 				fastMode: fastAvailable ? fastEnabled : undefined,
 				skillIds: resolvedSkillIds,
@@ -3234,6 +3412,14 @@ export function useAgentPanel({
 		warming,
 		pickModel,
 		toggleFavorite,
+		modeOptions,
+		modeId,
+		selectedModeName,
+		pickMode,
+		collaborationOptions,
+		collaborationModeId,
+		selectedCollaborationName,
+		pickCollaborationMode,
 		effortOptionsInDisplayOrder,
 		reasoningEffort,
 		setReasoningEffort,
@@ -3246,6 +3432,9 @@ export function useAgentPanel({
 		// Permission
 		permissionRequest,
 		setPermissionRequest,
+		// Form elicitation (request_user_input)
+		elicitationRequest,
+		setElicitationRequest,
 		// Refs used by composer submit race guards
 		switchingRef,
 		submittingRef,

@@ -41,16 +41,30 @@ export type ToolUiState = {
 	output?: unknown;
 };
 
-/** A selectable answer supplied by an ACP AskUserQuestion tool call. */
+/** A selectable answer supplied by an ACP AskUserQuestion / form elicitation. */
 export type AskUserQuestionOption = {
 	label: string;
 	description?: string;
+	/** Stable value for elicitation content (defaults to label). */
+	value?: string;
 };
 
-/** A question supplied by an ACP AskUserQuestion tool call. */
+/** A question supplied by AskUserQuestion tool or form elicitation. */
 export type AskUserQuestion = {
+	/** Optional field id (elicitation schema property name). */
+	id?: string;
 	question: string;
+	/** Empty options and no allowOther → free-text only. */
 	options: AskUserQuestionOption[];
+	/** When false, free-text / other fields may be left blank. Default true. */
+	required?: boolean;
+	/**
+	 * Show a free-text "Other" input on the same page as options
+	 * (Codex request_user_input companion field).
+	 */
+	allowOther?: boolean;
+	/** Elicitation content key for free-text Other (e.g. `q1__other`). */
+	otherFieldId?: string;
 };
 
 /**
@@ -496,6 +510,119 @@ export function formatAskUserAnswers(
 				`Question: ${question.question}\nAnswer: ${answers[index]}`,
 		)
 		.join("\n\n");
+}
+
+type ElicitationFieldInput = {
+	id: string;
+	title: string;
+	description?: string | null;
+	required?: boolean;
+	kind: string;
+	options: Array<{
+		value: string;
+		title: string;
+		description?: string | null;
+	}>;
+	isOtherAnswer?: boolean;
+	parentFieldId?: string | null;
+};
+
+/** Codex companion free-text field: `questionId__other` or `questionId__other2`. */
+function parseOtherFieldParentId(fieldId: string): string | null {
+	const match = fieldId.match(/^(.*)__other\d*$/);
+	return match?.[1] ?? null;
+}
+
+function mapFieldOptions(
+	field: ElicitationFieldInput,
+): AskUserQuestionOption[] {
+	if (field.kind !== "select" && field.kind !== "boolean") return [];
+	const options: AskUserQuestionOption[] = [];
+	for (const option of field.options) {
+		const label = (option.title || option.value).trim();
+		if (!label) continue;
+		options.push({
+			label,
+			description: option.description?.trim() || undefined,
+			value: option.value,
+		});
+	}
+	return options;
+}
+
+/**
+ * Map ACP form elicitation fields into AskUserQuestion pages.
+ * Codex splits each Q into select + optional `*__other` free-text — merge into one page.
+ */
+export function questionsFromElicitationFields(
+	fields: ElicitationFieldInput[],
+): AskUserQuestion[] {
+	const otherByParent = new Map<string, ElicitationFieldInput>();
+	const mains: ElicitationFieldInput[] = [];
+
+	for (const field of fields) {
+		const parentFromMeta =
+			field.isOtherAnswer && field.parentFieldId?.trim()
+				? field.parentFieldId.trim()
+				: null;
+		const parentFromId =
+			field.kind === "text" || field.options.length === 0
+				? parseOtherFieldParentId(field.id)
+				: null;
+		const parentId = parentFromMeta || parentFromId;
+		if (parentId && (field.isOtherAnswer || parentFromId)) {
+			otherByParent.set(parentId, field);
+			continue;
+		}
+		mains.push(field);
+	}
+
+	const out: AskUserQuestion[] = [];
+	for (const field of mains) {
+		const question = (field.description || field.title).trim();
+		if (!question) continue;
+		const options = mapFieldOptions(field);
+		const other = otherByParent.get(field.id);
+		// Standalone free-text (no options, not an Other companion).
+		const freeTextOnly = options.length === 0 && !other;
+		out.push({
+			id: field.id,
+			question,
+			options,
+			required: field.required !== false,
+			allowOther: Boolean(other) || freeTextOnly,
+			otherFieldId: other?.id ?? (freeTextOnly ? field.id : undefined),
+		});
+	}
+	return out;
+}
+
+/**
+ * Build elicitation content map.
+ * Option pick → primary field id; free-text Other → otherFieldId (Codex preference).
+ */
+export function elicitationContentFromAnswers(
+	questions: AskUserQuestion[],
+	answers: string[],
+): Record<string, string> {
+	const content: Record<string, string> = {};
+	for (let i = 0; i < questions.length; i++) {
+		const q = questions[i];
+		const answer = answers[i]?.trim();
+		if (!q || !answer) continue;
+		const matched = q.options.find((option) => option.label === answer);
+		if (matched && q.id) {
+			content[q.id] = matched.value ?? matched.label;
+			continue;
+		}
+		// Free-text / Other (not matching an option label).
+		if (q.otherFieldId) {
+			content[q.otherFieldId] = answer;
+		} else if (q.id) {
+			content[q.id] = answer;
+		}
+	}
+	return content;
 }
 
 export type ToolPatch = {

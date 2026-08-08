@@ -9,6 +9,7 @@ import {
 	buildOptions,
 	type ChatLine,
 	dedupeModelsClient,
+	elicitationContentFromAnswers,
 	ensureModelsInclude,
 	errorChatLine,
 	errorText,
@@ -16,6 +17,7 @@ import {
 	isBackgroundWorkflowHistoryTitle,
 	parseAskUserQuestions,
 	providerSessionIdForHistoryLoad,
+	questionsFromElicitationFields,
 	resetAgentChatIds,
 	resolveSelected,
 	shouldDeferSessionEvent,
@@ -140,6 +142,67 @@ describe("AskUserQuestion tool input", () => {
 		expect(
 			parseAskUserQuestions('{"variant":"AskUserQuestion","questions":[]}'),
 		).toBe(null);
+	});
+
+	it("maps form elicitation fields and merges Codex Other free-text into one page", () => {
+		const questions = questionsFromElicitationFields([
+			{
+				id: "lang",
+				title: "Language",
+				description: "Which language?",
+				required: true,
+				kind: "select",
+				options: [
+					{ value: "zh", title: "中文为主", description: "默认中文" },
+					{ value: "en", title: "英文为主" },
+				],
+			},
+			{
+				id: "lang__other",
+				title: "Other",
+				description:
+					"Type your own answer instead of choosing an option above.",
+				required: false,
+				kind: "text",
+				options: [],
+				isOtherAnswer: true,
+				parentFieldId: "lang",
+			},
+			{
+				id: "notes",
+				title: "Notes",
+				description: "Anything else?",
+				required: false,
+				kind: "text",
+				options: [],
+			},
+		]);
+		expect(questions).toHaveLength(2);
+		expect(questions[0]).toMatchObject({
+			id: "lang",
+			question: "Which language?",
+			allowOther: true,
+			otherFieldId: "lang__other",
+			required: true,
+		});
+		expect(questions[0]?.options).toHaveLength(2);
+		expect(questions[1]).toMatchObject({
+			id: "notes",
+			question: "Anything else?",
+			allowOther: true,
+			otherFieldId: "notes",
+			required: false,
+		});
+		// Option pick → primary id; free-text Other → __other key.
+		expect(elicitationContentFromAnswers(questions, ["中文为主", ""])).toEqual({
+			lang: "zh",
+		});
+		expect(
+			elicitationContentFromAnswers(questions, ["自定义语言", "x"]),
+		).toEqual({
+			lang__other: "自定义语言",
+			notes: "x",
+		});
 	});
 });
 

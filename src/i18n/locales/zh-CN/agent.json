@@ -17,6 +17,11 @@
 			"rejectAlways": "始终拒绝"
 		}
 	},
+	"elicitation": {
+		"title": "Agent 需要你的选择",
+		"submit": "提交回答",
+		"cancel": "取消"
+	},
 	"missing": "（缺失）",
 	"switchAgent": "切换 ACP Agent",
 	"suggestions": {
@@ -92,6 +97,14 @@
 		"mentionEmptyFolder": "此文件夹中没有可选项",
 		"fast": "快速",
 		"fastToggle": "切换快速模式",
+		"collaborationTooltip": "协作模式（Plan 下可用 request_user_input）",
+		"collaboration": {
+			"label": "协作"
+		},
+		"modeTooltip": "权限 / 沙箱模式（Agent 支持时显示）",
+		"mode": {
+			"label": "权限"
+		},
 		"effortTooltip": "选择推理强度",
 		"effort": {
 			"label": "推理强度",
@@ -123,8 +136,13 @@
 		"failed": "工具执行失败"
 	},
 	"askUserQuestion": {
-		"submit": "提交回答",
-		"submitted": "回答已提交"
+		"submit": "提交",
+		"submitted": "已提交",
+		"cancel": "取消",
+		"prev": "上一题",
+		"next": "下一题",
+		"progress": "{{current}} / {{total}}",
+		"freeTextPlaceholder": "输入你的回答"
 	},
 	"citation": {
 		"vaultPath": "Agent 引用的知识库路径"

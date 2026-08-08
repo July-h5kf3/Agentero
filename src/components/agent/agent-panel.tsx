@@ -216,6 +216,14 @@ export const AgentPanel = memo(function AgentPanel({
 		warming,
 		pickModel,
 		toggleFavorite,
+		modeOptions,
+		modeId,
+		selectedModeName,
+		pickMode,
+		collaborationOptions,
+		collaborationModeId,
+		selectedCollaborationName,
+		pickCollaborationMode,
 		effortOptionsInDisplayOrder,
 		reasoningEffort,
 		setReasoningEffort,
@@ -227,6 +235,8 @@ export const AgentPanel = memo(function AgentPanel({
 		cancelCurrentRun,
 		permissionRequest,
 		setPermissionRequest,
+		elicitationRequest,
+		setElicitationRequest,
 		switchingRef,
 		submittingRef,
 	} = panel;
@@ -376,6 +386,14 @@ export const AgentPanel = memo(function AgentPanel({
 						warming={warming}
 						onPickModel={pickModel}
 						onToggleFavorite={toggleFavorite}
+						modeOptions={modeOptions}
+						modeId={modeId}
+						selectedModeName={selectedModeName}
+						onPickMode={pickMode}
+						collaborationOptions={collaborationOptions}
+						collaborationModeId={collaborationModeId}
+						selectedCollaborationName={selectedCollaborationName}
+						onPickCollaborationMode={pickCollaborationMode}
 						effortOptionsInDisplayOrder={effortOptionsInDisplayOrder}
 						reasoningEffort={reasoningEffort}
 						onReasoningEffortChange={setReasoningEffort}
@@ -385,6 +403,8 @@ export const AgentPanel = memo(function AgentPanel({
 						fastEnabled={fastEnabled}
 						onFastEnabledToggle={() => setFastEnabled((current) => !current)}
 						onCancelRun={() => void cancelCurrentRun()}
+						elicitationRequest={elicitationRequest}
+						onElicitationResolved={() => setElicitationRequest(null)}
 						onSendSuggestion={sendSuggestion}
 					/>
 				</div>

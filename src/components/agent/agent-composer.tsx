@@ -11,8 +11,9 @@ import {
 	Zap,
 } from "lucide-react";
 import type { KeyboardEvent, DragEvent as ReactDragEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AskUserQuestionForm } from "@/components/agent/ask-user-question-form";
 import { ContextPathIcon } from "@/components/agent/context-path-icon";
 import type { QueuedPrompt } from "@/components/agent/types";
 import {
@@ -68,11 +69,19 @@ import {
 } from "@/components/ui/popover";
 import type {
 	AgentEffortChoice,
+	AgentModeChoice,
 	AgentModelChoice,
 	AgentSkill,
+	ElicitationRequest,
 	PromptImage,
 } from "@/lib/agent";
-import { SUGGESTION_KEYS, SUGGESTION_WORKFLOW } from "@/lib/agent/chat-state";
+import { respondElicitation } from "@/lib/agent/api";
+import {
+	elicitationContentFromAnswers,
+	questionsFromElicitationFields,
+	SUGGESTION_KEYS,
+	SUGGESTION_WORKFLOW,
+} from "@/lib/agent/chat-state";
 import { mentionPathHasChildren } from "@/lib/agent/mention";
 import {
 	COMPOSER_IMAGE_ACCEPT,
@@ -313,7 +322,7 @@ export function AgentComposer({
 	slashActiveIndex,
 	onAttachSlashCommand,
 	onSlashActiveIndexChange,
-	// Model / effort / usage / fast
+	// Model / mode / collaboration / effort / usage / fast
 	modelSelectorOpen,
 	onModelSelectorOpenChange,
 	models,
@@ -324,6 +333,14 @@ export function AgentComposer({
 	warming,
 	onPickModel,
 	onToggleFavorite,
+	modeOptions,
+	modeId,
+	selectedModeName,
+	onPickMode,
+	collaborationOptions,
+	collaborationModeId,
+	selectedCollaborationName,
+	onPickCollaborationMode,
 	effortOptionsInDisplayOrder,
 	reasoningEffort,
 	onReasoningEffortChange,
@@ -336,6 +353,9 @@ export function AgentComposer({
 	onCancelRun,
 	messageQueue,
 	onRemoveQueuedMessage,
+	// Form elicitation (Codex request_user_input) — same UI as AskUserQuestion
+	elicitationRequest,
+	onElicitationResolved,
 	// Follow-up suggestions
 	onSendSuggestion,
 }: {
@@ -397,6 +417,14 @@ export function AgentComposer({
 	warming: boolean;
 	onPickModel: (id: string) => void;
 	onToggleFavorite: (id: string) => void;
+	modeOptions: AgentModeChoice[];
+	modeId: string | null;
+	selectedModeName: string | null;
+	onPickMode: (id: string) => void;
+	collaborationOptions: AgentModeChoice[];
+	collaborationModeId: string | null;
+	selectedCollaborationName: string | null;
+	onPickCollaborationMode: (id: string) => void;
 	effortOptionsInDisplayOrder: AgentEffortChoice[];
 	reasoningEffort: string | null;
 	onReasoningEffortChange: (id: string) => void;
@@ -406,6 +434,8 @@ export function AgentComposer({
 	fastEnabled: boolean;
 	onFastEnabledToggle: () => void;
 	onCancelRun: () => void;
+	elicitationRequest: ElicitationRequest | null;
+	onElicitationResolved: () => void;
 	onSendSuggestion: (label: string, workflow?: string) => void;
 }) {
 	const { t } = useTranslation("agent");
@@ -414,6 +444,13 @@ export function AgentComposer({
 	// Attachments live inside PromptInput; base gate ignores them (see ComposerSubmitControl).
 	const canSubmitBase = hasComposerText || hasVisualDrafts;
 	const composerMenuOpen = showMentionMenu || showSkillMenu || showSlashMenu;
+	const elicitationQuestions = useMemo(
+		() =>
+			elicitationRequest
+				? questionsFromElicitationFields(elicitationRequest.fields)
+				: [],
+		[elicitationRequest],
+	);
 	// Nested enter/leave counter so moving over chips/textarea does not flicker the drop ring.
 	const fileDragDepthRef = useRef(0);
 	const [isFileDragOver, setIsFileDragOver] = useState(false);
@@ -472,13 +509,21 @@ export function AgentComposer({
 		};
 	}, [isFileDragOver, resetFileDragHighlight]);
 
+	const hasElicitation =
+		Boolean(elicitationRequest) && elicitationQuestions.length > 0;
+	// Questionnaire needs room; grow the fixed composer so the card can scroll.
+	const shellHeightPx =
+		heightPx && hasElicitation
+			? Math.max(heightPx, Math.min(420, Math.round(heightPx * 1.85)))
+			: heightPx;
+
 	return (
 		<div
 			className={cn(
 				"flex shrink-0 flex-col overflow-hidden border-t bg-muted/10",
 				compact ? "gap-1.5 p-2" : "gap-2 p-3",
 			)}
-			style={heightPx ? { height: heightPx } : undefined}
+			style={shellHeightPx ? { height: shellHeightPx } : undefined}
 		>
 			{linesLength > 0 && !activeTabIsRunning && !compact ? (
 				<Suggestions>
@@ -543,6 +588,49 @@ export function AgentComposer({
 						</QueueSectionContent>
 					</QueueSection>
 				</Queue>
+			) : null}
+			{elicitationRequest && elicitationQuestions.length > 0 ? (
+				<div
+					className={cn(
+						// Cap height inside the fixed composer; scroll body so options are reachable.
+						"min-h-0 max-h-[min(55%,22rem)] shrink overflow-y-auto overscroll-contain rounded-xl border border-border bg-muted/20",
+						compact ? "p-2" : "p-3",
+					)}
+				>
+					{(() => {
+						const msg = elicitationRequest.message?.trim() ?? "";
+						// Codex uses a generic "Input requested" when batching questions.
+						const showMessage =
+							msg.length > 0 && !/^input\s+requested\.?$/i.test(msg);
+						return showMessage ? (
+							<p className="mb-2 text-sm leading-5">{msg}</p>
+						) : null;
+					})()}
+					<AskUserQuestionForm
+						key={elicitationRequest.requestId}
+						questions={elicitationQuestions}
+						disabled={switching}
+						onSubmit={async (answers) => {
+							const content = elicitationContentFromAnswers(
+								elicitationQuestions,
+								answers,
+							);
+							await respondElicitation({
+								requestId: elicitationRequest.requestId,
+								action: "accept",
+								content,
+							});
+							onElicitationResolved();
+							return true;
+						}}
+						onCancel={() => {
+							void respondElicitation({
+								requestId: elicitationRequest.requestId,
+								action: "cancel",
+							}).finally(() => onElicitationResolved());
+						}}
+					/>
+				</div>
 			) : null}
 			<div className="relative min-h-0 flex-1">
 				<PromptInput
@@ -1180,6 +1268,90 @@ export function AgentComposer({
 									</ModelSelectorContent>
 								</ModelSelector>
 							)}
+							{!compact && collaborationOptions.length > 0 ? (
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<PromptInputButton
+											type="button"
+											className="h-7 max-w-[min(10rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
+											tooltip={t("composer.collaborationTooltip")}
+										>
+											<span className="truncate">
+												{t("composer.collaboration.label")}:{" "}
+												{selectedCollaborationName ??
+													collaborationModeId ??
+													t("composer.collaboration.label")}
+											</span>
+											<ChevronDown className="size-3 shrink-0 opacity-70" />
+										</PromptInputButton>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="start" className="min-w-36 p-1">
+										{collaborationOptions.map((mode) => (
+											<DropdownMenuItem
+												key={mode.id}
+												className={cn(
+													"flex flex-col items-start gap-0.5 rounded-md",
+													collaborationModeId === mode.id && "bg-muted",
+												)}
+												onSelect={() => onPickCollaborationMode(mode.id)}
+											>
+												<span className="flex w-full items-center justify-between gap-2">
+													<span className="truncate">{mode.name}</span>
+													{collaborationModeId === mode.id ? (
+														<CheckIcon className="size-3.5 shrink-0 text-muted-foreground" />
+													) : null}
+												</span>
+												{mode.description ? (
+													<span className="text-muted-foreground text-xs leading-snug">
+														{mode.description}
+													</span>
+												) : null}
+											</DropdownMenuItem>
+										))}
+									</DropdownMenuContent>
+								</DropdownMenu>
+							) : null}
+							{!compact && modeOptions.length > 0 ? (
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<PromptInputButton
+											type="button"
+											className="h-7 max-w-[min(10rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
+											tooltip={t("composer.modeTooltip")}
+										>
+											<span className="truncate">
+												{t("composer.mode.label")}:{" "}
+												{selectedModeName ?? modeId ?? t("composer.mode.label")}
+											</span>
+											<ChevronDown className="size-3 shrink-0 opacity-70" />
+										</PromptInputButton>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="start" className="min-w-36 p-1">
+										{modeOptions.map((mode) => (
+											<DropdownMenuItem
+												key={mode.id}
+												className={cn(
+													"flex flex-col items-start gap-0.5 rounded-md",
+													modeId === mode.id && "bg-muted",
+												)}
+												onSelect={() => onPickMode(mode.id)}
+											>
+												<span className="flex w-full items-center justify-between gap-2">
+													<span className="truncate">{mode.name}</span>
+													{modeId === mode.id ? (
+														<CheckIcon className="size-3.5 shrink-0 text-muted-foreground" />
+													) : null}
+												</span>
+												{mode.description ? (
+													<span className="text-muted-foreground text-xs leading-snug">
+														{mode.description}
+													</span>
+												) : null}
+											</DropdownMenuItem>
+										))}
+									</DropdownMenuContent>
+								</DropdownMenu>
+							) : null}
 							{!compact && effortOptionsInDisplayOrder.length > 0 ? (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
