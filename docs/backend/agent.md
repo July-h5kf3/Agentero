@@ -48,6 +48,7 @@ commands / config 仍可在 load 期间转发。
 | `agent_list_skills` | Vault skill 列表 |
 | `agent_respond_permission` | 回答权限请求 |
 | `agent_respond_elicitation` | 回答 form elicitation（Codex `request_user_input`） |
+| `agent_respond_ask_user` | 回答 Grok `_x.ai/ask_user_question` |
 | `agent_run_tool_lifecycle` | 静默安装/升级 catalog CLI（及 Claude/Codex ACP 适配器）；见 [api.md](api.md) 与 [#225](https://github.com/poco-ai/Agentero/issues/225) |
 | `agent_tool_lifecycle_supported` / `agent_tool_install_commands` | 是否支持静默安装；平台手动安装文案 |
 
@@ -71,6 +72,23 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 - Host 依赖 `agent-client-protocol` feature `unstable_elicitation`。
 - `initialize` 声明 `elicitation.form`，否则 codex-acp 对 `request_user_input` 直接返回空 answers。
 - 收到 `elicitation/create` → 事件 `agent:elicitation-request` → 前端表单 → `agent_respond_elicitation`。
+
+## 结构化提问（多 harness）
+
+ACP 无标准 tool 名；client 用 `parseAskUserQuestions` / elicitation / Grok ext 三条通路：
+
+| Harness | 形态 | 回答通路 |
+|---|---|---|
+| Codex | tool `variant: AskUserQuestion` 或 elicitation form | tool → 提升到 Composer → 下一用户轮；elicitation → `agent_respond_elicitation` |
+| Claude | tool `questions[]` | 同 tool 提升 → 下一用户轮 |
+| OpenCode | tool `question` → `questions[]` | 同 tool 提升；**默认 env** `OPENCODE_ENABLE_QUESTION_TOOL=1` |
+| Grok | ext method `_x.ai/ask_user_question` | Host → `agent:ask-user-request` → `agent_respond_ask_user`；与 tool 镜像去重 |
+
+**UI 约定**：可交互表单只在 Composer；transcript tool 卡不嵌选项。优先级 elicitation > Grok ext > tool 提升。
+
+Grok 实现：`src-tauri/src/features/agent/ask_user.rs`。
+
+详见 [frontend/agent.md](../frontend/agent.md)。
 
 ## 工作流与 Skill
 

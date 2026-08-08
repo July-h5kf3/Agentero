@@ -21,7 +21,7 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 - **图片附件**：Composer 支持粘贴 / 点选 / 拖入图片（`image/*`，最多 8 张、单张 ≤ 10 MiB）。提交时转为 ACP `ContentBlock::Image`（与 PDF 视觉批注同一 `runOnce.images` 通路）；会话气泡以缩略 chip 展示，纯图消息无文字气泡。图片仅会话本地保留，不随 `session/load` 历史回放。工具：`src/lib/agent/prompt-image.ts`。
 - `@`：空时优先最近路径与浅层目录；› 进入子目录；论文标签与 `paperTreeLabelMode` 一致。`@`、`$` 与 `/` 候选菜单由 viewport 碰撞处理定位，空间不足时翻转并在可用高度内滚动。
 - ACP `plan` 事件使用 AI Elements `Plan` / `PlanStep` 展示，可折叠查看步骤；步骤状态由图标、完成态和无障碍文案表达。
-- ACP `AskUserQuestion` 工具调用会解析为 AI Elements `Tool` 内的可选回答；完成选择后以正常的下一用户轮提交，并继续同一 ACP 会话。
+- ACP 结构化提问工具会解析为 AI Elements `Tool` 内的可选回答；完成选择后以正常的下一用户轮提交，并继续同一 ACP 会话。支持多 harness 的 rawInput 形状（见下表）。
 - 运行中可继续输入 → Queue waitlist；标题保持简洁，条目等宽并可单独移除；Esc / 停止中止。
 - 右侧栏 composer 顶部有竖向拖拽分隔条，可压低输入区高度；低于紧凑阈值后，当前文件 / `@` 提及 / 选区 / 视觉草稿 / skill / 图片附件都变为图标圆片，隐藏建议 prompts 与模型、推理强度、上下文用量、Fast 等常驻工具，只保留输入、图片附件和发送。
 - 会话空闲时 hover 用户消息可 **Edit** 后重发。
@@ -40,16 +40,23 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 
 ## 表单 Elicitation / AskUserQuestion（同一 UI）
 
-两者都是「Agent 向用户结构化提问」，**共用** `AskUserQuestionForm`（AI Elements `Suggestion` 选项芯片）：
+「Agent 向用户结构化提问」**共用** `AskUserQuestionForm`（AI Elements `Suggestion` 选项芯片）。ACP **没有**标准 tool 名 `AskUserQuestion`——各 harness 私货经 client adapter 落到同一表单：
 
-| 来源 | 协议 | UI 位置 |
-|---|---|---|
-| Tool `variant: AskUserQuestion` | `agent:tool` | Transcript 内 `Tool` 卡 |
-| Codex `request_user_input` | `elicitation/create` → `agent:elicitation-request` | **Composer 输入框上方** |
+| 来源 | 协议 / rawInput | UI 位置 | 备注 |
+|---|---|---|---|
+| Codex tool / Claude / OpenCode `question` | `agent:tool` + 可解析 questions | **Composer 输入框上方**（从 tool 提升） | Transcript 只留 tool 行 +「请在下方输入区作答」；不嵌表单 |
+| Codex `request_user_input` | `elicitation/create` → `agent:elicitation-request` | **Composer 输入框上方** | Client 须声明 `elicitation.form` |
+| Grok `_x.ai/ask_user_question` | ACP **ext method** → `agent:ask-user-request` | **Composer 输入框上方** | 提交 → `agent_respond_ask_user`；若同时有 tool 镜像则**抑制** tool 表单 |
 
-多题为 **翻页**：一页一题，上一题 / 下一题，末题显示「提交」；选项点击后自动进下一题。单题仅「提交」。
+**单一交互面**：优先级 `elicitation` > Grok ext > tool 提升；任意时刻只显示一张表单。表单在 **`AgentAskUserSurface`**，位于 **transcript 与 resize 手柄之间**——拖拽只改变下方输入壳高度，不包含问卷。解析：`parseAskUserQuestions` / `questionsFromElicitationFields` / `questionsFromAskUserDtos`。
 
-Client 声明 `elicitation.form`；用户提交 → `agent_respond_elicitation`（accept + content）或 cancel。映射：`questionsFromElicitationFields` / `elicitationContentFromAnswers`。
+多题为 **翻页**：一页一题，上一题 / 下一题，末题显示「提交」；单选且无 Other 时选项点击后自动进下一题。多选（`multiSelect` / `multiple`）可点多个芯片，答案以 `, ` 拼接。单题仅「提交」。底部「取消」右对齐。
+
+键盘（焦点在问卷区、非自由文本框）：`↑`/`↓` 移动选项焦点，`Space` 勾选/切换，`Enter` 确认当前焦点并下一题（末题提交），`←`/`→` 切题。
+
+Client 声明 `elicitation.form`；用户提交 elicitation → `agent_respond_elicitation`（accept + content）或 cancel。映射：`elicitationContentFromAnswers`。
+
+Tool 提升的作答：`formatAskUserAnswers` 后作为下一用户轮。若当前 turn 仍 `running`（OpenCode 等阻塞在 question tool），会先入队再 **取消该 turn**，以便队列立刻排空发送——避免卡在「等待发送」还要点停止。Grok ext / elicitation 不走此路径。
 
 ## 精读（paper-reader）
 
