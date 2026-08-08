@@ -81,7 +81,8 @@ pub fn push_notes(
         if notes_md.trim().is_empty() {
             continue;
         }
-        let html = codec::wrap_sync_html(&cand.paper_id, &codec::markdown_to_html(&notes_md));
+        let html =
+            codec::wrap_sync_html(&cand.paper_id, &codec::markdown_to_zotero_html(&notes_md));
         if let Err(e) = upsert_marked_note(&tx, cand.zotero_item_id, &cand.paper_id, &html) {
             failures.push(format!("{}: {e}", cand.path));
         }
