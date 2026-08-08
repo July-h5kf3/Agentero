@@ -15,8 +15,10 @@ import {
 	errorText,
 	formatAskUserAnswers,
 	isBackgroundWorkflowHistoryTitle,
+	isPendingAskUserToolStatus,
 	parseAskUserQuestions,
 	providerSessionIdForHistoryLoad,
+	questionsFromAskUserDtos,
 	questionsFromElicitationFields,
 	resetAgentChatIds,
 	resolveSelected,
@@ -107,7 +109,15 @@ describe("stream / tool / plan parts", () => {
 });
 
 describe("AskUserQuestion tool input", () => {
-	it("parses selectable questions and formats the selected answers", () => {
+	it("treats pending and in_progress as interactive ask-user tool status", () => {
+		expect(isPendingAskUserToolStatus("pending")).toBe(true);
+		expect(isPendingAskUserToolStatus("in_progress")).toBe(true);
+		expect(isPendingAskUserToolStatus(null)).toBe(true);
+		expect(isPendingAskUserToolStatus("completed")).toBe(false);
+		expect(isPendingAskUserToolStatus("failed")).toBe(false);
+	});
+
+	it("parses Codex variant selectable questions and formats answers", () => {
 		const questions = parseAskUserQuestions({
 			variant: "AskUserQuestion",
 			questions: [
@@ -128,11 +138,151 @@ describe("AskUserQuestion tool input", () => {
 					{ label: "Paper", description: "Only the open paper" },
 					{ label: "Vault", description: undefined },
 				],
+				allowOther: false,
 			},
 		]);
 		expect(formatAskUserAnswers(questions ?? [], ["Paper"])).toBe(
 			"Question: Which scope should I use?\nAnswer: Paper",
 		);
+	});
+
+	it("parses Claude AskUserQuestion shape (header + multiSelect + Other)", () => {
+		const questions = parseAskUserQuestions({
+			questions: [
+				{
+					question: "Which authentication method should we use?",
+					header: "Auth method",
+					multiSelect: false,
+					options: [
+						{ label: "OAuth 2.0", description: "Industry standard" },
+						{ label: "JWT", description: "Stateless" },
+					],
+				},
+				{
+					question: "Which features do you want?",
+					header: "Features",
+					multiSelect: true,
+					options: [
+						{ label: "Auto-scaling", description: "Scale out" },
+						{ label: "Monitoring", description: "Metrics" },
+					],
+				},
+			],
+		});
+		expect(questions).toHaveLength(2);
+		expect(questions?.[0]).toMatchObject({
+			question: "Which authentication method should we use?",
+			header: "Auth method",
+			allowOther: true,
+		});
+		expect(questions?.[0]?.multiSelect).toBeUndefined();
+		expect(questions?.[1]).toMatchObject({
+			header: "Features",
+			multiSelect: true,
+			allowOther: true,
+		});
+	});
+
+	it("parses OpenCode question tool shape (multiple + custom)", () => {
+		const questions = parseAskUserQuestions({
+			questions: [
+				{
+					question: "Preferred UI language?",
+					header: "Language",
+					multiple: false,
+					custom: true,
+					options: [
+						{ label: "Chinese", description: "中文" },
+						{ label: "English", description: "EN" },
+						// Synthetic Other is stripped when custom is on.
+						{ label: "Other", description: "Type your own" },
+					],
+				},
+			],
+		});
+		expect(questions).toEqual([
+			{
+				question: "Preferred UI language?",
+				header: "Language",
+				options: [
+					{ label: "Chinese", description: "中文" },
+					{ label: "English", description: "EN" },
+				],
+				allowOther: true,
+			},
+		]);
+	});
+
+	it("parses Grok-shaped multi_select questions", () => {
+		const questions = parseAskUserQuestions({
+			questions: [
+				{
+					question: "Pick targets",
+					multi_select: true,
+					options: [
+						{ label: "A", description: "one", preview: "preview-a" },
+						{ label: "B", description: "two" },
+					],
+				},
+			],
+		});
+		expect(questions?.[0]).toMatchObject({
+			question: "Pick targets",
+			multiSelect: true,
+			allowOther: true,
+		});
+		expect(questions?.[0]?.options[0]?.description).toBe("one");
+	});
+
+	it("folds Claude free-text companion questions into the previous page Other", () => {
+		const questions = parseAskUserQuestions({
+			questions: [
+				{
+					question: "Which language?",
+					header: "Lang",
+					options: [
+						{ label: "中文", description: "Chinese" },
+						{ label: "English", description: "EN" },
+						{ label: "Other", description: "Type your own" },
+					],
+				},
+				// Model-emitted free-text page — must not be a second flip page.
+				{
+					question: "Please type your own answer",
+					header: "Other",
+					options: [],
+				},
+			],
+		});
+		expect(questions).toHaveLength(1);
+		expect(questions?.[0]).toMatchObject({
+			question: "Which language?",
+			allowOther: true,
+		});
+		expect(questions?.[0]?.options.map((o) => o.label)).toEqual([
+			"中文",
+			"English",
+		]);
+	});
+
+	it("strips 其他 / Type your own option labels into allowOther", () => {
+		const questions = parseAskUserQuestions({
+			questions: [
+				{
+					question: "Pick one",
+					options: [
+						{ label: "A" },
+						{ label: "其他" },
+						{ label: "Type your own answer" },
+					],
+				},
+			],
+		});
+		expect(questions).toHaveLength(1);
+		expect(questions?.[0]?.options).toEqual([
+			{ label: "A", description: undefined },
+		]);
+		expect(questions?.[0]?.allowOther).toBe(true);
 	});
 
 	it("leaves malformed or unrelated tools on the generic UI", () => {
@@ -142,6 +292,48 @@ describe("AskUserQuestion tool input", () => {
 		expect(
 			parseAskUserQuestions('{"variant":"AskUserQuestion","questions":[]}'),
 		).toBe(null);
+		// Shell-like payloads must not become ask-user forms.
+		expect(
+			parseAskUserQuestions({
+				command: "ls",
+				questions: [
+					{
+						question: "noop",
+						options: [{ label: "x" }],
+					},
+				],
+			}),
+		).toBe(null);
+	});
+
+	it("maps Grok ask-user DTOs into form pages", () => {
+		const questions = questionsFromAskUserDtos([
+			{
+				question: "Preferred language?",
+				multiSelect: false,
+				allowOther: true,
+				options: [
+					{ label: "Chinese", description: "中文" },
+					{ label: "English" },
+				],
+			},
+			{
+				question: "Pick features",
+				multiSelect: true,
+				allowOther: true,
+				options: [{ label: "A" }, { label: "B" }],
+			},
+		]);
+		expect(questions).toHaveLength(2);
+		expect(questions[0]).toMatchObject({
+			question: "Preferred language?",
+			allowOther: true,
+		});
+		expect(questions[0]?.multiSelect).toBeUndefined();
+		expect(questions[1]).toMatchObject({
+			multiSelect: true,
+			allowOther: true,
+		});
 	});
 
 	it("maps form elicitation fields and merges Codex Other free-text into one page", () => {
@@ -202,6 +394,69 @@ describe("AskUserQuestion tool input", () => {
 		).toEqual({
 			lang__other: "自定义语言",
 			notes: "x",
+		});
+	});
+
+	it("merges elicitation Other without meta (Codex boilerplate description)", () => {
+		// No isOtherAnswer / parentFieldId / __other id — only the stock description.
+		const questions = questionsFromElicitationFields([
+			{
+				id: "q0",
+				title: "Language",
+				description: "Which language?",
+				required: true,
+				kind: "select",
+				options: [
+					{ value: "zh", title: "中文" },
+					{ value: "en", title: "English" },
+				],
+			},
+			{
+				id: "q0_free",
+				title: "q0_free",
+				description:
+					"Type your own answer instead of choosing an option above (optional).",
+				required: false,
+				kind: "text",
+				options: [],
+			},
+			{
+				id: "q1",
+				title: "Scope",
+				description: "Which scope?",
+				required: true,
+				kind: "select",
+				options: [{ value: "paper", title: "Paper" }],
+			},
+			{
+				id: "q1_free",
+				title: "q1_free",
+				description:
+					"Type your own answer instead of choosing an option above (optional).",
+				required: false,
+				kind: "text",
+				options: [],
+			},
+		]);
+		expect(questions).toHaveLength(2);
+		expect(questions[0]).toMatchObject({
+			id: "q0",
+			question: "Which language?",
+			allowOther: true,
+			otherFieldId: "q0_free",
+		});
+		expect(questions[1]).toMatchObject({
+			id: "q1",
+			question: "Which scope?",
+			allowOther: true,
+			otherFieldId: "q1_free",
+		});
+		// Free-text answers write to companion field ids.
+		expect(
+			elicitationContentFromAnswers(questions, ["自定义", "Paper"]),
+		).toEqual({
+			q0_free: "自定义",
+			q1: "paper",
 		});
 	});
 });
