@@ -407,6 +407,7 @@
 			"notInstalled": "Not installed on PATH",
 			"stale": "Installed shim may point to an older binary — reinstall to update",
 			"pathHint": "{{dir}} is not on PATH; add it in your shell settings",
+			"installHint": "Install places agentero in {{dir}} (does not edit shell rc)",
 			"install": "Install CLI",
 			"reinstall": "Reinstall CLI",
 			"uninstall": "Remove CLI",

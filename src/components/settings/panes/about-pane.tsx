@@ -133,6 +133,7 @@ export function AboutPane() {
 		if (!cli) {
 			return cliLoading ? "…" : t("about.cli.statusFailed");
 		}
+		// Prefer structured i18n over English Host `message` strings.
 		const parts: string[] = [];
 		if (cli.bundledVersion) {
 			parts.push(t("about.cli.version", { version: cli.bundledVersion }));
@@ -151,8 +152,8 @@ export function AboutPane() {
 		}
 		if (cli.installed && !cli.preferredBinOnPath) {
 			parts.push(t("about.cli.pathHint", { dir: cli.preferredBinDir }));
-		} else if (cli.message) {
-			parts.push(cli.message);
+		} else if (!cli.installed && cli.bundledPath) {
+			parts.push(t("about.cli.installHint", { dir: cli.preferredBinDir }));
 		}
 		return parts.join(" · ");
 	})();

@@ -400,6 +400,7 @@
 			"notInstalled": "尚未安装到 PATH",
 			"stale": "已安装的命令可能指向旧二进制，请重新安装以更新",
 			"pathHint": "{{dir}} 不在 PATH 中；请在 shell 配置里自行添加",
+			"installHint": "安装会将 agentero 放到 {{dir}}（不会修改 shell 配置）",
 			"install": "安装 CLI",
 			"reinstall": "重新安装 CLI",
 			"uninstall": "移除 CLI",

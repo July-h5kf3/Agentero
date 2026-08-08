@@ -16,6 +16,31 @@ export function useVaultOpenRequest(): void {
 		let unlistenOpen: (() => void) | undefined;
 		let unlistenError: (() => void) | undefined;
 		let cancelled = false;
+		/** In-flight path so event + pending take do not double-activate. */
+		let inflight: string | null = null;
+		let generation = 0;
+
+		const handlePath = async (path: string | undefined | null) => {
+			const trimmed = path?.trim();
+			if (!trimmed || cancelled) return;
+			// Host emits and also queues pending; drain + dedupe the concurrent pair.
+			if (inflight === trimmed) return;
+			const gen = ++generation;
+			inflight = trimmed;
+			try {
+				try {
+					await takePendingVaultOpen();
+				} catch {
+					// Older Host or no pending — fine.
+				}
+				if (cancelled || gen !== generation) return;
+				await openLocalVaultPath(trimmed);
+			} finally {
+				if (gen === generation) {
+					inflight = null;
+				}
+			}
+		};
 
 		void (async () => {
 			const { listen } = await import("@tauri-apps/api/event");
@@ -24,8 +49,7 @@ export function useVaultOpenRequest(): void {
 			unlistenOpen = await listen<OpenPayload>(
 				"vault:open-request",
 				(event) => {
-					const path = event.payload?.path;
-					if (path) void openLocalVaultPath(path);
+					void handlePath(event.payload?.path);
 				},
 			);
 			unlistenError = await listen<{ message?: string }>(
@@ -40,7 +64,7 @@ export function useVaultOpenRequest(): void {
 			try {
 				const pending = await takePendingVaultOpen();
 				if (!cancelled && pending) {
-					await openLocalVaultPath(pending);
+					await handlePath(pending);
 				}
 			} catch {
 				// Non-fatal when the command is unavailable (older Host).
