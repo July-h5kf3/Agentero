@@ -11,7 +11,7 @@
 - 左右栏折叠：`⌥⌘S` / `⌘L`（不重叠）。
 - 标题栏右侧：布局菜单、右栏 tab 切换；有新版本可更新时显示更新指示器按钮（见 [settings.md](settings.md) 「应用更新」）。
 
-实现：`src/components/shell/`、`src/lib/shell/ui-store.ts`、`src/lib/shell/leaf.ts`、`src/lib/shell/feature-window.ts`、`hooks/use-zen-layout.ts`。
+实现：`src/components/shell/`、`src/lib/shell/ui-store.ts`、`src/lib/shell/leaf.ts`、`src/lib/shell/feature-window.ts`、`hooks/use-shell-layout.ts`。
 
 ## 欢迎页与多窗口
 

@@ -79,9 +79,7 @@ import {
 	Languages,
 	List,
 	Loader2,
-	Maximize2,
 	MessageSquareText,
-	Minimize2,
 	Minus,
 	Moon,
 	MoveVertical,
@@ -393,10 +391,6 @@ export type PdfViewerProps = {
 	paperRelPath?: string | null;
 	/** Current vault root for ACP cwd */
 	vaultPath?: string | null;
-	/** Immersive full-window reading mode (adapts width + hides app chrome). */
-	zen?: boolean;
-	/** Toggle immersive mode; when provided a toolbar button is shown. */
-	onToggleZen?: () => void;
 	/** Open the annotations overview (App-level right sidebar tab). */
 	onOpenAnnotations?: () => void;
 	/** Open Translate settings from a translation error card. */
@@ -929,9 +923,7 @@ function PdfViewerInner({
 	paperAbsPath = null,
 	paperRelPath = null,
 	vaultPath = null,
-	zen = false,
 	isActive = true,
-	onToggleZen,
 	onOpenAnnotations,
 	onOpenSettings,
 	onHandle,
@@ -5095,7 +5087,7 @@ function PdfViewerInner({
 					)
 				: null}
 
-			{/* Bottom bar: page nav + PDF color scheme + immersive (zen). */}
+			{/* Bottom bar: page nav + PDF color scheme. */}
 			{totalPages > 0 ? (
 				<div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
 					<TooltipProvider delayDuration={200}>
@@ -5183,29 +5175,6 @@ function PdfViewerInner({
 									{t("pdf.zoomFitPage")}
 								</TooltipContent>
 							</Tooltip>
-							{onToggleZen ? (
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											size="icon-xs"
-											variant="ghost"
-											aria-label={zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
-											aria-pressed={zen}
-											onClick={onToggleZen}
-										>
-											{zen ? (
-												<Minimize2 className="size-3.5" />
-											) : (
-												<Maximize2 className="size-3.5" />
-											)}
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent side="top">
-										{zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
-									</TooltipContent>
-								</Tooltip>
-							) : null}
 						</div>
 					</TooltipProvider>
 				</div>

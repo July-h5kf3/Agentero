@@ -15,7 +15,6 @@ import {
 import {
 	useLibraryStore,
 	useSettings,
-	useUiStore,
 	useVaultStore,
 	useWorkspaceStore,
 } from "@/hooks/use-app-stores";
@@ -33,7 +32,7 @@ import {
 import type { LibraryColumnPref } from "@/lib/settings";
 import { patchSettings } from "@/lib/settings/react-store";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
-import { layout, openRightTab, togglePdfZen } from "@/lib/shell/ui-store";
+import { openRightTab } from "@/lib/shell/ui-store";
 import { joinVaultPath } from "@/lib/vault";
 import { handleTrashChanged } from "@/lib/vault/actions";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
@@ -96,7 +95,6 @@ export function WorkspaceHost() {
 	const libraryScopePath = useLibraryStore((s) => s.scopePath);
 	const rescanning = useLibraryStore((s) => s.rescanning);
 	const trashReloadSignal = useLibraryStore((s) => s.trashReloadSignal);
-	const pdfZenMode = useUiStore((s) => s.pdfZenMode);
 	const libraryColumns = useSettings((s) => s.libraryColumns);
 	const editorFontSize = useSettings((s) => s.editorFontSize);
 	const showEditorToolbar = useSettings((s) => s.showEditorToolbar);
@@ -189,23 +187,6 @@ export function WorkspaceHost() {
 		savePersistedTabs(dockLayout);
 	}, [dockLayout]);
 
-	// Leave immersive reading on Escape, or when the active tab is not a PDF.
-	useEffect(() => {
-		if (!pdfZenMode) return;
-		if (activeTab?.mode !== "pdf") {
-			layout()?.exitPdfZen();
-			return;
-		}
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") {
-				e.preventDefault();
-				layout()?.exitPdfZen();
-			}
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [pdfZenMode, activeTab]);
-
 	/**
 	 * Memoized DocView props — must not be an inline object in JSX, or
 	 * DocView's React.memo never bails out. Grouped by kind so library /
@@ -242,8 +223,6 @@ export function WorkspaceHost() {
 						: undefined,
 			},
 			pdf: {
-				zen: pdfZenMode,
-				onToggleZen: togglePdfZen,
 				onOpenAnnotations: () => openRightTab("annotations"),
 				onOpenSettings: () => openSettingsWindow("translate"),
 				registerHandle: registerPdfHandle,
@@ -265,7 +244,6 @@ export function WorkspaceHost() {
 			showEditorToolbar,
 			rescanning,
 			trashReloadSignal,
-			pdfZenMode,
 			t,
 		],
 	);

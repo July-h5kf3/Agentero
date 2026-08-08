@@ -1,5 +1,5 @@
 /**
- * Rail / PDF immersive layout controller: owns the resizable panel refs and the
+ * Rail layout controller: owns the resizable panel refs and the
  * imperative collapse / expand transitions, and registers them into the
  * ui-store so plain actions (palette, shortcuts, agent) can drive layout.
  */
@@ -8,10 +8,8 @@ import { type RefObject, useEffect, useMemo, useRef } from "react";
 import { usePanelRef } from "react-resizable-panels";
 import {
 	registerLayoutController,
-	setPdfZenMode,
 	setRightSidebarOpenState,
 	setSidebarCollapsedState,
-	uiStore,
 } from "@/lib/shell/ui-store";
 import { toggleNotesSplit } from "@/lib/workspace/actions";
 import { getActiveTabId, getTabs } from "@/lib/workspace/store";
@@ -20,7 +18,7 @@ import { tabHasNotesSplit, tabNotesEligible } from "@/lib/workspace/tabs";
 export const SIDEBAR_DEFAULT_PX = 200;
 export const RIGHT_SIDEBAR_DEFAULT_PX = 320;
 
-export type ZenLayout = {
+export type ShellLayout = {
 	sidebarPanelRef: ReturnType<typeof usePanelRef>;
 	rightSidebarPanelRef: ReturnType<typeof usePanelRef>;
 	sourcePanelRef: ReturnType<typeof usePanelRef>;
@@ -31,7 +29,7 @@ export type ZenLayout = {
 	rightWidthPxRef: RefObject<number>;
 };
 
-export function useZenLayout(): ZenLayout {
+export function useShellLayout(): ShellLayout {
 	const sidebarPanelRef = usePanelRef();
 	const rightSidebarPanelRef = usePanelRef();
 	const sourcePanelRef = usePanelRef();
@@ -39,8 +37,6 @@ export function useZenLayout(): ZenLayout {
 	const editorPaneRef = useRef<HTMLDivElement>(null);
 	const leftWidthPxRef = useRef(SIDEBAR_DEFAULT_PX);
 	const rightWidthPxRef = useRef(RIGHT_SIDEBAR_DEFAULT_PX);
-	const leftCollapsedBeforePdfZenRef = useRef(false);
-	const rightOpenBeforePdfZenRef = useRef(false);
 
 	const controller = useMemo(() => {
 		/** Collapse / expand left file-tree panel without remounting. */
@@ -98,25 +94,6 @@ export function useZenLayout(): ZenLayout {
 			setRightSidebarOpenState(!collapsed);
 		};
 
-		/**
-		 * Immersive PDF reading: collapse both side rails and hide the center
-		 * header so the viewer fills the window.
-		 */
-		const enterPdfZen = () => {
-			const { sidebarCollapsed, rightSidebarOpen } = uiStore.getState();
-			leftCollapsedBeforePdfZenRef.current = sidebarCollapsed;
-			rightOpenBeforePdfZenRef.current = rightSidebarOpen;
-			setPdfZenMode(true);
-			setLeftCollapsed(true);
-			setRightCollapsed(true);
-		};
-
-		const exitPdfZen = () => {
-			setPdfZenMode(false);
-			if (!leftCollapsedBeforePdfZenRef.current) setLeftCollapsed(false);
-			if (rightOpenBeforePdfZenRef.current) setRightCollapsed(false);
-		};
-
 		const focusSidebar = () => {
 			setLeftCollapsed(false);
 			requestAnimationFrame(() => {
@@ -152,8 +129,6 @@ export function useZenLayout(): ZenLayout {
 		return {
 			setLeftCollapsed,
 			setRightCollapsed,
-			enterPdfZen,
-			exitPdfZen,
 			focusSidebar,
 			focusEditorPane,
 			focusNotesEditor,
