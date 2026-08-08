@@ -1,6 +1,6 @@
 /**
  * Structured ask-user UI (elicitation / Grok ext / tool-promote).
- * Renders *above* the composer resize handle so only the prompt shell is resizable.
+ * While active, replaces the bottom composer (mutually exclusive with free-text input).
  */
 import { useMemo } from "react";
 import { AskUserQuestionForm } from "@/components/agent/ask-user-question-form";
@@ -14,6 +14,29 @@ import {
 	type ToolAskUserRequest,
 } from "@/lib/agent/chat-state";
 import { cn } from "@/lib/core/utils";
+
+/** True when the panel should show a questionnaire and hide the composer. */
+export function isAskUserSurfaceActive(input: {
+	elicitationRequest: ElicitationRequest | null;
+	askUserRequest: AskUserRequest | null;
+	toolAskUserRequest: ToolAskUserRequest | null;
+}): boolean {
+	if (
+		input.elicitationRequest &&
+		questionsFromElicitationFields(input.elicitationRequest.fields).length > 0
+	) {
+		return true;
+	}
+	if (
+		input.askUserRequest &&
+		questionsFromAskUserDtos(input.askUserRequest.questions).length > 0
+	) {
+		return true;
+	}
+	return Boolean(
+		input.toolAskUserRequest && input.toolAskUserRequest.questions.length > 0,
+	);
+}
 
 export function AgentAskUserSurface({
 	elicitationRequest,
@@ -62,9 +85,10 @@ export function AgentAskUserSurface({
 
 	if (!showElicitation && !showGrokAsk && !showToolAsk) return null;
 
-	const shellClass = cn("shrink-0 bg-muted/10 px-3 pb-1 pt-0", className);
+	// Docked at panel bottom while composer is hidden — a bit more bottom inset.
+	const shellClass = cn("shrink-0 bg-muted/10 px-3 pb-3 pt-0", className);
 	const cardClass =
-		"rounded-xl border border-border  bg-muted/20 px-3 pb-3 pt-1";
+		"rounded-xl border border-border bg-muted/20 px-3 pb-3 pt-1";
 
 	if (showElicitation && elicitationRequest) {
 		const msg = elicitationRequest.message?.trim() ?? "";

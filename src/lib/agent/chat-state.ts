@@ -447,7 +447,7 @@ export function mapToolStatus(
 	}
 }
 
-/** True while an ask-user tool still needs a user decision (composer owns the form). */
+/** True while an ask-user tool still needs a user decision (bottom surface owns the form). */
 export function isPendingAskUserToolStatus(
 	status: string | null | undefined,
 ): boolean {

@@ -82,7 +82,7 @@ import {
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 
-/** Compact note: interactive form lives in the composer, not inside the tool card. */
+/** Compact note: interactive form is docked below, not inside the tool card. */
 function AskUserToolPendingNote() {
 	const { t } = useTranslation("agent");
 	return (

@@ -143,7 +143,7 @@
 		"next": "Next",
 		"progress": "{{current}} / {{total}}",
 		"freeTextPlaceholder": "Type your answer",
-		"pendingInComposer": "Answer in the input area below",
+		"pendingInComposer": "Answer in the questionnaire below",
 		"keyboardHint": "↑↓ options · Space select · Enter confirm",
 		"keyboardHintMulti": "↑↓ options · Space select · Enter next · ←→ pages",
 		"collapse": "Collapse questionnaire",

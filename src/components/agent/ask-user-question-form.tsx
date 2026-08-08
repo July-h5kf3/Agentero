@@ -1,9 +1,9 @@
 /**
  * Shared AskUserQuestion UI (AI Elements Suggestion chips).
- * Used by:
- * - ACP tool cards (Codex / Claude / OpenCode / Grok-shaped rawInput)
- * - ACP form elicitation (Codex request_user_input) above the composer
- * - Grok ext / tool-promoted asks in the composer
+ * Used by AgentAskUserSurface (bottom dock; replaces free-text composer while open):
+ * - ACP tool promote (Codex / Claude / OpenCode / Grok-shaped rawInput)
+ * - ACP form elicitation (Codex request_user_input)
+ * - Grok ext `_x.ai/ask_user_question`
  *
  * Multi-question UX is paginated: one question per page, prev/next, Submit on last.
  * Options + optional free-text "Other" stay on the same page.
