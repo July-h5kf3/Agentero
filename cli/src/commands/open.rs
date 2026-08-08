@@ -134,8 +134,13 @@ fn open_system_url(url: &str) -> Result<(), CliError> {
     }
     #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     {
+        // Suppress OS noise (e.g. macOS kLSApplicationNotFoundErr) — callers
+        // fall back to launching the GUI binary when this fails.
         let status = Command::new(program)
             .args(&args)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .status()
             .map_err(|e| CliError::message(format!("failed to invoke {program}: {e}")))?;
         if !status.success() {
@@ -231,11 +236,9 @@ fn find_gui_binary() -> Option<PathBuf> {
                 candidates.push(ancestor.join("target/release/agentero"));
                 #[cfg(target_os = "macos")]
                 {
-                    candidates.push(
-                        ancestor.join("src-tauri/target/release/bundle/macos/Agentero.app"),
-                    );
                     candidates
-                        .push(ancestor.join("target/release/bundle/macos/Agentero.app"));
+                        .push(ancestor.join("src-tauri/target/release/bundle/macos/Agentero.app"));
+                    candidates.push(ancestor.join("target/release/bundle/macos/Agentero.app"));
                 }
             }
         }
