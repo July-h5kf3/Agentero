@@ -56,6 +56,7 @@
 		"queueLabel": "等待发送",
 		"queueRemove": "从队列移除",
 		"contextInstruction": "请在回答相关问题前读取以下知识库文件：",
+		"resizeHandle": "调整输入区高度",
 		"removeContext": "从上下文移除 {{path}}",
 		"removeSkill": "从上下文移除 ${{skill}}",
 		"removeSelection": "从上下文移除选中文本",

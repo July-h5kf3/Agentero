@@ -97,12 +97,18 @@ export type GroupedModel = {
 };
 
 /** Pending image attachment chips (inside PromptInput attachment context). */
-function ComposerImageAttachments() {
+function ComposerImageAttachments({ compact = false }: { compact?: boolean }) {
 	const { t } = useTranslation("agent");
 	const attachments = usePromptInputAttachments();
 	if (attachments.files.length === 0) return null;
 	return (
-		<div className="mb-2 flex flex-wrap gap-1.5">
+		<div
+			className={cn(
+				"mb-2 flex flex-wrap gap-1.5",
+				compact &&
+					"mb-0 max-w-[30%] shrink-0 flex-nowrap gap-1 overflow-hidden",
+			)}
+		>
 			{attachments.files.map((file) => {
 				const label = file.filename?.trim() || t("composer.attachedImage");
 				const thumb = file.url || null;
@@ -110,7 +116,12 @@ function ComposerImageAttachments() {
 					<button
 						key={file.id}
 						type="button"
-						className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-1.5 pr-2 text-foreground text-xs transition-colors hover:bg-muted"
+						className={cn(
+							"inline-flex items-center border bg-muted/20 text-foreground text-xs transition-colors hover:bg-muted",
+							compact
+								? "size-7 shrink-0 justify-center rounded-full p-0"
+								: "h-8 max-w-full gap-1.5 rounded-full px-1.5 pr-2",
+						)}
 						onClick={() => attachments.remove(file.id)}
 						title={t("composer.removeAttachedImage")}
 					>
@@ -118,15 +129,22 @@ function ComposerImageAttachments() {
 							<img
 								src={thumb}
 								alt=""
-								className="size-5 shrink-0 rounded object-cover"
+								className={cn(
+									"shrink-0 object-cover",
+									compact ? "size-5 rounded-full" : "size-5 rounded",
+								)}
 							/>
 						) : (
 							<ImageIcon className="size-3.5 shrink-0 text-muted-foreground" />
 						)}
-						<span className="max-w-[10rem] truncate" title={label}>
-							{label}
-						</span>
-						<X className="size-3 shrink-0 text-muted-foreground" />
+						{compact ? null : (
+							<>
+								<span className="max-w-[10rem] truncate" title={label}>
+									{label}
+								</span>
+								<X className="size-3 shrink-0 text-muted-foreground" />
+							</>
+						)}
 					</button>
 				);
 			})}
@@ -207,12 +225,14 @@ function ComposerSubmitControl({
 	switching,
 	submitting,
 	activeTabIsRunning,
+	compact = false,
 	onCancelRun,
 }: {
 	canSubmitBase: boolean;
 	switching: boolean;
 	submitting: boolean;
 	activeTabIsRunning: boolean;
+	compact?: boolean;
 	onCancelRun: () => void;
 }) {
 	const attachments = usePromptInputAttachments();
@@ -222,7 +242,8 @@ function ComposerSubmitControl({
 	return (
 		<PromptInputSubmit
 			className="ml-auto shrink-0"
-			size="icon-xs"
+			size={compact ? "icon-xs" : "icon-sm"}
+			variant={compact ? "ghost" : "default"}
 			status={
 				stop
 					? "streaming"
@@ -242,6 +263,8 @@ function ComposerSubmitControl({
 
 export function AgentComposer({
 	autoFocus,
+	heightPx,
+	compact = false,
 	linesLength,
 	activeTabIsRunning,
 	switching,
@@ -317,6 +340,8 @@ export function AgentComposer({
 	onSendSuggestion,
 }: {
 	autoFocus: boolean;
+	heightPx?: number;
+	compact?: boolean;
 	linesLength: number;
 	activeTabIsRunning: boolean;
 	switching: boolean;
@@ -448,8 +473,14 @@ export function AgentComposer({
 	}, [isFileDragOver, resetFileDragHighlight]);
 
 	return (
-		<div className="shrink-0 space-y-2 border-t bg-muted/10 p-3">
-			{linesLength > 0 && !activeTabIsRunning ? (
+		<div
+			className={cn(
+				"flex shrink-0 flex-col overflow-hidden border-t bg-muted/10",
+				compact ? "gap-1.5 p-2" : "gap-2 p-3",
+			)}
+			style={heightPx ? { height: heightPx } : undefined}
+		>
+			{linesLength > 0 && !activeTabIsRunning && !compact ? (
 				<Suggestions>
 					{SUGGESTION_KEYS.map((key) => {
 						const label = t(`suggestions.${key}`);
@@ -513,15 +544,15 @@ export function AgentComposer({
 					</QueueSection>
 				</Queue>
 			) : null}
-			<div className="relative">
+			<div className="relative min-h-0 flex-1">
 				<PromptInput
 					className={cn(
-						"w-full rounded-xl border-border bg-background shadow-none transition-[background-color,box-shadow,border-color] duration-150",
+						"h-full w-full rounded-xl border-border bg-background shadow-none transition-[background-color,box-shadow,border-color] duration-150",
 						isFileDragOver &&
 							"border-primary/55 bg-primary/5 shadow-[inset_0_0_0_1px] shadow-primary/25 ring-2 ring-primary/35",
 					)}
 					inputGroupClassName={cn(
-						"overflow-visible",
+						"!flex !h-full min-h-0 !flex-col overflow-visible",
 						// Keep the same surface while any child is disabled or a run is
 						// in progress — never dim / recolor the composer for "processing".
 						"has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30",
@@ -557,20 +588,36 @@ export function AgentComposer({
 						>
 							<PopoverAnchor asChild>
 								<div
-									className="relative flex min-h-[96px] w-full flex-col px-3 pt-3"
+									className={cn(
+										"relative flex min-h-0 w-full flex-1",
+										compact
+											? "flex-row items-start gap-1 px-2 pt-2"
+											: "flex-col px-3 pt-3",
+									)}
 									onDragOverCapture={onComposerDragOver}
 									onDropCapture={onComposerDrop}
 								>
-									<ComposerImageAttachments />
+									<ComposerImageAttachments compact={compact} />
 									{currentFilePath ||
 									mentionChipPaths.length > 0 ||
 									selectionChips.length > 0 ||
 									visualDrafts.length > 0 ? (
-										<div className="mb-2 flex flex-wrap gap-1.5">
+										<div
+											className={cn(
+												"mb-2 flex flex-wrap gap-1.5",
+												compact &&
+													"mb-0 max-w-[45%] shrink-0 flex-nowrap gap-1 overflow-hidden",
+											)}
+										>
 											{currentFilePath ? (
 												<button
 													type="button"
-													className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+													className={cn(
+														"inline-flex items-center border bg-muted/20 text-foreground text-xs transition-colors hover:bg-muted",
+														compact
+															? "size-7 shrink-0 justify-center rounded-full p-0"
+															: "h-8 max-w-full gap-1.5 rounded-full px-2",
+													)}
 													onClick={() => onRemoveContextPath(currentFilePath)}
 													title={t("composer.currentFileRemove")}
 												>
@@ -579,10 +626,17 @@ export function AgentComposer({
 														directoryPaths={directoryPathSet}
 														paperPaths={paperPathSet}
 													/>
-													<span className="truncate" title={currentFilePath}>
-														{currentFileLabel}
-													</span>
-													<X className="size-3 shrink-0 text-muted-foreground" />
+													{compact ? null : (
+														<>
+															<span
+																className="truncate"
+																title={currentFilePath}
+															>
+																{currentFileLabel}
+															</span>
+															<X className="size-3 shrink-0 text-muted-foreground" />
+														</>
+													)}
 												</button>
 											) : null}
 											{mentionChipPaths.map((path) => {
@@ -591,7 +645,12 @@ export function AgentComposer({
 													<button
 														key={path}
 														type="button"
-														className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+														className={cn(
+															"inline-flex items-center border bg-muted/20 text-foreground text-xs transition-colors hover:bg-muted",
+															compact
+																? "size-7 shrink-0 justify-center rounded-full p-0"
+																: "h-8 max-w-full gap-1.5 rounded-full px-2",
+														)}
 														onClick={() => onRemoveContextPath(path)}
 														title={t("composer.removeContext", { path })}
 													>
@@ -600,13 +659,17 @@ export function AgentComposer({
 															directoryPaths={directoryPathSet}
 															paperPaths={paperPathSet}
 														/>
-														<span
-															className="max-w-[16rem] truncate"
-															title={path}
-														>
-															{label}
-														</span>
-														<X className="size-3 shrink-0 text-muted-foreground" />
+														{compact ? null : (
+															<>
+																<span
+																	className="max-w-[16rem] truncate"
+																	title={path}
+																>
+																	{label}
+																</span>
+																<X className="size-3 shrink-0 text-muted-foreground" />
+															</>
+														)}
 													</button>
 												);
 											})}
@@ -621,7 +684,10 @@ export function AgentComposer({
 														key={sel.id}
 														type="button"
 														className={cn(
-															"inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-2 text-foreground text-xs transition-colors hover:bg-muted",
+															"inline-flex items-center border text-foreground text-xs transition-colors hover:bg-muted",
+															compact
+																? "size-7 shrink-0 justify-center rounded-full p-0"
+																: "h-8 max-w-full gap-1.5 rounded-full px-2",
 															sel.pinned
 																? "bg-muted/20"
 																: "border-dashed bg-transparent",
@@ -630,13 +696,17 @@ export function AgentComposer({
 														title={t("composer.removeSelection")}
 													>
 														<TextSelect className="size-3.5 shrink-0 text-muted-foreground" />
-														<span
-															className="max-w-[16rem] truncate"
-															title={sel.text}
-														>
-															{label}
-														</span>
-														<X className="size-3 shrink-0 text-muted-foreground" />
+														{compact ? null : (
+															<>
+																<span
+																	className="max-w-[16rem] truncate"
+																	title={sel.text}
+																>
+																	{label}
+																</span>
+																<X className="size-3 shrink-0 text-muted-foreground" />
+															</>
+														)}
 													</button>
 												);
 											})}
@@ -655,7 +725,12 @@ export function AgentComposer({
 													<button
 														key={draft.id}
 														type="button"
-														className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-1.5 pr-2 text-foreground text-xs transition-colors hover:bg-muted"
+														className={cn(
+															"inline-flex items-center border bg-muted/20 text-foreground text-xs transition-colors hover:bg-muted",
+															compact
+																? "size-7 shrink-0 justify-center rounded-full p-0"
+																: "h-8 max-w-full gap-1.5 rounded-full px-1.5 pr-2",
+														)}
 														onClick={() => onRemoveVisualDraft(draft.id)}
 														title={t("composer.removeVisualDraft")}
 													>
@@ -663,30 +738,50 @@ export function AgentComposer({
 															<img
 																src={thumb}
 																alt=""
-																className="size-5 shrink-0 rounded object-cover"
+																className={cn(
+																	"shrink-0 object-cover",
+																	compact
+																		? "size-5 rounded-full"
+																		: "size-5 rounded",
+																)}
 															/>
 														) : (
 															<ScanSearch className="size-3.5 shrink-0 text-muted-foreground" />
 														)}
-														<span
-															className="max-w-[14rem] truncate"
-															title={draft.comment || pageLabel}
-														>
-															{label}
-														</span>
-														<X className="size-3 shrink-0 text-muted-foreground" />
+														{compact ? null : (
+															<>
+																<span
+																	className="max-w-[14rem] truncate"
+																	title={draft.comment || pageLabel}
+																>
+																	{label}
+																</span>
+																<X className="size-3 shrink-0 text-muted-foreground" />
+															</>
+														)}
 													</button>
 												);
 											})}
 										</div>
 									) : null}
 									{selectedSkills.length > 0 ? (
-										<div className="mb-2 flex flex-wrap gap-1.5">
+										<div
+											className={cn(
+												"mb-2 flex flex-wrap gap-1.5",
+												compact &&
+													"mb-0 max-w-[30%] shrink-0 flex-nowrap gap-1 overflow-hidden",
+											)}
+										>
 											{selectedSkills.map((skill) => (
 												<button
 													key={skill.id}
 													type="button"
-													className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+													className={cn(
+														"inline-flex items-center border bg-muted/20 text-foreground text-xs transition-colors hover:bg-muted",
+														compact
+															? "size-7 shrink-0 justify-center rounded-full p-0"
+															: "h-8 max-w-full gap-1.5 rounded-full px-2",
+													)}
 													onClick={() => onRemoveSkill(skill.id)}
 													title={t("composer.removeSkill", {
 														skill: skill.name,
@@ -695,8 +790,12 @@ export function AgentComposer({
 													<span className="font-mono text-muted-foreground">
 														$
 													</span>
-													<span className="truncate">{skill.name}</span>
-													<X className="size-3 shrink-0 text-muted-foreground" />
+													{compact ? null : (
+														<>
+															<span className="truncate">{skill.name}</span>
+															<X className="size-3 shrink-0 text-muted-foreground" />
+														</>
+													)}
 												</button>
 											))}
 										</div>
@@ -906,7 +1005,12 @@ export function AgentComposer({
 									) : null}
 									<PromptInputTextarea
 										autoFocus={autoFocus || undefined}
-										className="min-h-[82px] px-0 py-1 text-[15px] leading-6 placeholder:text-muted-foreground/80"
+										className={cn(
+											"min-h-0 flex-1 overflow-y-auto px-0 py-1 placeholder:text-muted-foreground/80",
+											compact
+												? "max-h-none min-w-0 text-sm leading-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+												: "text-[15px] leading-6",
+										)}
 										value={composerText}
 										onChange={(event) => {
 											onComposerTextChange(event.currentTarget.value);
@@ -946,124 +1050,137 @@ export function AgentComposer({
 							</PopoverAnchor>
 						</Popover>
 					</PromptInputBody>
-					<PromptInputFooter className="flex-wrap items-end gap-x-2 gap-y-1.5 px-3 pb-2.5">
-						<PromptInputTools className="min-w-0 flex-1 flex-wrap gap-1">
-							<ModelSelector
-								open={modelSelectorOpen}
-								onOpenChange={(open) => {
-									onModelSelectorOpenChange(open);
-									if (!open) setModelQuery("");
-								}}
-							>
-								<ModelSelectorTrigger asChild>
-									<PromptInputButton
-										type="button"
-										className="h-7 max-w-[min(16rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
-										disabled={warming}
-										tooltip={
-											models.length > 0 || selectedModelName
-												? t("models.selectTooltip")
-												: t("models.customOrReportedTooltip")
-										}
-									>
-										<span className="truncate text-xs">
-											{selectedModelName ??
-												(warming ? t("models.loading") : t("models.button"))}
-										</span>
-										<ChevronDown className="size-3 shrink-0 opacity-70" />
-									</PromptInputButton>
-								</ModelSelectorTrigger>
-								<ModelSelectorContent className="sm:max-w-md">
-									<ModelSelectorInput
-										value={modelQuery}
-										onValueChange={setModelQuery}
-										placeholder={t("models.searchOrCustomPlaceholder")}
-									/>
-									<ModelSelectorList className="max-h-64">
-										{canUseCustomModel ? (
-											<ModelSelectorGroup heading={t("models.customGroup")}>
-												<ModelSelectorItem
-													value={customModelId}
-													onSelect={() => onPickModel(customModelId)}
+					<PromptInputFooter
+						className={cn(
+							"flex-wrap items-end gap-x-2 gap-y-1.5",
+							compact ? "px-2 pb-2" : "px-3 pb-2.5",
+						)}
+					>
+						<PromptInputTools
+							className={cn(
+								"min-w-0 flex-1 flex-wrap gap-1",
+								compact && "flex-none",
+							)}
+						>
+							{compact ? null : (
+								<ModelSelector
+									open={modelSelectorOpen}
+									onOpenChange={(open) => {
+										onModelSelectorOpenChange(open);
+										if (!open) setModelQuery("");
+									}}
+								>
+									<ModelSelectorTrigger asChild>
+										<PromptInputButton
+											type="button"
+											className="h-7 max-w-[min(16rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
+											disabled={warming}
+											tooltip={
+												models.length > 0 || selectedModelName
+													? t("models.selectTooltip")
+													: t("models.customOrReportedTooltip")
+											}
+										>
+											<span className="truncate text-xs">
+												{selectedModelName ??
+													(warming ? t("models.loading") : t("models.button"))}
+											</span>
+											<ChevronDown className="size-3 shrink-0 opacity-70" />
+										</PromptInputButton>
+									</ModelSelectorTrigger>
+									<ModelSelectorContent className="sm:max-w-md">
+										<ModelSelectorInput
+											value={modelQuery}
+											onValueChange={setModelQuery}
+											placeholder={t("models.searchOrCustomPlaceholder")}
+										/>
+										<ModelSelectorList className="max-h-64">
+											{canUseCustomModel ? (
+												<ModelSelectorGroup heading={t("models.customGroup")}>
+													<ModelSelectorItem
+														value={customModelId}
+														onSelect={() => onPickModel(customModelId)}
+													>
+														<span className="flex-1 truncate">
+															{t("models.useCustom", { id: customModelId })}
+														</span>
+													</ModelSelectorItem>
+												</ModelSelectorGroup>
+											) : null}
+											{groupedModels.map((group) => (
+												<ModelSelectorGroup
+													key={group.id}
+													heading={group.heading}
 												>
-													<span className="flex-1 truncate">
-														{t("models.useCustom", { id: customModelId })}
-													</span>
-												</ModelSelectorItem>
-											</ModelSelectorGroup>
-										) : null}
-										{groupedModels.map((group) => (
-											<ModelSelectorGroup
-												key={group.id}
-												heading={group.heading}
-											>
-												{group.items.map((model) => {
-													const favorited = favoriteIds.includes(model.id);
-													const selected = modelId === model.id;
-													return (
-														<ModelSelectorItem
-															key={`${group.id}-${model.id}`}
-															value={`${model.name} ${model.id}${
-																group.isFavorites ? "\u200b" : ""
-															}`}
-															onSelect={() => onPickModel(model.id)}
-															className={cn(
-																selected &&
-																	"bg-accent font-medium text-accent-foreground data-selected:bg-accent",
-															)}
-														>
-															<span className="flex-1 truncate">
-																{model.name}
-															</span>
-															<button
-																type="button"
-																aria-label={
-																	favorited
-																		? t("models.removeFromFavorites")
-																		: t("models.addToFavorites")
-																}
-																title={
-																	favorited
-																		? t("models.removeFromFavorites")
-																		: t("models.addToFavorites")
-																}
+													{group.items.map((model) => {
+														const favorited = favoriteIds.includes(model.id);
+														const selected = modelId === model.id;
+														return (
+															<ModelSelectorItem
+																key={`${group.id}-${model.id}`}
+																value={`${model.name} ${model.id}${
+																	group.isFavorites ? "\u200b" : ""
+																}`}
+																onSelect={() => onPickModel(model.id)}
 																className={cn(
-																	"rounded p-0.5 text-muted-foreground transition hover:text-foreground",
-																	favorited
-																		? "opacity-100"
-																		: "opacity-0 group-hover/command-item:opacity-100 group-data-selected/command-item:opacity-100",
+																	selected &&
+																		"bg-accent font-medium text-accent-foreground data-selected:bg-accent",
 																)}
-																onClick={(e) => {
-																	e.stopPropagation();
-																	e.preventDefault();
-																	onToggleFavorite(model.id);
-																}}
-																onPointerDown={(e) => e.stopPropagation()}
-																onMouseDown={(e) => e.stopPropagation()}
 															>
-																<Star
+																<span className="flex-1 truncate">
+																	{model.name}
+																</span>
+																<button
+																	type="button"
+																	aria-label={
+																		favorited
+																			? t("models.removeFromFavorites")
+																			: t("models.addToFavorites")
+																	}
+																	title={
+																		favorited
+																			? t("models.removeFromFavorites")
+																			: t("models.addToFavorites")
+																	}
 																	className={cn(
-																		"size-3.5",
-																		favorited && "fill-current text-amber-500",
+																		"rounded p-0.5 text-muted-foreground transition hover:text-foreground",
+																		favorited
+																			? "opacity-100"
+																			: "opacity-0 group-hover/command-item:opacity-100 group-data-selected/command-item:opacity-100",
 																	)}
-																/>
-															</button>
-														</ModelSelectorItem>
-													);
-												})}
-											</ModelSelectorGroup>
-										))}
-										<ModelSelectorEmpty>
-											{canUseCustomModel
-												? null
-												: models.length === 0
-													? t("models.emptyNoneCustom")
-													: t("models.emptyNoMatch")}
-										</ModelSelectorEmpty>
-									</ModelSelectorList>
-								</ModelSelectorContent>
-							</ModelSelector>
-							{effortOptionsInDisplayOrder.length > 0 ? (
+																	onClick={(e) => {
+																		e.stopPropagation();
+																		e.preventDefault();
+																		onToggleFavorite(model.id);
+																	}}
+																	onPointerDown={(e) => e.stopPropagation()}
+																	onMouseDown={(e) => e.stopPropagation()}
+																>
+																	<Star
+																		className={cn(
+																			"size-3.5",
+																			favorited &&
+																				"fill-current text-amber-500",
+																		)}
+																	/>
+																</button>
+															</ModelSelectorItem>
+														);
+													})}
+												</ModelSelectorGroup>
+											))}
+											<ModelSelectorEmpty>
+												{canUseCustomModel
+													? null
+													: models.length === 0
+														? t("models.emptyNoneCustom")
+														: t("models.emptyNoMatch")}
+											</ModelSelectorEmpty>
+										</ModelSelectorList>
+									</ModelSelectorContent>
+								</ModelSelector>
+							)}
+							{!compact && effortOptionsInDisplayOrder.length > 0 ? (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
 										<PromptInputButton
@@ -1097,7 +1214,7 @@ export function AgentComposer({
 									</DropdownMenuContent>
 								</DropdownMenu>
 							) : null}
-							{activeUsage && activeUsage.size > 0 ? (
+							{!compact && activeUsage && activeUsage.size > 0 ? (
 								<Context
 									usedTokens={activeUsage.used}
 									maxTokens={activeUsage.size}
@@ -1108,7 +1225,7 @@ export function AgentComposer({
 									</ContextContent>
 								</Context>
 							) : null}
-							{fastAvailable ? (
+							{!compact && fastAvailable ? (
 								<PromptInputButton
 									type="button"
 									className={cn(
@@ -1128,13 +1245,16 @@ export function AgentComposer({
 									/>
 								</PromptInputButton>
 							) : null}
-							<ComposerAttachImageButton disabled={switching} />
+							{compact ? null : (
+								<ComposerAttachImageButton disabled={switching} />
+							)}
 						</PromptInputTools>
 						<ComposerSubmitControl
 							canSubmitBase={canSubmitBase}
 							switching={switching}
 							submitting={submitting}
 							activeTabIsRunning={activeTabIsRunning}
+							compact={compact}
 							onCancelRun={onCancelRun}
 						/>
 					</PromptInputFooter>

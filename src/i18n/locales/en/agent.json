@@ -56,6 +56,7 @@
 		"queueLabel": "Queued",
 		"queueRemove": "Remove from queue",
 		"contextInstruction": "Read these Vault files before answering when relevant:",
+		"resizeHandle": "Resize composer height",
 		"removeContext": "Remove {{path}} from context",
 		"removeSkill": "Remove ${{skill}} from context",
 		"removeSelection": "Remove selected text from context",

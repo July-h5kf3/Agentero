@@ -1,4 +1,8 @@
-import { memo } from "react";
+import type {
+	KeyboardEvent as ReactKeyboardEvent,
+	PointerEvent as ReactPointerEvent,
+} from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { AgentComposer } from "@/components/agent/agent-composer";
 import { SidebarHistoryTrailing } from "@/components/agent/agent-history";
 import { AgentPermissionDialog } from "@/components/agent/agent-permission-dialog";
@@ -9,6 +13,12 @@ import { useAgentPanel } from "@/components/agent/use-agent-panel";
 import { PaneHeader } from "@/components/shell/pane-header";
 import { removeSelection } from "@/lib/agent/selection-store";
 import { cn } from "@/lib/core/utils";
+
+const COMPOSER_DEFAULT_HEIGHT_PX = 208;
+const COMPOSER_MIN_HEIGHT_PX = 88;
+const COMPOSER_MAX_HEIGHT_PX = 360;
+const COMPOSER_COMPACT_THRESHOLD_PX = 140;
+const TRANSCRIPT_MIN_HEIGHT_PX = 160;
 
 export type { AgentPanelProps } from "@/components/agent/types";
 
@@ -38,6 +48,97 @@ export const AgentPanel = memo(function AgentPanel({
 		paperMetaByRelPath,
 		paperTreeLabelMode,
 	});
+	const bodyRef = useRef<HTMLDivElement>(null);
+	const [composerHeightPx, setComposerHeightPx] = useState(
+		COMPOSER_DEFAULT_HEIGHT_PX,
+	);
+
+	const clampComposerHeight = useCallback((height: number) => {
+		const bodyHeight = bodyRef.current?.getBoundingClientRect().height ?? 0;
+		const availableMax =
+			bodyHeight > 0
+				? Math.max(
+						COMPOSER_MIN_HEIGHT_PX,
+						Math.min(
+							COMPOSER_MAX_HEIGHT_PX,
+							bodyHeight - TRANSCRIPT_MIN_HEIGHT_PX,
+						),
+					)
+				: COMPOSER_MAX_HEIGHT_PX;
+		return Math.min(Math.max(height, COMPOSER_MIN_HEIGHT_PX), availableMax);
+	}, []);
+
+	useEffect(() => {
+		const handleResize = () =>
+			setComposerHeightPx((height) => clampComposerHeight(height));
+		handleResize();
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, [clampComposerHeight]);
+
+	const onComposerResizePointerDown = useCallback(
+		(event: ReactPointerEvent<HTMLButtonElement>) => {
+			if (event.button !== 0) return;
+			event.preventDefault();
+			const startY = event.clientY;
+			const startHeight = composerHeightPx;
+
+			const handlePointerMove = (moveEvent: PointerEvent) => {
+				const deltaY = startY - moveEvent.clientY;
+				setComposerHeightPx(clampComposerHeight(startHeight + deltaY));
+			};
+			const handlePointerUp = () => {
+				window.removeEventListener("pointermove", handlePointerMove);
+				window.removeEventListener("pointerup", handlePointerUp);
+			};
+
+			window.addEventListener("pointermove", handlePointerMove);
+			window.addEventListener("pointerup", handlePointerUp, { once: true });
+		},
+		[clampComposerHeight, composerHeightPx],
+	);
+	const onComposerResizeKeyDown = useCallback(
+		(event: ReactKeyboardEvent<HTMLButtonElement>) => {
+			const smallStep = event.shiftKey ? 32 : 16;
+			const largeStep = 64;
+			switch (event.key) {
+				case "ArrowUp":
+					event.preventDefault();
+					setComposerHeightPx((height) =>
+						clampComposerHeight(height + smallStep),
+					);
+					break;
+				case "ArrowDown":
+					event.preventDefault();
+					setComposerHeightPx((height) =>
+						clampComposerHeight(height - smallStep),
+					);
+					break;
+				case "PageUp":
+					event.preventDefault();
+					setComposerHeightPx((height) =>
+						clampComposerHeight(height + largeStep),
+					);
+					break;
+				case "PageDown":
+					event.preventDefault();
+					setComposerHeightPx((height) =>
+						clampComposerHeight(height - largeStep),
+					);
+					break;
+				case "Home":
+					event.preventDefault();
+					setComposerHeightPx(clampComposerHeight(COMPOSER_MIN_HEIGHT_PX));
+					break;
+				case "End":
+					event.preventDefault();
+					setComposerHeightPx(clampComposerHeight(COMPOSER_MAX_HEIGHT_PX));
+					break;
+			}
+		},
+		[clampComposerHeight],
+	);
+	const composerCompact = composerHeightPx <= COMPOSER_COMPACT_THRESHOLD_PX;
 
 	const {
 		t,
@@ -164,11 +265,12 @@ export const AgentPanel = memo(function AgentPanel({
 					/>
 				</PaneHeader>
 
-				<div className="flex min-h-0 flex-1 flex-col">
+				<div ref={bodyRef} className="flex min-h-0 flex-1 flex-col">
 					<ChatTranscript
 						lines={lines}
 						activeTabId={activeTabId}
 						agentName={selected?.name ?? t("defaultName")}
+						compact={composerCompact}
 						activeTabIsRunning={activeTabIsRunning}
 						submitting={submitting}
 						switching={switching}
@@ -186,8 +288,21 @@ export const AgentPanel = memo(function AgentPanel({
 						onOpenSource={onOpenSource}
 					/>
 
+					<button
+						type="button"
+						aria-label={t("composer.resizeHandle")}
+						title={t("composer.resizeHandle")}
+						className="group relative h-2 shrink-0 cursor-row-resize touch-none bg-muted/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+						onPointerDown={onComposerResizePointerDown}
+						onKeyDown={onComposerResizeKeyDown}
+					>
+						<div className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 h-px w-12 rounded-full bg-border transition-colors group-hover:bg-foreground/35 group-active:bg-foreground/45" />
+					</button>
+
 					<AgentComposer
 						autoFocus={autoFocus}
+						heightPx={composerHeightPx}
+						compact={composerCompact}
 						linesLength={lines.length}
 						activeTabIsRunning={activeTabIsRunning}
 						switching={switching}
