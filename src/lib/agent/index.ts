@@ -9,3 +9,4 @@ export * from "@/lib/agent/slash-commands";
 // (ComposerStateStorage is defined once in composer-state; mention re-exports
 // the type for convenience — avoid star-exporting both to prevent silent drops).
 export * from "@/lib/agent/stream-parse";
+export * from "@/lib/agent/user-agent-presets";

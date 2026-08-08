@@ -137,6 +137,17 @@
 		"proxy": {
 			"label": "Agent proxy"
 		},
+		"userAgent": {
+			"section": "Relay compatibility",
+			"sectionHint": "Optional. Injects User-Agent when the agent starts, for relays that check the client.",
+			"label": "User-Agent",
+			"placeholder": "codex-cli/0.50.0",
+			"presets": "Presets",
+			"presetsAria": "User-Agent presets",
+			"presetOff": "Off (default agent UA)",
+			"providerIdsLabel": "Codex provider ids",
+			"providerIdsPlaceholder": "my_proxy, openai"
+		},
 		"desktopOnly": "Agent registry requires the desktop app.",
 		"desktopHint": "Run `pnpm tauri dev` to scan agents on this machine.",
 		"commonAgents": "Common agents",

@@ -1,5 +1,7 @@
 import {
 	ArrowUpCircle,
+	Check,
+	ChevronDown,
 	Loader2,
 	Plus,
 	RefreshCw,
@@ -37,6 +39,12 @@ import {
 import type { SettingsHostContext } from "@/components/settings/types";
 import { useProbingKeys } from "@/components/settings/use-probing-keys";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -61,8 +69,10 @@ import {
 	removeAgent,
 	runToolLifecycle,
 	scanCatalog,
+	setAgentUserAgent,
 	setDefaultAgent,
 	type ToolLifecycleAction,
+	USER_AGENT_PRESETS,
 	upsertAgent,
 } from "@/lib/agent";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
@@ -94,6 +104,9 @@ export function AgentPane({
 	const [formName, setFormName] = useState(() => t("agent.form.defaultName"));
 	const [formCommand, setFormCommand] = useState("");
 	const [formArgs, setFormArgs] = useState("");
+	/** Draft for optional ACP User-Agent (Codex / mid-station affinity). */
+	const [userAgentDraft, setUserAgentDraft] = useState("");
+	const [userAgentProviderDraft, setUserAgentProviderDraft] = useState("");
 	const { probingKeys, setProbingKeys, clearProbingKey, clearAllProbingKeys } =
 		useProbingKeys();
 	const autoProbedRef = useRef(false);
@@ -124,12 +137,49 @@ export function AgentPane({
 			try {
 				const scan = await scanCatalog();
 				setCatalog(scan);
+				setUserAgentDraft(scan.userAgent ?? "");
+				setUserAgentProviderDraft(scan.userAgentProviderIds ?? "");
 				return scan;
 			} catch (e) {
 				notifyError(e instanceof Error ? e.message : String(e));
 				return null;
 			}
 		}, [t]);
+
+	const commitUserAgent = useCallback(
+		async (override?: { userAgent?: string; providerIds?: string }) => {
+			if (!isTauri()) return;
+			const ua = (override?.userAgent ?? userAgentDraft).trim();
+			const providers = (
+				override?.providerIds ?? userAgentProviderDraft
+			).trim();
+			try {
+				const next = await setAgentUserAgent(ua, providers);
+				setUserAgentDraft(next.userAgent);
+				setUserAgentProviderDraft(next.userAgentProviderIds);
+				setCatalog((prev) =>
+					prev
+						? {
+								...prev,
+								userAgent: next.userAgent,
+								userAgentProviderIds: next.userAgentProviderIds,
+							}
+						: prev,
+				);
+			} catch (e) {
+				notifyError(e instanceof Error ? e.message : String(e));
+			}
+		},
+		[userAgentDraft, userAgentProviderDraft],
+	);
+
+	const applyUserAgentPreset = useCallback(
+		(value: string) => {
+			setUserAgentDraft(value);
+			void commitUserAgent({ userAgent: value });
+		},
+		[commitUserAgent],
+	);
 
 	/**
 	 * Parallel ACP probe. Soft open skips already-ready rows; force re-probes all
@@ -810,6 +860,97 @@ export function AgentPane({
 						</p>
 					}
 				/>
+			</SettingsGroup>
+
+			{/* Advanced / rare: mid-station User-Agent injection (#207). */}
+			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+				{t("agent.userAgent.section")}
+			</p>
+			<p className="mb-2 px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("agent.userAgent.sectionHint")}
+			</p>
+			<SettingsGroup>
+				<SettingsRow
+					label={t("agent.userAgent.label")}
+					htmlFor="agent-user-agent"
+				>
+					<div className="flex min-w-0 items-center gap-1.5">
+						<Input
+							id="agent-user-agent"
+							value={userAgentDraft}
+							onChange={(e) => setUserAgentDraft(e.target.value)}
+							onBlur={() => void commitUserAgent()}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									e.currentTarget.blur();
+								}
+							}}
+							placeholder={t("agent.userAgent.placeholder")}
+							spellCheck={false}
+							autoComplete="off"
+							disabled={!isTauri()}
+							className="h-8 w-44 text-xs sm:w-52"
+						/>
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="h-8 shrink-0 gap-1 px-2 text-xs"
+									disabled={!isTauri()}
+									aria-label={t("agent.userAgent.presetsAria")}
+								>
+									{t("agent.userAgent.presets")}
+									<ChevronDown className="size-3 opacity-70" aria-hidden />
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end" className="min-w-[14rem]">
+								{USER_AGENT_PRESETS.map((preset) => {
+									const selected =
+										userAgentDraft.trim() === preset.value.trim();
+									const label =
+										preset.id === "off"
+											? t("agent.userAgent.presetOff")
+											: preset.value;
+									return (
+										<DropdownMenuItem
+											key={preset.id}
+											className="gap-2 font-mono text-xs"
+											onSelect={() => applyUserAgentPreset(preset.value)}
+										>
+											<span className="flex-1 truncate">{label}</span>
+											{selected ? (
+												<Check className="size-3.5 shrink-0" aria-hidden />
+											) : null}
+										</DropdownMenuItem>
+									);
+								})}
+							</DropdownMenuContent>
+						</DropdownMenu>
+					</div>
+				</SettingsRow>
+				<SettingsRow
+					label={t("agent.userAgent.providerIdsLabel")}
+					htmlFor="agent-user-agent-providers"
+				>
+					<Input
+						id="agent-user-agent-providers"
+						value={userAgentProviderDraft}
+						onChange={(e) => setUserAgentProviderDraft(e.target.value)}
+						onBlur={() => void commitUserAgent()}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.currentTarget.blur();
+							}
+						}}
+						placeholder={t("agent.userAgent.providerIdsPlaceholder")}
+						spellCheck={false}
+						autoComplete="off"
+						disabled={!isTauri() || !userAgentDraft.trim()}
+						className="h-8 w-56 text-xs"
+					/>
+				</SettingsRow>
 			</SettingsGroup>
 		</>
 	);

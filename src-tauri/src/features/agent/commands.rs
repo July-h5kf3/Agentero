@@ -32,6 +32,13 @@ pub struct AgentProxyResponse {
     pub proxy_url: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentUserAgentResponse {
+    pub user_agent: String,
+    pub user_agent_provider_ids: String,
+}
+
 fn list_from_state(state: crate::features::agent::models::AgentRegistryState) -> AgentListResponse {
     AgentListResponse {
         agents: state.agents,
@@ -147,6 +154,21 @@ pub fn agent_set_proxy(
         Ok(s) => ApiResult::ok(AgentProxyResponse {
             proxy_enabled: s.proxy_enabled,
             proxy_url: s.proxy_url,
+        }),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub fn agent_set_user_agent(
+    registry: State<'_, AgentRegistry>,
+    user_agent: String,
+    user_agent_provider_ids: String,
+) -> ApiResult<AgentUserAgentResponse> {
+    match registry.set_user_agent(user_agent, user_agent_provider_ids) {
+        Ok(s) => ApiResult::ok(AgentUserAgentResponse {
+            user_agent: s.user_agent,
+            user_agent_provider_ids: s.user_agent_provider_ids,
         }),
         Err(e) => map_err(e),
     }

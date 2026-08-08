@@ -130,6 +130,17 @@
 		"proxy": {
 			"label": "Agent 代理"
 		},
+		"userAgent": {
+			"section": "中转站兼容",
+			"sectionHint": "可选。启动 Agent 时注入 User-Agent，用于部分中转的客户端校验。",
+			"label": "User-Agent",
+			"placeholder": "codex-cli/0.50.0",
+			"presets": "预设",
+			"presetsAria": "User-Agent 预设",
+			"presetOff": "关闭（使用 Agent 默认 UA）",
+			"providerIdsLabel": "Codex Provider id",
+			"providerIdsPlaceholder": "my_proxy, openai"
+		},
 		"desktopOnly": "Agent 注册表需要桌面应用。",
 		"desktopHint": "运行 `pnpm tauri dev` 以扫描本机上的 Agent。",
 		"commonAgents": "常用 Agent",

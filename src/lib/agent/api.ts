@@ -74,6 +74,10 @@ export type CatalogScanResponse = {
 	enabled: boolean;
 	proxyEnabled: boolean;
 	proxyUrl: string;
+	/** Optional ACP/Codex HTTP User-Agent override (empty = off). */
+	userAgent?: string;
+	/** Comma-separated Codex model_providers ids for http_headers injection. */
+	userAgentProviderIds?: string;
 };
 
 export type AcpSessionCapabilities = {
@@ -332,6 +336,17 @@ export async function setAgentProxy(
 	proxyUrl: string,
 ): Promise<{ proxyEnabled: boolean; proxyUrl: string }> {
 	return invokeAgentApi("agent_set_proxy", { proxyEnabled, proxyUrl });
+}
+
+/** Persist optional ACP User-Agent override for Codex / mid-station affinity. */
+export async function setAgentUserAgent(
+	userAgent: string,
+	userAgentProviderIds = "",
+): Promise<{ userAgent: string; userAgentProviderIds: string }> {
+	return invokeAgentApi("agent_set_user_agent", {
+		userAgent,
+		userAgentProviderIds,
+	});
 }
 
 export async function probeAgent(id: string): Promise<ProbeResult> {
