@@ -54,6 +54,8 @@ agentero mark delete papers/demo <id> -y --json
 正文句子高亮 / `translate` 命令见规划 [#170](https://github.com/poco-ai/Agentero/issues/170) 与 [mark-cli-roadmap.md](../development/mark-cli-roadmap.md)。
 
 ```bash
+# 首次/干净树：tauri-build 需要 externalBin 占位，否则 build-script 失败
+pnpm cli:bundle:stub   # 或 pnpm cli:bundle
 cargo build -p agentero-cli
 cargo run -p agentero-cli -- vault which --json
 cargo run -p agentero-cli -- wiki check papers/demo/NOTES.md --json

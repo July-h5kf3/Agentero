@@ -81,6 +81,8 @@ fn is_runnable_cli(path: &Path) -> bool {
 pub fn resolve_bundled_cli<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
+    // `executable_dir` is desktop-only (PathResolver). Mobile never ships the CLI.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Ok(exe_dir) = app.path().executable_dir() {
         candidates.push(exe_dir.join(BUNDLED_CLI_NAME));
         candidates.push(exe_dir.join("binaries").join(BUNDLED_CLI_NAME));

@@ -1,6 +1,6 @@
 [package]
 name = "agentero"
-version = "0.5.1"
+version = "0.5.2"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -49,6 +49,7 @@ sha2 = "0.11.0"
 hex = "0.4.3"
 walkdir = "2.5.0"
 base64 = "0.22"
+encoding_rs = "0.8"
 urlencoding = "2"
 url = "2"
 os_info = "3"

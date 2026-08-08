@@ -197,6 +197,8 @@ pub fn handle_argv_urls<R: Runtime>(app: &AppHandle<R>, argv: &[String]) {
 fn focus_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
+        // unminimize is desktop-only in Tauri (no window manager chrome on mobile).
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let _ = win.unminimize();
         let _ = win.set_focus();
     }

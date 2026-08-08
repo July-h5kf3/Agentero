@@ -4,15 +4,31 @@
 //! npm fallback; login-shell PATH for GUI apps; no `curl | bash` pipes).
 //! Scoped to Motif catalog templates.
 
+#[cfg(target_os = "windows")]
+use crate::features::agent::discover::path_entries;
 use crate::features::agent::discover::resolve_command;
 use crate::features::agent::templates::{template_info, CLAUDE_ACP_INSTALL_COMMAND};
 use std::process::{Command, Output};
+use std::sync::{Mutex, OnceLock};
 
 #[cfg(target_os = "windows")]
+use std::fs::{self, OpenOptions};
+#[cfg(target_os = "windows")]
+use std::io::Write;
+#[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
+#[cfg(target_os = "windows")]
+use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(target_os = "windows")]
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+static TOOL_LIFECYCLE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+#[cfg(target_os = "windows")]
+static WINDOWS_BATCH_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Catalog template ids that support silent install/update.
 pub const LIFECYCLE_TEMPLATES: &[&str] = &[
@@ -390,6 +406,11 @@ npm i -g openclaw@latest
 }
 
 fn run_tool_lifecycle_silently(command_line: &str) -> Result<(), String> {
+    let _guard = TOOL_LIFECYCLE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "failed to acquire lifecycle lock".to_string())?;
+
     #[cfg(not(target_os = "windows"))]
     {
         let script = format!("set -e\nset -o pipefail\n{command_line}\n");
@@ -407,47 +428,81 @@ fn run_tool_lifecycle_silently(command_line: &str) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        // Wrap each logical line with `call` so .cmd shims don't replace the batch.
-        let mut bat = String::from("@echo off\r\n");
-        for line in command_line.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('@') {
-                continue;
-            }
-            // Lines already containing `||` stay as-is but get call on the left-most command.
-            if line.starts_with("call ") || line.starts_with("powershell ") {
-                bat.push_str(line);
-            } else {
-                bat.push_str("call ");
-                bat.push_str(line);
-            }
-            bat.push_str("\r\nif errorlevel 1 exit /b %errorlevel%\r\n");
-        }
-        let bat_file =
-            std::env::temp_dir().join(format!("agentero_tool_{}.bat", std::process::id()));
-        std::fs::write(&bat_file, &bat).map_err(|e| format!("failed to write batch file: {e}"))?;
+        let bat_file = write_windows_batch_file(command_line)?;
+        let merged_path = std::env::join_paths(path_entries())
+            .map_err(|e| format!("failed to build install PATH: {e}"))?;
         let output = Command::new("cmd")
+            .arg("/D")
             .arg("/C")
             .arg(&bat_file)
+            .env("PATH", merged_path)
             .creation_flags(CREATE_NO_WINDOW)
             .output();
-        let _ = std::fs::remove_file(&bat_file);
+        let _ = fs::remove_file(&bat_file);
         finish_lifecycle_output(
             &output.map_err(|e| format!("failed to start install process: {e}"))?,
         )
     }
 }
 
+#[cfg(target_os = "windows")]
+fn write_windows_batch_file(command_line: &str) -> Result<std::path::PathBuf, String> {
+    let temp_dir = std::env::temp_dir();
+    let pid = std::process::id();
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("failed to read system time: {e}"))?
+        .as_nanos();
+
+    for _ in 0..32 {
+        let seq = WINDOWS_BATCH_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = temp_dir.join(format!("agentero_tool_{pid}_{stamp}_{seq}.bat"));
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                let bat = build_windows_batch(command_line);
+                file.write_all(bat.as_bytes())
+                    .map_err(|e| format!("failed to write batch file: {e}"))?;
+                return Ok(path);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("failed to create batch file: {e}")),
+        }
+    }
+
+    Err("failed to create unique batch file".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn build_windows_batch(command_line: &str) -> String {
+    let mut bat = String::from("@echo off\r\nchcp 65001 >nul\r\n");
+    for line in command_line.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('@') {
+            continue;
+        }
+        if line.starts_with("call ") || line.starts_with("powershell ") || line.starts_with("chcp ")
+        {
+            bat.push_str(line);
+        } else {
+            bat.push_str("call ");
+            bat.push_str(line);
+        }
+        bat.push_str("\r\nif errorlevel 1 exit /b %errorlevel%\r\n");
+    }
+    bat
+}
+
 fn finish_lifecycle_output(output: &Output) -> Result<(), String> {
     if output.status.success() {
         return Ok(());
     }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let raw = if stderr.trim().is_empty() {
-        stdout.trim()
-    } else {
-        stderr.trim()
+    let stderr = decode_process_output(&output.stderr);
+    let stdout = decode_process_output(&output.stdout);
+    let raw = match (stderr.trim(), stdout.trim()) {
+        ("", "") => "",
+        ("", out) => out,
+        (err, "") => err,
+        (err, out) => return Err(last_lines(&format!("{err}\n{out}"), 8)),
     };
     let detail = last_lines(raw, 8);
     Err(if detail.is_empty() {
@@ -455,6 +510,22 @@ fn finish_lifecycle_output(output: &Output) -> Result<(), String> {
     } else {
         detail
     })
+}
+
+fn decode_process_output(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return text.to_string();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let (text, _, _) = encoding_rs::GBK.decode(bytes);
+        text.into_owned()
+    }
+    #[cfg(not(target_os = "windows"))]
+    String::from_utf8_lossy(bytes).into_owned()
 }
 
 fn last_lines(text: &str, n: usize) -> String {
@@ -552,5 +623,29 @@ mod tests {
     fn last_lines_trims() {
         let t = "a\nb\nc\nd\ne";
         assert_eq!(last_lines(t, 2), "d\ne");
+    }
+
+    #[test]
+    fn decode_process_output_handles_utf8() {
+        assert_eq!(
+            decode_process_output("ok: 安装失败".as_bytes()),
+            "ok: 安装失败"
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn decode_process_output_handles_gbk() {
+        let (encoded, _, _) = encoding_rs::GBK.encode("命令失败");
+        assert_eq!(decode_process_output(&encoded), "命令失败");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_batch_sets_utf8_and_wraps_cmd_shims() {
+        let bat = build_windows_batch("npm i -g foo\r\npowershell -NoProfile test");
+        assert!(bat.starts_with("@echo off\r\nchcp 65001 >nul\r\n"));
+        assert!(bat.contains("call npm i -g foo\r\nif errorlevel 1 exit /b %errorlevel%"));
+        assert!(bat.contains("powershell -NoProfile test\r\nif errorlevel 1 exit /b %errorlevel%"));
     }
 }

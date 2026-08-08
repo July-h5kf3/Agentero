@@ -86,6 +86,13 @@ agentero open <PATH> / agentero <PATH>
 
 release workflow 先编译 desktop App 和目标平台的 `agentero-cli`，再把 CLI 作为 App Bundle 的 executable resource（内部文件名可为 `agentero-cli`，避免与 GUI 主程序重名）。CLI 的构建目标必须和 desktop App 相同，且使用同一 tag / version。
 
+**仅 desktop**。iOS / Android 是远端客户端，不内置 headless CLI：
+
+- `tauri.conf.json`：`bundle.externalBin = ["binaries/agentero-cli"]`，`beforeBuildCommand` 含 `pnpm cli:bundle:release`
+- `tauri.ios.conf.json` / `tauri.android.conf.json`：覆盖 `beforeBuildCommand` 为仅 `pnpm build`，并清空 `externalBin`
+- 独立 CLI job / `cargo build -p agentero-cli`：须先 seed `src-tauri/binaries/agentero-cli-$TRIPLE` stub（`pnpm cli:bundle:stub` 或 release workflow 中的 shell 步骤），否则 `tauri-build` 会因 missing resource 失败
+- `scripts/prepare-bundled-cli.mjs` 在 `TAURI_ENV_PLATFORM` 为 android/ios 时只写 stub、不编译 desktop CLI
+
 外部 `agentero` 是指向或调用该内置 CLI 的轻量 shim；它不携带第二个版本，也不从网络下载组件。App 更新替换 Bundle 后，shim 继续定位同一 Bundle 内的新版 CLI；App 被卸载或移动导致不可定位时，shim 给出可操作错误。
 
 ### 平台策略
