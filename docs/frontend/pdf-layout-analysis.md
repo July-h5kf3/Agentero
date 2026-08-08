@@ -96,7 +96,7 @@ LayoutAnalysisPluginPackage: {
 | ModelScope | `greatv/oar-ocr` → `pp-doclayoutv3.onnx` |
 | HuggingFace | EmbedPDF `PP-DocLayoutV3-ONNX/model_fp16.onnx` |
 | 来源标记 | 同目录 `pp-doclayoutv3.onnx.source` |
-| 前端 | `agentero-model://…/pp-doclayoutv3.onnx`（Windows：`https://agentero-model.localhost/…`） |
+| 前端 | `agentero-model://…/pp-doclayoutv3.onnx`（Windows：`http://agentero-model.localhost/…`） |
 | Commands | `layout_model_status` / `layout_model_ensure({ progressTaskId? })` |
 
 实现：`src-tauri/src/features/layout_model/`、`src/lib/pdf/layout/model.ts`、`ai-runtime.ts`。

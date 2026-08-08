@@ -33,7 +33,7 @@ type LayoutModelTaskEvent = {
 /** Local custom-protocol URL for the XDG-cached ONNX (Host serves the file). */
 export function layoutModelLocalUrl(fileName = "pp-doclayoutv3.onnx"): string {
 	const origin = navigator.userAgent.includes("Windows")
-		? "https://agentero-model.localhost"
+		? "http://agentero-model.localhost"
 		: "agentero-model://localhost";
 	return `${origin}/${fileName}`;
 }
