@@ -7,7 +7,9 @@ import { loadSettings } from "@/lib/settings";
 
 export type AgentTemplate =
 	| "opencode"
+	| "openclaw"
 	| "gemini"
+	| "hermes"
 	| "claude-acp"
 	| "codex-acp"
 	| "qodercli"

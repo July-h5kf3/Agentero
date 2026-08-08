@@ -1436,7 +1436,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 {
   id?: string; // 省略则新建
   name: string;
-  template?: 'opencode' | 'gemini' | 'claude-acp' | 'codex-acp' | 'qodercli' | 'custom';
+  template?: 'opencode' | 'openclaw' | 'gemini' | 'hermes' | 'claude-acp' | 'codex-acp' | 'qodercli' | 'grok-build' | 'custom';
   command: string;
   args?: string[];
   env?: Record<string, string>;
@@ -1485,17 +1485,17 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 > 已取代旧的 `agent_open_install_terminal`（打开系统终端、Enter 确认后再装）。远端仍用 `remote_agent_open_install_terminal`（SSH 确认安装）。
 
 - **参数**：`{ templateId: string, action: "install" | "update" }`
-  - 支持的 `templateId`：`opencode` · `claude-acp` · `codex-acp` · `gemini` · `grok-build`（不含 `qodercli` / `custom`）
+  - 支持的 `templateId`：`opencode` · `openclaw` · `claude-acp` · `codex-acp` · `gemini` · `hermes` · `grok-build`（不含 `qodercli` / `custom`）
 - **返回**：`{ ok: true; data: null }` 或错误（stderr/stdout 末尾若干行）
 - **行为**
-  - `install`：未装 host 时走官方 installer（POSIX curl→临时文件再 bash，非 `curl|bash`）或 npm；Claude/Codex 在 host 已存在但 ACP 缺失时只装适配器；两者都缺则 host && adapter。
-  - `update`：优先 `tool update` / 官方链，失败再 npm；Codex 固定 npm（避免假成功）；Windows 上 OpenCode 不用交互式 `upgrade`。
+  - `install`：未装 host 时走官方 installer（POSIX curl→临时文件再 bash，非 `curl|bash`）或 npm；Claude/Codex 在 host 已存在但 ACP 缺失时只装适配器；两者都缺则 host && adapter；Hermes 走官方 installer；OpenClaw 走 npm。
+  - `update`：优先 `tool update` / 官方链，失败再 npm；Codex 固定 npm（避免假成功）；OpenClaw 使用 `openclaw update --yes` 后 fallback npm；Windows 上 OpenCode 不用交互式 `upgrade`。
   - macOS/Linux：注入 login shell 的 `PATH`（GUI 窄 PATH）。
   - Windows：写临时 `.bat` + `CREATE_NO_WINDOW` + `call` 前缀。
   - 在 `spawn_blocking` 中执行，避免卡住 async runtime。
 - **实现**：`src-tauri/src/features/agent/tool_lifecycle.rs`
 - **Catalog 两层检测**（`agent_scan_catalog` / 远端 scan）：
-  - **Agent**：`binaryAvailable`（`detect_command`，如 `claude` / `codex` / `opencode`）
+  - **Agent**：`binaryAvailable`（`detect_command`，如 `claude` / `codex` / `opencode` / `openclaw` / `hermes`）
   - **ACP**：`acpCommandAvailable`（`command`，如 `claude-agent-acp`；原生 ACP 时与 Agent 同二进制）
   - `adapterDistinct`：host 与 ACP 入口不同
   - `canInstall`：本机支持静默安装

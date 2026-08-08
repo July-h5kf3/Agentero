@@ -411,7 +411,15 @@ mod tests {
         // agent discover via ssh which (login shell PATH)
         let dest_for_ssh = host.clone();
         let mut found_any_agent = false;
-        for bin in ["claude", "codex", "opencode", "claude-agent-acp", "grok"] {
+        for bin in [
+            "claude",
+            "codex",
+            "opencode",
+            "openclaw",
+            "hermes",
+            "claude-agent-acp",
+            "grok",
+        ] {
             match agent_exec::remote_which(&dest_for_ssh, bin).await {
                 Ok(Some(p)) => {
                     eprintln!("remote which {bin} -> {p}");
