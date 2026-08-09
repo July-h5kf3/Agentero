@@ -12,6 +12,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { clamp } from "@/lib/core/math";
 import { cn } from "@/lib/core/utils";
 
 /** Minimum inset from the viewport edges (px). */
@@ -108,7 +109,7 @@ export function placeSelectionCard(
 		// Not enough room on the left — flip right of the pin.
 		left = Math.min(vw - edge - planWidth, screen.x + gap);
 	}
-	left = Math.min(Math.max(edge, left), Math.max(edge, vw - planWidth - edge));
+	left = clamp(left, edge, Math.max(edge, vw - planWidth - edge));
 
 	const viewportCap = Math.max(SELECTION_CARD_MIN_HEIGHT, vh - edge * 2);
 
