@@ -7,16 +7,16 @@ import {
 	type TElement,
 } from "platejs";
 import { describe, expect, it } from "vitest";
-import { editorCompletionHasFocus } from "@/components/editor/plugins/completion-focus";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
+import { editorCompletionHasFocus } from "@/lib/markdown/completion-focus";
 import {
 	executeSlashCommand,
 	filterSlashCommands,
 	findSlashCommandTrigger,
 	isSlashCommandSubmitKey,
 	type SlashCommandTarget,
-} from "@/components/editor/plugins/slash-command";
+} from "@/lib/markdown/slash-command";
 
 const TestPlugins = [
 	KEYS.p,
