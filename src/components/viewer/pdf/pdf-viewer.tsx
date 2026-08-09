@@ -43,7 +43,7 @@ import {
 	ZoomMode,
 	ZoomPluginPackage,
 } from "@embedpdf/plugin-zoom/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
 import { PdfBottomBar } from "@/components/viewer/pdf/chrome/pdf-bottom-bar";
@@ -51,17 +51,12 @@ import { PdfCardStack } from "@/components/viewer/pdf/chrome/pdf-card-stack";
 import { PdfFindBar } from "@/components/viewer/pdf/chrome/pdf-find-bar";
 import { PdfOutlinePanel } from "@/components/viewer/pdf/chrome/pdf-outline-panel";
 import { PdfToolbar } from "@/components/viewer/pdf/chrome/pdf-toolbar";
-import {
-	PDF_COLOR_SCHEME_EVENT,
-	type PdfColorScheme,
-	readPdfColorScheme,
-	writePdfColorScheme,
-} from "@/components/viewer/pdf/color-scheme";
 import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
 import { usePdfEngineContext } from "@/components/viewer/pdf/engine-provider";
 import { usePdfAskThreads } from "@/components/viewer/pdf/hooks/use-pdf-ask-threads";
 import { usePdfCards } from "@/components/viewer/pdf/hooks/use-pdf-cards";
 import { usePdfCitations } from "@/components/viewer/pdf/hooks/use-pdf-citations";
+import { usePdfColorScheme } from "@/components/viewer/pdf/hooks/use-pdf-color-scheme";
 import { usePdfFind } from "@/components/viewer/pdf/hooks/use-pdf-find";
 import { usePdfHighlights } from "@/components/viewer/pdf/hooks/use-pdf-highlights";
 import { usePdfLayoutHover } from "@/components/viewer/pdf/hooks/use-pdf-layout-hover";
@@ -69,6 +64,8 @@ import { usePdfLayoutRegions } from "@/components/viewer/pdf/hooks/use-pdf-layou
 import { usePdfLayoutRun } from "@/components/viewer/pdf/hooks/use-pdf-layout-run";
 import { usePdfLayoutTranslate } from "@/components/viewer/pdf/hooks/use-pdf-layout-translate";
 import { usePdfMarksIo } from "@/components/viewer/pdf/hooks/use-pdf-marks-io";
+import { usePdfNavigation } from "@/components/viewer/pdf/hooks/use-pdf-navigation";
+import { usePdfNoteEditor } from "@/components/viewer/pdf/hooks/use-pdf-note-editor";
 import { usePdfOutline } from "@/components/viewer/pdf/hooks/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/pdf/hooks/use-pdf-page-text";
 import { usePdfRegionFraming } from "@/components/viewer/pdf/hooks/use-pdf-region-framing";
@@ -76,6 +73,7 @@ import { usePdfSelectionTranslate } from "@/components/viewer/pdf/hooks/use-pdf-
 import { usePdfTextSelection } from "@/components/viewer/pdf/hooks/use-pdf-text-selection";
 import { usePdfViewerHandle } from "@/components/viewer/pdf/hooks/use-pdf-viewer-handle";
 import { usePdfVisualMarks } from "@/components/viewer/pdf/hooks/use-pdf-visual-marks";
+import { usePdfZoomControls } from "@/components/viewer/pdf/hooks/use-pdf-zoom-controls";
 import {
 	type PdfPageHandlers,
 	PdfPageLayers,
@@ -84,7 +82,6 @@ import {
 	type PdfPageModeSlice,
 } from "@/components/viewer/pdf/layers/page-layers";
 import type {
-	EditorState,
 	PdfViewerInnerProps,
 	PdfViewerProps,
 } from "@/components/viewer/pdf/types";
@@ -102,26 +99,19 @@ import { toSummaries } from "@/lib/pdf/ask";
 import { threadHasUserQuestion } from "@/lib/pdf/ask/schema";
 import type { PdfAskNormalizedRect, PdfAskThread } from "@/lib/pdf/ask/types";
 import { equationAnnotationPath } from "@/lib/pdf/equation-annotation";
-import { isHighlightObject } from "@/lib/pdf/highlight/annotation-store";
 import {
 	DEFAULT_HIGHLIGHT_COLOR,
 	HIGHLIGHT_HEX_LIST,
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
 import { getPdfAiRuntime, layoutAnalysisStore } from "@/lib/pdf/layout";
-import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
 	pinFromRects,
 	pinObscuresBodyText,
 	type SelectionPin,
 } from "@/lib/pdf/selection";
-import {
-	formatPdfZoomPercentage,
-	PDF_ZOOM_MAX,
-	PDF_ZOOM_MIN,
-	parsePdfZoomPercentage,
-} from "@/lib/pdf/zoom";
+import { PDF_ZOOM_MAX, PDF_ZOOM_MIN } from "@/lib/pdf/zoom";
 import { openRightTab } from "@/lib/shell/ui-store";
 import { openPath } from "@/lib/workspace/actions";
 
@@ -346,12 +336,27 @@ function PdfViewerInner({
 	});
 	const zoomLevel = zoomState.currentZoomLevel || 1;
 
-	const [pageField, setPageField] = useState("1");
-	const [zoomField, setZoomField] = useState(() =>
-		formatPdfZoomPercentage(zoomLevel),
-	);
-	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
+	const { pdfDark, togglePdfColorScheme } = usePdfColorScheme();
+	const {
+		zoomField,
+		setZoomField,
+		zoomFieldFocusedRef,
+		zoomFieldCancelRef,
+		zoomRef,
+		commitZoomField,
+	} = usePdfZoomControls(zoom, zoomLevel);
+
 	const paperKey = paperRelPath || paperAbsPath || null;
+
+	const { pageField, setPageField, pageFocusedRef, goToPage, commitPageField } =
+		usePdfNavigation({
+			paperKey,
+			currentPage,
+			totalPages,
+			scroll,
+			scrollRef,
+			scrollReady,
+		});
 
 	// ---- Highlights (EmbedPDF annotations) ----
 
@@ -372,8 +377,6 @@ function PdfViewerInner({
 		totalPages,
 		onHighlightsChangeRef,
 	});
-
-	const [editor, setEditor] = useState<EditorState | null>(null);
 
 	// ---- Persisted marks (ask threads / translates / visual traces) ----
 
@@ -418,16 +421,7 @@ function PdfViewerInner({
 	 */
 	const translateStreamingRef = useRef(false);
 
-	const [pdfColorScheme, setPdfColorScheme] =
-		useState<PdfColorScheme>(readPdfColorScheme);
-
-	const pageFocusedRef = useRef(false);
-	const restoredRef = useRef(false);
 	const hostRef = useRef<HTMLDivElement>(null);
-	const zoomRef = useRef(zoomLevel);
-	zoomRef.current = zoomLevel;
-	const zoomFieldFocusedRef = useRef(false);
-	const zoomFieldCancelRef = useRef(false);
 	/**
 	 * Mirrors of the visual-mark cluster's `regionSelecting` / `visualCropPending`.
 	 * Created here (not in {@link usePdfVisualMarks}) because the layout-hover
@@ -475,8 +469,6 @@ function PdfViewerInner({
 	 */
 	const activeSessionRef = useRef<string | null>(null);
 
-	const pdfDark = pdfColorScheme === "dark";
-
 	/**
 	 * `usePdfCards` must be declared before the ask and translate clusters (both
 	 * open and hide cards), but cards also reset per-kind card chrome and cancel a
@@ -488,6 +480,7 @@ function PdfViewerInner({
 	const clearAskErrorRef = useRef<() => void>(() => undefined);
 	const closeAskChromeRef = useRef<(threadId: string) => void>(() => undefined);
 	const resetVisualCardChromeRef = useRef<() => void>(() => undefined);
+	const closeEditorRef = useRef<() => void>(() => undefined);
 	const stopTranslateSession = useCallback(() => {
 		stopTranslateSessionRef.current();
 	}, []);
@@ -504,7 +497,7 @@ function PdfViewerInner({
 			if (card?.kind === "ask") closeAskChromeRef.current(card.id);
 			if (card?.kind === "translate") clearTranslateErrorRef.current();
 			if (isVisualMarkKind(card?.kind)) resetVisualCardChromeRef.current();
-			setEditor(null);
+			closeEditorRef.current();
 		},
 		[],
 	);
@@ -626,44 +619,6 @@ function PdfViewerInner({
 		handleCitationLinkActivate,
 		handleCitationLinkHover,
 	} = usePdfCitations({ docId, annotationCap, hostRef, zoomRef });
-
-	const togglePdfColorScheme = useCallback(() => {
-		setPdfColorScheme((current) => {
-			const next: PdfColorScheme = current === "dark" ? "light" : "dark";
-			writePdfColorScheme(next);
-			return next;
-		});
-	}, []);
-
-	useEffect(() => {
-		const onColorSchemeChange = (event: Event) => {
-			const next = (event as CustomEvent<PdfColorScheme>).detail;
-			if (next === "light" || next === "dark") setPdfColorScheme(next);
-		};
-		window.addEventListener(PDF_COLOR_SCHEME_EVENT, onColorSchemeChange);
-		return () => {
-			window.removeEventListener(PDF_COLOR_SCHEME_EVENT, onColorSchemeChange);
-		};
-	}, []);
-
-	useEffect(() => {
-		if (!zoomFieldFocusedRef.current) {
-			setZoomField(formatPdfZoomPercentage(zoomLevel));
-		}
-	}, [zoomLevel]);
-
-	const commitZoomField = useCallback(
-		(value: string) => {
-			const requested = parsePdfZoomPercentage(value);
-			if (requested == null) {
-				setZoomField(formatPdfZoomPercentage(zoomLevel));
-				return;
-			}
-			zoom?.requestZoom(requested);
-			setZoomField(formatPdfZoomPercentage(requested));
-		},
-		[zoom, zoomLevel],
-	);
 
 	const askSummaries = useMemo(
 		() => toSummaries(threads.filter(threadHasUserQuestion)),
@@ -904,27 +859,24 @@ function PdfViewerInner({
 	beginVisualAnnotationRef.current = beginVisualAnnotation;
 	resetVisualCardChromeRef.current = resetVisualCardChrome;
 
-	const openEditorForAnnotation = useCallback(
-		(id: string) => {
-			const obj = annotationCap
-				?.forDocument(docId)
-				.getAnnotationById(id)?.object;
-			if (!obj || !isHighlightObject(obj)) return;
-			const pageEl = pageElByIndex(hostRef.current, obj.pageIndex);
-			if (!pageEl) return;
-			// Same sticky-hover contract as openCard — pin leave must not close
-			// the note editor while the user is moving onto / into the modal.
-			cancelHoverHide();
-			cardHoverSurfaceRef.current = true;
-			setEditor({
-				screen: rectRightScreen(pageEl, obj.rect, zoomRef.current),
-				pageIndex: obj.pageIndex,
-				id,
-				comment: obj.contents?.trim() ?? "",
-			});
-		},
-		[annotationCap, docId, cancelHoverHide, cardHoverSurfaceRef],
-	);
+	const {
+		editor,
+		setEditor,
+		openEditorForAnnotation,
+		closeEditor,
+		saveEditor,
+		deleteEditorAnnotation,
+	} = usePdfNoteEditor({
+		docId,
+		annotationCap,
+		hostRef,
+		zoomRef,
+		cancelHoverHide,
+		cardHoverSurfaceRef,
+		updateHighlightComment,
+		deleteHighlightAnnotation,
+	});
+	closeEditorRef.current = closeEditor;
 
 	const handleOpenPin = useCallback(
 		(pin: SelectionPin) => {
@@ -994,7 +946,15 @@ function PdfViewerInner({
 				});
 			}
 		}
-	}, [selectionMenu, createHighlights, selectionCap, docId, setSelectionMenu]);
+	}, [
+		selectionMenu,
+		createHighlights,
+		selectionCap,
+		docId,
+		setSelectionMenu,
+		setEditor,
+		zoomRef,
+	]);
 
 	const handleCopy = useCallback(() => {
 		selectionCap?.copyToClipboard(docId);
@@ -1084,22 +1044,6 @@ function PdfViewerInner({
 		rePlaceActiveCardOnScroll,
 	]);
 
-	const saveEditor = useCallback(
-		(text: string) => {
-			if (!editor) return;
-			updateHighlightComment(editor.pageIndex, editor.id, text);
-			setEditor(null);
-		},
-		[editor, updateHighlightComment],
-	);
-
-	/** Header delete on the text annotation editor — remove highlight and close. */
-	const deleteEditorAnnotation = useCallback(() => {
-		if (!editor) return;
-		deleteHighlightAnnotation(editor.pageIndex, editor.id);
-		setEditor(null);
-	}, [editor, deleteHighlightAnnotation]);
-
 	usePdfViewerHandle({
 		docId,
 		paperAbsPath,
@@ -1120,49 +1064,6 @@ function PdfViewerInner({
 		deleteVisualTraceById,
 		toggleRegionSelect,
 	});
-
-	// Keep the page-number input in sync with the observed current page.
-	useEffect(() => {
-		if (!pageFocusedRef.current) setPageField(String(currentPage));
-	}, [currentPage]);
-
-	// On first load: record page count (reading heatmap) and restore last page.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: scrollReady waits for EmbedPDF scope
-	useEffect(() => {
-		const scrollScope = scrollRef.current;
-		if (restoredRef.current || totalPages <= 0 || !scrollScope) return;
-		restoredRef.current = true;
-		if (paperKey) {
-			const saved = readReadingPage(paperKey);
-			if (saved && saved > 1 && saved <= totalPages) {
-				scrollScope.scrollToPage({
-					pageNumber: saved,
-					behavior: "instant",
-				});
-			}
-		}
-	}, [totalPages, scrollReady, paperAbsPath, paperKey]);
-
-	// Persist the last read page (debounced) as the user scrolls.
-	useEffect(() => {
-		if (!paperKey || !restoredRef.current || currentPage < 1) return;
-		const id = setTimeout(() => {
-			writeReadingPage(paperKey, currentPage);
-		}, 400);
-		return () => clearTimeout(id);
-	}, [paperKey, currentPage]);
-
-	const goToPage = (n: number) => {
-		if (!scroll || totalPages <= 0) return;
-		const clamped = Math.min(totalPages, Math.max(1, Math.floor(n)));
-		scroll.scrollToPage({ pageNumber: clamped, behavior: "instant" });
-	};
-
-	const commitPageField = () => {
-		const n = Number.parseInt(pageField, 10);
-		if (Number.isFinite(n)) goToPage(n);
-		else setPageField(String(currentPage));
-	};
 
 	const pageMarks = useMemo<PdfPageMarksSlice>(
 		() => ({
@@ -1272,7 +1173,7 @@ function PdfViewerInner({
 				handlers={pageHandlers}
 			/>
 		),
-		[docId, pdfDark, pageMarks, pageLayout, pageMode, pageHandlers],
+		[docId, pdfDark, zoomRef, pageMarks, pageLayout, pageMode, pageHandlers],
 	);
 
 	return (
@@ -1410,7 +1311,7 @@ function PdfViewerInner({
 				editor={{
 					state: editor,
 					onSave: saveEditor,
-					onClose: () => setEditor(null),
+					onClose: closeEditor,
 					onDelete: deleteEditorAnnotation,
 				}}
 			/>
