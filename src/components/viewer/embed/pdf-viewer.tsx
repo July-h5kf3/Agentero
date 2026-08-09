@@ -60,10 +60,7 @@ import { PdfCardStack } from "@/components/viewer/embed/chrome/pdf-card-stack";
 import { PdfFindBar } from "@/components/viewer/embed/chrome/pdf-find-bar";
 import { PdfOutlinePanel } from "@/components/viewer/embed/chrome/pdf-outline-panel";
 import { PdfToolbar } from "@/components/viewer/embed/chrome/pdf-toolbar";
-import {
-	isLinkObject,
-	useDestinationPreviewResolver,
-} from "@/components/viewer/embed/citation-links";
+import { isLinkObject } from "@/components/viewer/embed/citation-links";
 import { DockviewViewport } from "@/components/viewer/embed/dockview-viewport";
 import { usePdfEngineContext } from "@/components/viewer/embed/engine-provider";
 import {
@@ -92,7 +89,6 @@ import {
 } from "@/components/viewer/embed/pdf-page-layers";
 import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
 import type {
-	CitationPreviewState,
 	EditorState,
 	FormulaAnnotationPreviewState,
 	PdfViewerHandle,
@@ -103,6 +99,7 @@ import type {
 } from "@/components/viewer/embed/pdf-viewer-types";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
 import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
+import { usePdfCitations } from "@/components/viewer/embed/use-pdf-citations";
 import { usePdfFind } from "@/components/viewer/embed/use-pdf-find";
 import { usePdfOutline } from "@/components/viewer/embed/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
@@ -130,7 +127,6 @@ import {
 	isBackgroundTaskCancelledError,
 } from "@/lib/core/background-tasks";
 import { notifyError } from "@/lib/core/notify";
-import { openExternalUrl } from "@/lib/core/open-external";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
@@ -493,8 +489,6 @@ function PdfViewerInner({
 	);
 	const [regionSelecting, setRegionSelecting] = useState(false);
 	const [visualCropPending, setVisualCropPending] = useState(false);
-	const [citationPreview, setCitationPreview] =
-		useState<CitationPreviewState | null>(null);
 	const [editor, setEditor] = useState<EditorState | null>(null);
 	const [visualDraftEditor, setVisualDraftEditor] =
 		useState<VisualDraftEditorState | null>(null);
@@ -628,9 +622,6 @@ function PdfViewerInner({
 	const formulaHoverSurfaceRef = useRef(false);
 	const activeSessionRef = useRef<string | null>(null);
 	const translateSessionRef = useRef<string | null>(null);
-	const citationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
-	);
 
 	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
 	const paperKey = paperRelPath || paperAbsPath || null;
@@ -724,6 +715,16 @@ function PdfViewerInner({
 		paperRelPath,
 	});
 
+	// ---- In-text citation / internal PDF links ----
+
+	const {
+		citationPreview,
+		cancelCitationHide,
+		scheduleCitationHide,
+		handleCitationLinkActivate,
+		handleCitationLinkHover,
+	} = usePdfCitations({ docId, annotationCap, hostRef, zoomRef });
+
 	const togglePdfColorScheme = useCallback(() => {
 		setPdfColorScheme((current) => {
 			const next: PdfColorScheme = current === "dark" ? "light" : "dark";
@@ -746,7 +747,6 @@ function PdfViewerInner({
 	// Reset per-document UI state when the active PDF document changes.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the effect.
 	useEffect(() => {
-		setCitationPreview(null);
 		setRegionSelecting(false);
 	}, [docId]);
 
@@ -3448,74 +3448,6 @@ function PdfViewerInner({
 		if (Number.isFinite(n)) goToPage(n);
 		else setPageField(String(currentPage));
 	};
-
-	// ---- In-text citation / internal PDF links ----
-
-	const resolveDestinationPreview = useDestinationPreviewResolver(docId);
-	const linkHoverSeqRef = useRef(0);
-
-	const cancelCitationHide = useCallback(() => {
-		if (!citationHideTimerRef.current) return;
-		clearTimeout(citationHideTimerRef.current);
-		citationHideTimerRef.current = null;
-	}, []);
-
-	const scheduleCitationHide = useCallback(() => {
-		cancelCitationHide();
-		citationHideTimerRef.current = setTimeout(() => {
-			citationHideTimerRef.current = null;
-			setCitationPreview(null);
-		}, 250);
-	}, [cancelCitationHide]);
-
-	/** GoTo/destination → smooth scroll (annotation plugin); URI → browser. */
-	const handleCitationLinkActivate = useCallback(
-		(link: PdfLinkAnnoObject) => {
-			const target = link.target;
-			if (!target || !annotationCap) return;
-			annotationCap
-				.navigateTarget(target, docId)
-				.toPromise()
-				.then((result) => {
-					if (result.outcome === "uri") openExternalUrl(result.uri);
-				})
-				.catch(() => {});
-		},
-		[annotationCap, docId],
-	);
-
-	const handleCitationLinkHover = useCallback(
-		(link: PdfLinkAnnoObject | null) => {
-			const seq = ++linkHoverSeqRef.current;
-			if (!link) {
-				scheduleCitationHide();
-				return;
-			}
-			cancelCitationHide();
-			setCitationPreview(null);
-			void resolveDestinationPreview(link).then((previewText) => {
-				if (linkHoverSeqRef.current !== seq || !previewText) return;
-				const pageEl = pageElByIndex(hostRef.current, link.pageIndex);
-				if (!pageEl) return;
-				setCitationPreview({
-					screen: rectRightScreen(pageEl, link.rect, zoomRef.current),
-					previewText,
-				});
-			});
-		},
-		[resolveDestinationPreview, scheduleCitationHide, cancelCitationHide],
-	);
-
-	// Clean up the citation preview hide timer when the document changes or unmounts.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the cleanup.
-	useEffect(
-		() => () => {
-			if (citationHideTimerRef.current) {
-				clearTimeout(citationHideTimerRef.current);
-			}
-		},
-		[docId],
-	);
 
 	const handleVisualRegionSelect = useCallback(
 		(page: number, region: PdfAskNormalizedRect) => {
