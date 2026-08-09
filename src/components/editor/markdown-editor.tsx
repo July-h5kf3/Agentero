@@ -492,7 +492,6 @@ export function MarkdownEditor({
 											 * (matches Plate default variant pb-72).
 											 */}
 											<Editor
-												variant="none"
 												placeholder={placeholder}
 												readOnly={readOnly}
 												className="min-h-full px-6 pt-4 pb-48"
