@@ -22,7 +22,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import { useMarkdownDoc } from "@/components/editor/context/markdown-doc-context";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
 import {
 	annotationSnippet,

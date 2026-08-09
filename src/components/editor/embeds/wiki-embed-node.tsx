@@ -19,14 +19,14 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
-import { WikiAnnotationEmbed } from "@/components/editor/wiki-annotation-embed";
+import { useMarkdownDoc } from "@/components/editor/context/markdown-doc-context";
 import {
 	MAX_WIKI_EMBED_DEPTH,
 	useWikiEmbedAncestry,
 	WikiEmbedAncestryProvider,
-} from "@/components/editor/wiki-embed-context";
-import { useWikiEmbedProjection } from "@/components/editor/wiki-embed-projection-context";
+} from "@/components/editor/embeds/ancestry-context";
+import { useWikiEmbedProjection } from "@/components/editor/embeds/projection-context";
+import { WikiAnnotationEmbed } from "@/components/editor/embeds/wiki-annotation-embed";
 import { cn } from "@/lib/core/utils";
 import type { AnnotationRefKind } from "@/lib/pdf/annotation-ref";
 import { joinVaultPath } from "@/lib/vault";
@@ -42,7 +42,9 @@ import type { WikiSlateNode } from "@/lib/wiki/wikilink-model";
 import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
 
 const WikiAttachmentEmbed = lazy(async () => {
-	const module = await import("@/components/editor/wiki-attachment-embed");
+	const module = await import(
+		"@/components/editor/embeds/wiki-attachment-embed"
+	);
 	return { default: module.WikiAttachmentEmbed };
 });
 

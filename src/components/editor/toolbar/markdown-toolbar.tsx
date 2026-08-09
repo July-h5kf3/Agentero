@@ -37,7 +37,7 @@ import {
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import { useMarkdownDoc } from "@/components/editor/context/markdown-doc-context";
 
 import {
 	Popover,
@@ -47,12 +47,11 @@ import {
 import { errorMessage, notifyError } from "@/lib/core/notify";
 import { copyFileToMarkdownAssets, pickImageFiles } from "@/lib/markdown/image";
 import { formatModShortcut } from "@/lib/shell/shortcuts";
-
+import { ToolbarButton } from "./primitives";
 import {
 	ResponsiveFixedToolbar,
 	type ToolbarAction,
 } from "./responsive-toolbar";
-import { ToolbarButton } from "./toolbar";
 
 function useBlockTypeAction(
 	blockType: string | undefined,

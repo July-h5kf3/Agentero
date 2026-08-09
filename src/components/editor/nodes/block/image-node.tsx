@@ -9,7 +9,7 @@ import {
 } from "platejs/react";
 import { useEffect, useState } from "react";
 
-import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import { useMarkdownDoc } from "@/components/editor/context/markdown-doc-context";
 import { cn } from "@/lib/core/utils";
 import {
 	formatMarkdownImageSyntax,

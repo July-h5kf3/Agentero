@@ -7,8 +7,8 @@ import {
 } from "platejs/react";
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
-import { WikiEmbedElement } from "@/components/editor/wiki-embed-node";
+import { useMarkdownDoc } from "@/components/editor/context/markdown-doc-context";
+import { WikiEmbedElement } from "@/components/editor/embeds/wiki-embed-node";
 import { cn } from "@/lib/core/utils";
 import {
 	type LinkFragment,

@@ -15,7 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/core/utils";
 
 import { FixedToolbar } from "./fixed-toolbar";
-import { ToolbarButton } from "./toolbar";
+import { ToolbarButton } from "./primitives";
 
 export type ToolbarAction = {
 	id: string;

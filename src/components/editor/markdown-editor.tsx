@@ -15,27 +15,27 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { Editor, EditorContainer } from "@/components/editor/editor";
-import { MarkdownEditorToolbar } from "@/components/editor/editor-toolbar";
-import { FindReplaceBar } from "@/components/editor/find-replace-bar";
-import { FrontmatterPanel } from "@/components/editor/frontmatter-panel";
-import { HeadingRenameDialog } from "@/components/editor/heading-rename-dialog";
-import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
+import { MarkdownDocProvider } from "@/components/editor/context/markdown-doc-context";
+import { Editor, EditorContainer } from "@/components/editor/editor-surface";
+import { WikiEmbedProjectionProvider } from "@/components/editor/embeds/projection-context";
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
-import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
-import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
+import { FindReplaceBar } from "@/components/editor/overlays/find-replace-bar";
+import { FrontmatterPanel } from "@/components/editor/overlays/frontmatter-panel";
+import { HeadingRenameDialog } from "@/components/editor/overlays/heading-rename-dialog";
 import {
 	type SlashCommandController,
 	type SlashCommandDraft,
 	SlashCommandMenu,
-} from "@/components/editor/slash-command-menu";
-import { TocSidebar } from "@/components/editor/toc-sidebar";
-import { WikiEmbedProjectionProvider } from "@/components/editor/wiki-embed-projection-context";
+} from "@/components/editor/overlays/slash-command-menu";
+import { TocSidebar } from "@/components/editor/overlays/toc-sidebar";
 import {
 	type WikiCompletionController,
 	type WikiCompletionDraft,
 	WikiLinkSuggestion,
-} from "@/components/editor/wiki-link-suggestion";
+} from "@/components/editor/overlays/wiki-link-suggestion";
+import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
+import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
+import { MarkdownEditorToolbar } from "@/components/editor/toolbar/markdown-toolbar";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -150,7 +150,7 @@ const CHANGE_DEBOUNCE_MS = 500;
 
 const EmbeddedMarkdownProjection = lazy(async () => {
 	const module = await import(
-		"@/components/editor/embedded-markdown-projection"
+		"@/components/editor/embeds/embedded-markdown-projection"
 	);
 	return { default: module.EmbeddedMarkdownProjection };
 });

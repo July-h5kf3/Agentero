@@ -4,11 +4,11 @@ import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
 import { Plate, usePlateEditor } from "platejs/react";
 import { memo, useMemo } from "react";
-import { Editor } from "@/components/editor/editor";
-import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
+import { MarkdownDocProvider } from "@/components/editor/context/markdown-doc-context";
+import { Editor } from "@/components/editor/editor-surface";
+import { WikiEmbedProjectionProvider } from "@/components/editor/embeds/projection-context";
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
-import { WikiEmbedProjectionProvider } from "@/components/editor/wiki-embed-projection-context";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import { splitFrontmatter } from "@/lib/markdown/doc";
 
