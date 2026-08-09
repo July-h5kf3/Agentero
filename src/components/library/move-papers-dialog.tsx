@@ -1,5 +1,5 @@
 import { Check, FolderPlus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,10 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
+import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { normalizePath } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
-import { isPaperDirectory } from "@/lib/paper";
-import { type FileNode, vaultRelativePath } from "@/lib/vault";
+import type { FileNode } from "@/lib/vault";
 
 /**
  * Destination picker for batch-moving papers into a `papers/` subfolder.
@@ -55,27 +55,7 @@ export function MovePapersDialog({
 	}, [open]);
 
 	/** Existing org folders under papers/ (papers root first), minus the sources. */
-	const folders = useMemo(() => {
-		const out = ["papers"];
-		if (!vaultPath) return out;
-		const excluded = sourcePaths.map((p) => normalizePath(p));
-		const walk = (list: FileNode[]) => {
-			for (const n of list) {
-				if (n.kind !== "directory") continue;
-				if (isPaperDirectory(n.path, n.children)) continue;
-				const norm = normalizePath(n.path);
-				const rel = vaultRelativePath(vaultPath, n.path);
-				const under = rel && (rel === "papers" || rel.startsWith("papers/"));
-				const isSourceOrChild = excluded.some(
-					(s) => norm === s || norm.startsWith(`${s}/`),
-				);
-				if (under && rel !== "papers" && !isSourceOrChild) out.push(rel);
-				if (n.children?.length) walk(n.children);
-			}
-		};
-		walk(nodes);
-		return Array.from(new Set(out));
-	}, [nodes, vaultPath, sourcePaths]);
+	const folders = usePapersOrgFolders(vaultPath, nodes, sourcePaths);
 
 	const typed = newFolder.trim();
 	const dest = typed
