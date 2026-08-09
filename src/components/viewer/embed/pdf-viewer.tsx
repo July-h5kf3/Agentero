@@ -104,6 +104,7 @@ import type {
 } from "@/components/viewer/embed/pdf-viewer-types";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
 import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
+import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
 import i18n from "@/i18n";
 import {
@@ -210,7 +211,6 @@ import {
 	type ActiveSelectionCard,
 	marksDir,
 	type NormalizedRect,
-	normalizePageTextRects,
 	pinFromRects,
 	pinObscuresBodyText,
 	type SelectionPin,
@@ -543,17 +543,22 @@ function PdfViewerInner({
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
 	const [translates, setTranslates] = useState<PdfTranslateRecord[]>([]);
+	const [visualTraces, setVisualTraces] = useState<PdfVisualSessionTrace[]>([]);
 	/**
 	 * Per-page 0–1 text rects from PDFium `getPageTextRects` — used to decide
 	 * whether a gutter pin sits on real glyphs (translucent) vs in a free gutter.
 	 */
-	const [pageTextMap, setPageTextMap] = useState(
-		() => new Map<number, NormalizedRect[]>(),
-	);
-	const pageTextPendingRef = useRef(new Set<number>());
-	const pageTextMapRef = useRef(pageTextMap);
-	pageTextMapRef.current = pageTextMap;
-	const [visualTraces, setVisualTraces] = useState<PdfVisualSessionTrace[]>([]);
+	const { pageTextMap, pageTextMapRef } = usePdfPageText({
+		engine,
+		docCap,
+		docId,
+		totalPages,
+		currentPage,
+		translates,
+		threads,
+		highlights,
+		visualTraces,
+	});
 	const [streaming, setStreaming] = useState(false);
 	const [askError, setAskError] = useState<string | null>(null);
 	const [visualError, setVisualError] = useState<string | null>(null);
@@ -839,68 +844,6 @@ function PdfViewerInner({
 		translates,
 		visualTraces,
 		pageTextMap,
-	]);
-
-	// Load real page text geometry for pages that have pins (or near the viewport).
-	useEffect(() => {
-		if (!engine || !docCap || totalPages <= 0) return;
-		const doc = docCap.getDocument(docId);
-		if (!doc) return;
-
-		const need = new Set<number>();
-		const from = Math.max(0, currentPage - 2);
-		const to = Math.min(totalPages, currentPage + 2);
-		for (let i = from; i < to; i++) need.add(i);
-		for (const tr of translates) {
-			if (!tr.error) need.add(tr.page - 1);
-		}
-		for (const th of threads) {
-			if (threadHasUserQuestion(th)) need.add(th.anchor.page - 1);
-		}
-		for (const h of highlights) {
-			if (h.comment?.trim()) need.add(h.page - 1);
-		}
-		for (const v of visualTraces) need.add(v.page - 1);
-
-		for (const pageIndex of need) {
-			if (
-				pageTextMapRef.current.has(pageIndex) ||
-				pageTextPendingRef.current.has(pageIndex)
-			) {
-				continue;
-			}
-			const page = doc.pages[pageIndex];
-			if (!page) continue;
-			pageTextPendingRef.current.add(pageIndex);
-			void engine
-				.getPageTextRects(doc, page)
-				.toPromise()
-				.then((rects) => {
-					const norm = normalizePageTextRects(rects, page.size);
-					setPageTextMap((prev) => {
-						if (prev.get(pageIndex) === norm) return prev;
-						const next = new Map(prev);
-						next.set(pageIndex, norm);
-						return next;
-					});
-				})
-				.catch(() => {
-					// Leave unloaded; pins stay solid until text geometry is available.
-				})
-				.finally(() => {
-					pageTextPendingRef.current.delete(pageIndex);
-				});
-		}
-	}, [
-		engine,
-		docCap,
-		docId,
-		totalPages,
-		currentPage,
-		translates,
-		threads,
-		highlights,
-		visualTraces,
 	]);
 
 	const activeThread = useMemo(() => {
