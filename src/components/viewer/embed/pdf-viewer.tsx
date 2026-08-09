@@ -515,7 +515,11 @@ export function PdfViewer(props: PdfViewerProps) {
 				initialDocuments: [initialDocument],
 			}),
 			createPluginRegistration(ViewportPluginPackage),
-			createPluginRegistration(ScrollPluginPackage),
+			createPluginRegistration(ScrollPluginPackage, {
+				// Manifest default (4) keeps ~8 off-screen pages mounted, and every
+				// mounted page re-renders whenever the scroller layout changes.
+				defaultBufferSize: 2,
+			}),
 			createPluginRegistration(RenderPluginPackage),
 			createPluginRegistration(TilingPluginPackage, {
 				// Pre-render one ring of tiles around the viewport so fast
