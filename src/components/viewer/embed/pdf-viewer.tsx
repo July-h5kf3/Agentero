@@ -653,6 +653,9 @@ const PDF_BASE_LAYER_SCALE_CAP = 1.5;
 const EMPTY_LAYOUT_REGIONS_BY_PAGE: ReadonlyMap<number, PdfLayoutRegion[]> =
 	new Map();
 
+/** Stable identity for pages without gutter pins. */
+const EMPTY_PINS: SelectionPin[] = [];
+
 /**
  * Native viewport scroll → re-place floating selection cards.
  * Must render inside DockviewViewport (ViewportElementContext).
@@ -1037,6 +1040,10 @@ function PdfViewerInner({
 		formatPdfZoomPercentage(zoomLevel),
 	);
 	const [highlights, setHighlights] = useState<PdfHighlight[]>([]);
+	/** Normalized annotation rects for pin placement, keyed by annotation id. */
+	const [highlightAnchors, setHighlightAnchors] = useState(
+		() => new Map<string, NormalizedRect>(),
+	);
 	const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(
 		null,
 	);
@@ -1252,6 +1259,93 @@ function PdfViewerInner({
 		[threads],
 	);
 
+	/**
+	 * Gutter pins per page (1-based). Built once per mark/text change: pin
+	 * placement walks the page's whole text-rect list, so doing it inside
+	 * renderPage cost that walk for every mounted page on every scroll frame.
+	 */
+	const pinsByPage = useMemo(() => {
+		const byPage = new Map<number, SelectionPin[]>();
+		const add = (page: number, pin: SelectionPin) => {
+			const list = byPage.get(page);
+			if (list) list.push(pin);
+			else byPage.set(page, [pin]);
+		};
+		for (const highlight of highlights) {
+			const comment = highlight.comment?.trim();
+			if (!comment) continue;
+			const anchor = highlightAnchors.get(highlight.id);
+			if (!anchor) continue;
+			const pageText = pageTextMap.get(highlight.page - 1);
+			const pin = pinFromRects([anchor], pageText);
+			add(highlight.page, {
+				id: highlight.id,
+				kind: "annotate",
+				x: pin.x,
+				y: pin.y,
+				preview: comment,
+				overText: pinObscuresBodyText(pin, pageText),
+				side: pin.side,
+			});
+		}
+		for (const summary of askSummaries) {
+			const pageText = pageTextMap.get(summary.page - 1);
+			const thread = threads.find((th) => th.id === summary.id);
+			const pin = thread
+				? pinFromRects(thread.anchor.rects, pageText)
+				: { x: summary.x, y: summary.y, side: "right" as const };
+			add(summary.page, {
+				id: summary.id,
+				kind: "ask",
+				x: pin.x,
+				y: pin.y,
+				preview: summary.preview,
+				ended: summary.status === "ended",
+				overText: pinObscuresBodyText(pin, pageText),
+				side: pin.side,
+			});
+		}
+		for (const translate of translates) {
+			if (translate.error) continue;
+			const pageText = pageTextMap.get(translate.page - 1);
+			const pin = pinFromRects(translate.rects, pageText);
+			add(translate.page, {
+				id: translate.id,
+				kind: "translate",
+				x: pin.x,
+				y: pin.y,
+				preview:
+					translate.result?.trim() || translate.quote?.trim() || translate.id,
+				overText: pinObscuresBodyText(pin, pageText),
+				side: pin.side,
+			});
+		}
+		for (const trace of visualTraces) {
+			const pageText = pageTextMap.get(trace.page - 1);
+			const pin = pinFromRects(trace.rects, pageText);
+			add(trace.page, {
+				id: trace.id,
+				kind: "visual",
+				x: pin.x,
+				y: pin.y,
+				preview: tracePreview(trace),
+				ended: trace.agent?.status !== "running",
+				traceId: trace.id,
+				overText: pinObscuresBodyText(pin, pageText),
+				side: pin.side,
+			});
+		}
+		return byPage;
+	}, [
+		highlights,
+		highlightAnchors,
+		askSummaries,
+		threads,
+		translates,
+		visualTraces,
+		pageTextMap,
+	]);
+
 	// Load real page text geometry for pages that have pins (or near the viewport).
 	useEffect(() => {
 		if (!engine || !docCap || totalPages <= 0) return;
@@ -1357,12 +1451,25 @@ function PdfViewerInner({
 		if (!annotationCap) return;
 		const scope = annotationCap.forDocument(docId);
 		const all = scope.getAnnotations();
-		const list = all
-			.map((a) => a.object)
-			.filter(isHighlightObject)
-			.map((o) => highlightViewFromObject(o, paperKey ?? ""));
+		const doc = docCap?.getDocument(docId);
+		const objects = all.map((a) => a.object).filter(isHighlightObject);
+		const list = objects.map((o) => highlightViewFromObject(o, paperKey ?? ""));
 		setHighlights(list);
 		onHighlightsChangeRef.current?.(list);
+		// Pin anchors: normalize each annotation rect here, where the objects are
+		// already in hand, so pin geometry never reads plugin state during render.
+		const anchors = new Map<string, NormalizedRect>();
+		for (const o of objects) {
+			const size = doc?.pages[o.pageIndex]?.size;
+			if (!size?.width || !size?.height) continue;
+			anchors.set(o.id, {
+				x: o.rect.origin.x / size.width,
+				y: o.rect.origin.y / size.height,
+				w: o.rect.size.width / size.width,
+				h: o.rect.size.height / size.height,
+			});
+		}
+		setHighlightAnchors(anchors);
 		const links = new Map<number, PdfLinkAnnoObject[]>();
 		for (const tracked of all) {
 			const o = tracked.object;
@@ -1373,7 +1480,7 @@ function PdfViewerInner({
 			}
 		}
 		setCitationLinks(links);
-	}, [annotationCap, docId, paperKey]);
+	}, [annotationCap, docCap, docId, paperKey]);
 
 	const scheduleSave = useCallback(() => {
 		if (!paperAbsPath || !annotationCap) return;
@@ -4261,7 +4368,6 @@ function PdfViewerInner({
 			height: number;
 		}) => {
 			const pageNumber = pageIndex + 1;
-			const pageText = pageTextMap.get(pageIndex);
 			const activeAskOnPage =
 				activeThread?.anchor.page === pageNumber ? activeThread : null;
 			const activeTranslateOnPage =
@@ -4280,89 +4386,7 @@ function PdfViewerInner({
 				focusedLayoutRegion?.pageIndex === pageIndex
 					? focusedLayoutRegion
 					: null;
-			const pins: SelectionPin[] = [
-				...highlights
-					.filter(
-						(highlight) =>
-							highlight.page === pageNumber &&
-							Boolean(highlight.comment?.trim()),
-					)
-					.flatMap((highlight): SelectionPin[] => {
-						const obj = annotationCap
-							?.forDocument(docId)
-							.getAnnotationById(highlight.id)?.object;
-						if (!obj || !isHighlightObject(obj)) return [];
-						const pageWidth = width / zoomRef.current;
-						const pageHeight = height / zoomRef.current;
-						if (pageWidth <= 0 || pageHeight <= 0) return [];
-						const normRect = {
-							x: obj.rect.origin.x / pageWidth,
-							y: obj.rect.origin.y / pageHeight,
-							w: obj.rect.size.width / pageWidth,
-							h: obj.rect.size.height / pageHeight,
-						};
-						const pin = pinFromRects([normRect], pageText);
-						return [
-							{
-								id: highlight.id,
-								kind: "annotate",
-								x: pin.x,
-								y: pin.y,
-								preview: highlight.comment?.trim() ?? highlight.id,
-								overText: pinObscuresBodyText(pin, pageText),
-								side: pin.side,
-							},
-						];
-					}),
-				...askSummaries
-					.filter((s) => s.page === pageNumber)
-					.map((s): SelectionPin => {
-						const thread = threads.find((th) => th.id === s.id);
-						const pin = thread
-							? pinFromRects(thread.anchor.rects, pageText)
-							: { x: s.x, y: s.y, side: "right" as const };
-						return {
-							id: s.id,
-							kind: "ask",
-							x: pin.x,
-							y: pin.y,
-							preview: s.preview,
-							ended: s.status === "ended",
-							overText: pinObscuresBodyText(pin, pageText),
-							side: pin.side,
-						};
-					}),
-				...translates
-					.filter((tr) => tr.page === pageNumber && !tr.error)
-					.map((tr): SelectionPin => {
-						const pin = pinFromRects(tr.rects, pageText);
-						return {
-							id: tr.id,
-							kind: "translate",
-							x: pin.x,
-							y: pin.y,
-							preview: tr.result?.trim() || tr.quote?.trim() || tr.id,
-							overText: pinObscuresBodyText(pin, pageText),
-							side: pin.side,
-						};
-					}),
-				...visualTraces
-					.filter((tr) => tr.page === pageNumber)
-					.map((tr): SelectionPin => {
-						const pin = pinFromRects(tr.rects, pageText);
-						return {
-							id: tr.id,
-							kind: "visual",
-							x: pin.x,
-							y: pin.y,
-							preview: tracePreview(tr),
-							ended: tr.agent?.status !== "running",
-							traceId: tr.id,
-							overText: pinObscuresBodyText(pin, pageText),
-							side: pin.side,
-						};
-					}),
-			];
+			const pins = pinsByPage.get(pageNumber) ?? EMPTY_PINS;
 			// Page shell: paper-white in light mode; near-black when PDF dark mode is on
 			// so loading gaps match inverted page rasters.
 			return (
@@ -4648,13 +4672,7 @@ function PdfViewerInner({
 		},
 		[
 			docId,
-			highlights,
-			annotationCap,
-			askSummaries,
-			threads,
-			visualTraces,
-			translates,
-			pageTextMap,
+			pinsByPage,
 			activeThread,
 			activeTranslate,
 			activeVisualTrace,
