@@ -1,7 +1,6 @@
 // biome-ignore-all lint/security/noDangerouslySetInnerHtml: Mermaid strict mode produces the SVG markup shown in this preview.
 "use client";
 
-import { mermaid as mermaidPlugin } from "@streamdown/mermaid";
 import { common } from "lowlight";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { NodeApi, type TCodeBlockElement, type TCodeSyntaxLeaf } from "platejs";
@@ -212,19 +211,26 @@ function MermaidPreview({ source }: { source: string }) {
 
 		let cancelled = false;
 		const timeout = window.setTimeout(() => {
-			void mermaidPlugin
-				.getMermaid()
-				.render(`agentero-mermaid-${previewId}-${renderVersion}`, sourceText)
-				.then((result) => {
+			void (async () => {
+				try {
+					// Mermaid drags in a multi-MB bundle, so it stays out of the editor
+					// chunk — notes without diagrams never pay for it.
+					const { mermaid } = await import("@streamdown/mermaid");
+					const result = await mermaid
+						.getMermaid()
+						.render(
+							`agentero-mermaid-${previewId}-${renderVersion}`,
+							sourceText,
+						);
 					if (cancelled || renderVersionRef.current !== renderVersion) return;
 					setSvg(result.svg);
 					setRenderError(false);
-				})
-				.catch(() => {
+				} catch {
 					if (cancelled || renderVersionRef.current !== renderVersion) return;
 					setSvg(null);
 					setRenderError(true);
-				});
+				}
+			})();
 		}, 160);
 
 		return () => {
