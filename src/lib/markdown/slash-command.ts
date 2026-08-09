@@ -50,7 +50,7 @@ export type SlashCommand = {
 	keywords: readonly string[];
 };
 
-export type SlashCommandTrigger = {
+type SlashCommandTrigger = {
 	query: string;
 	start: number;
 	end: number;
@@ -64,7 +64,7 @@ export function isSlashCommandSubmitKey(key: string): key is "Enter" | "Tab" {
 	return key === "Enter" || key === "Tab";
 }
 
-export const SLASH_COMMANDS: readonly SlashCommand[] = [
+const SLASH_COMMANDS: readonly SlashCommand[] = [
 	{
 		id: "heading1",
 		labelKey: "slashCommand.commands.heading1",
