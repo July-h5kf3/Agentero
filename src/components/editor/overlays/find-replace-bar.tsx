@@ -11,7 +11,7 @@ import {
 import type { SlateEditor, TRange } from "platejs";
 import { RangeApi } from "platejs";
 import { useEditorRef, useEditorSelector } from "platejs/react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	ActiveSearchHighlightPlugin,
@@ -25,6 +25,40 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+/** All six bar buttons are the same ghost icon button with a bottom tooltip. */
+function IconAction({
+	label,
+	icon,
+	onClick,
+	disabled,
+	"aria-expanded": ariaExpanded,
+}: {
+	label: string;
+	icon: ReactNode;
+	onClick: () => void;
+	disabled?: boolean;
+	"aria-expanded"?: boolean;
+}) {
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<Button
+					type="button"
+					size="icon-xs"
+					variant="ghost"
+					aria-label={label}
+					aria-expanded={ariaExpanded}
+					disabled={disabled}
+					onClick={onClick}
+				>
+					{icon}
+				</Button>
+			</TooltipTrigger>
+			<TooltipContent side="bottom">{label}</TooltipContent>
+		</Tooltip>
+	);
+}
 
 function scrollToMatch(editor: SlateEditor, match: TRange) {
 	try {
@@ -157,27 +191,18 @@ export function FindReplaceBar({
 				onKeyDown={handleBarKeyDown}
 			>
 				<div className="flex items-center gap-1">
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								size="icon-xs"
-								variant="ghost"
-								aria-label={t("findReplace.toggleReplace")}
-								aria-expanded={showReplace}
-								onClick={() => setShowReplace((v) => !v)}
-							>
-								{showReplace ? (
-									<ChevronDown className="size-3.5" />
-								) : (
-									<ChevronRight className="size-3.5" />
-								)}
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{t("findReplace.toggleReplace")}
-						</TooltipContent>
-					</Tooltip>
+					<IconAction
+						label={t("findReplace.toggleReplace")}
+						aria-expanded={showReplace}
+						icon={
+							showReplace ? (
+								<ChevronDown className="size-3.5" />
+							) : (
+								<ChevronRight className="size-3.5" />
+							)
+						}
+						onClick={() => setShowReplace((v) => !v)}
+					/>
 					<input
 						ref={searchInputRef}
 						type="text"
@@ -199,56 +224,23 @@ export function FindReplaceBar({
 								: t("findReplace.noResults")
 							: ""}
 					</span>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								size="icon-xs"
-								variant="ghost"
-								aria-label={t("findReplace.prev")}
-								disabled={!matches.length}
-								onClick={() => goTo(index - 1)}
-							>
-								<ChevronUp className="size-3.5" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{t("findReplace.prev")}
-						</TooltipContent>
-					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								size="icon-xs"
-								variant="ghost"
-								aria-label={t("findReplace.next")}
-								disabled={!matches.length}
-								onClick={() => goTo(index + 1)}
-							>
-								<ChevronDown className="size-3.5" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{t("findReplace.next")}
-						</TooltipContent>
-					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								size="icon-xs"
-								variant="ghost"
-								aria-label={t("findReplace.close")}
-								onClick={onClose}
-							>
-								<X className="size-3.5" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{t("findReplace.close")}
-						</TooltipContent>
-					</Tooltip>
+					<IconAction
+						label={t("findReplace.prev")}
+						icon={<ChevronUp className="size-3.5" />}
+						disabled={!matches.length}
+						onClick={() => goTo(index - 1)}
+					/>
+					<IconAction
+						label={t("findReplace.next")}
+						icon={<ChevronDown className="size-3.5" />}
+						disabled={!matches.length}
+						onClick={() => goTo(index + 1)}
+					/>
+					<IconAction
+						label={t("findReplace.close")}
+						icon={<X className="size-3.5" />}
+						onClick={onClose}
+					/>
 				</div>
 				{showReplace ? (
 					<div className="mt-1 flex items-center gap-1 pl-7">
@@ -265,40 +257,18 @@ export function FindReplaceBar({
 								}
 							}}
 						/>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant="ghost"
-									aria-label={t("findReplace.replace")}
-									disabled={index < 0}
-									onClick={replaceCurrent}
-								>
-									<Replace className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">
-								{t("findReplace.replace")}
-							</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant="ghost"
-									aria-label={t("findReplace.replaceAll")}
-									disabled={!matches.length}
-									onClick={replaceAll}
-								>
-									<ReplaceAll className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">
-								{t("findReplace.replaceAll")}
-							</TooltipContent>
-						</Tooltip>
+						<IconAction
+							label={t("findReplace.replace")}
+							icon={<Replace className="size-3.5" />}
+							disabled={index < 0}
+							onClick={replaceCurrent}
+						/>
+						<IconAction
+							label={t("findReplace.replaceAll")}
+							icon={<ReplaceAll className="size-3.5" />}
+							disabled={!matches.length}
+							onClick={replaceAll}
+						/>
 					</div>
 				) : null}
 			</div>
