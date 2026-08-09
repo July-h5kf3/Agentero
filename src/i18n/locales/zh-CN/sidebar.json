@@ -40,6 +40,7 @@
 		"moveSelected": "移动 {{count}} 项",
 		"clearSelection": "清除选择",
 		"move": "移动…",
+		"moveToFolder": "移动 {{count}} 项到…",
 		"rename": "重命名…",
 		"renameDialogTitle": "重命名“{{name}}”",
 		"renameNameLabel": "名称",
@@ -64,14 +65,11 @@
 		"paperMoveOutsidePapers": "无法将「{{name}}」移出 papers/。",
 		"pastedWithErrors": "{{count}} 项粘贴失败。",
 		"pasteFailed": "粘贴失败。",
-		"moveDialog": {
-			"title": "移动 {{count}} 项到…",
-			"existing": "已有文件夹",
+		"movePicker": {
 			"papersRoot": "papers（顶层）",
 			"newFolder": "新建文件夹",
 			"newFolderHint": "例如 papers/archive",
-			"confirm": "移动",
-			"cancel": "取消"
+			"invalidFolderPath": "必须位于 papers/ 下"
 		}
 	},
 	"importLocalPdf": {

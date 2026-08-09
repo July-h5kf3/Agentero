@@ -35,7 +35,6 @@ import {
 	paperTagsChange,
 	readPaper,
 } from "@/lib/paper/library-actions";
-import { requestMovePaths } from "@/lib/paper/library-store";
 import { setZoteroOpen, setZoteroSyncOpen } from "@/lib/shell/ui-store";
 import { vaultDisplayName } from "@/lib/vault";
 import {
@@ -181,7 +180,6 @@ export function VaultSidebar() {
 					onDeletePath={onDeletePath}
 					onDeletePaths={onDeletePaths}
 					onRenamePath={startRenamePath}
-					onMovePaths={requestMovePaths}
 					onMoveTo={onMoveTo}
 					onCutPaths={cutSelectedPaths}
 					onPasteInto={(target) => void pasteCutPaths(target)}

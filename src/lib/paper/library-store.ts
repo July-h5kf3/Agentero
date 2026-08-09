@@ -7,11 +7,7 @@
 import { createStore } from "zustand/vanilla";
 import { isTauri } from "@/lib/core/tauri";
 import type { PaperMetadata } from "@/lib/paper";
-import {
-	isLibraryVirtualPath,
-	isTrashVirtualPath,
-	listPapers,
-} from "@/lib/paper/api";
+import { listPapers } from "@/lib/paper/api";
 import type { LocalPdfImportEntry } from "@/lib/paper/lookup";
 import { getVaultPath } from "@/lib/vault/store";
 
@@ -36,8 +32,6 @@ type LibraryStore = {
 	scopePath: string | null;
 	rescanning: boolean;
 	ioBusy: LibraryIoBusy;
-	/** Paths queued for the "move to folder" dialog (null = closed). */
-	movePaths: string[] | null;
 	/** OS PDF drop onto papers/ → metadata confirm dialog (not silent import). */
 	importPdfDraft: ImportPdfDraft | null;
 	/** Bump to force RecycleBinView reload after Empty Recycle Bin. */
@@ -62,7 +56,6 @@ export const libraryStore = createStore<LibraryStore>(() => ({
 	scopePath: null,
 	rescanning: false,
 	ioBusy: null,
-	movePaths: null,
 	importPdfDraft: null,
 	trashReloadSignal: 0,
 	paperMetaByRelPath: new Map(),
@@ -130,19 +123,6 @@ export function setLibraryRescanning(rescanning: boolean): void {
 
 export function setLibraryIoBusy(ioBusy: LibraryIoBusy): void {
 	libraryStore.setState({ ioBusy });
-}
-
-export function setMovePaths(paths: string[] | null): void {
-	libraryStore.setState({ movePaths: paths });
-}
-
-/** Open the "move to folder" dialog for the given (non-virtual) paths. */
-export function requestMovePaths(paths: string[]): void {
-	const valid = paths.filter(
-		(p) => !isLibraryVirtualPath(p) && !isTrashVirtualPath(p),
-	);
-	if (valid.length === 0) return;
-	setMovePaths(valid);
 }
 
 export function setImportPdfDraft(draft: ImportPdfDraft | null): void {

@@ -40,6 +40,7 @@
 		"moveSelected": "Move {{count}}",
 		"clearSelection": "Clear selection",
 		"move": "Move…",
+		"moveToFolder": "Move {{count}} to…",
 		"rename": "Rename…",
 		"renameDialogTitle": "Rename “{{name}}”",
 		"renameNameLabel": "Name",
@@ -64,14 +65,11 @@
 		"paperMoveOutsidePapers": "Cannot move 「{{name}}」 outside papers/.",
 		"pastedWithErrors": "{{count}} item(s) could not be pasted.",
 		"pasteFailed": "Failed to paste.",
-		"moveDialog": {
-			"title": "Move {{count}} item(s) to…",
-			"existing": "Existing folders",
+		"movePicker": {
 			"papersRoot": "papers (top level)",
 			"newFolder": "New folder",
 			"newFolderHint": "e.g. papers/archive",
-			"confirm": "Move",
-			"cancel": "Cancel"
+			"invalidFolderPath": "Must be under papers/"
 		}
 	},
 	"importLocalPdf": {

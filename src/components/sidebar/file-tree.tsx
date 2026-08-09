@@ -1,5 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+	Check,
 	Download,
 	FileText,
 	FolderInput,
@@ -34,6 +35,14 @@ import {
 	FileTreeName,
 } from "@/components/ai-elements/file-tree";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+	Popover,
+	PopoverAnchor,
+	PopoverContent,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Tooltip,
@@ -42,9 +51,11 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
+import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { contextPathIcon } from "@/lib/agent/context-path-icon";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { notifyError } from "@/lib/core/notify";
+import { normalizePath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import {
@@ -349,9 +360,7 @@ type FileTreeProps = {
 	onDeletePaths?: (paths: string[]) => void | Promise<void>;
 	/** Rename one real tree path through the link-aware Vault transaction. */
 	onRenamePath?: (path: string) => void | Promise<void>;
-	/** Batch move: parent opens a destination picker for these paths. */
-	onMovePaths?: (paths: string[]) => void;
-	/** Drag-and-drop move: relocate paths into an existing folder (no dialog). */
+	/** Move paths into a papers/ folder chosen by the inline picker. */
 	onMoveTo?: (paths: string[], destParentRel: string) => void;
 	onCutPaths?: (paths: string[]) => void;
 	onPasteInto?: (targetPath: string) => void;
@@ -419,7 +428,6 @@ export const FileTree = memo(
 			onDeletePath,
 			onDeletePaths,
 			onRenamePath,
-			onMovePaths,
 			onMoveTo,
 			onCutPaths,
 			onPasteInto,
@@ -439,6 +447,17 @@ export const FileTree = memo(
 		);
 		const [revealError, setRevealError] = useState<string | null>(null);
 		const contextMenuRef = useRef<HTMLDivElement>(null);
+		/** Inline move picker state. */
+		const [movePickerOpen, setMovePickerOpen] = useState(false);
+		const [moveTargets, setMoveTargets] = useState<string[]>([]);
+		const [moveSelectedFolder, setMoveSelectedFolder] = useState("papers");
+		const [moveNewFolder, setMoveNewFolder] = useState("");
+		const [moveBusy, setMoveBusy] = useState(false);
+		const [moveAnchorPos, setMoveAnchorPos] = useState<{
+			x: number;
+			y: number;
+		} | null>(null);
+		const containerRef = useRef<HTMLDivElement>(null);
 		/** Paths currently being listed (lazy expand). */
 		const [loadingDirs, setLoadingDirs] = useState<Set<string>>(
 			() => new Set(),
@@ -990,11 +1009,25 @@ export const FileTree = memo(
 			else if (onDeletePath && paths[0]) void onDeletePath(paths[0]);
 		}, [orderedSelected, onDeletePaths, onDeletePath]);
 
-		const runBatchMove = useCallback(() => {
-			const paths = orderedSelected();
-			if (paths.length === 0 || !onMovePaths) return;
-			onMovePaths(paths);
-		}, [orderedSelected, onMovePaths]);
+		const openMovePicker = useCallback(
+			(paths: string[], anchor?: { x: number; y: number }) => {
+				if (paths.length === 0 || !onMoveTo) return;
+				setMoveTargets(paths);
+				setMoveSelectedFolder("papers");
+				setMoveNewFolder("");
+				if (anchor && containerRef.current) {
+					const containerRect = containerRef.current.getBoundingClientRect();
+					setMoveAnchorPos({
+						x: anchor.x - containerRect.left,
+						y: anchor.y - containerRect.top,
+					});
+				} else {
+					setMoveAnchorPos(anchor ?? null);
+				}
+				setMovePickerOpen(true);
+			},
+			[onMoveTo],
+		);
 
 		/** Context-menu action target: the whole selection when the row is in it. */
 		const menuTargets = useCallback(
@@ -1333,11 +1366,12 @@ export const FileTree = memo(
 		}, [contextMenu, menuTargets, onDeletePaths, onDeletePath]);
 
 		const handleMoveFromMenu = useCallback(() => {
-			if (!contextMenu || !onMovePaths) return;
+			if (!contextMenu || !onMoveTo) return;
 			const targets = menuTargets(contextMenu.path);
+			const anchor = { x: contextMenu.x, y: contextMenu.y };
 			setContextMenu(null);
-			onMovePaths(targets);
-		}, [contextMenu, menuTargets, onMovePaths]);
+			openMovePicker(targets, anchor);
+		}, [contextMenu, menuTargets, onMoveTo, openMovePicker]);
 
 		const handleCutFromMenu = useCallback(() => {
 			if (!contextMenu || !onCutPaths) return;
@@ -1561,7 +1595,7 @@ export const FileTree = memo(
 								</span>
 							</button>
 						) : null}
-						{onMovePaths ? (
+						{onMoveTo ? (
 							<button
 								type="button"
 								role="menuitem"
@@ -1829,8 +1863,9 @@ export const FileTree = memo(
 		return (
 			<TooltipProvider delayDuration={300}>
 				<div
+					ref={containerRef}
 					className={cn(
-						"flex min-h-0 flex-1 flex-col select-none text-sm",
+						"relative flex min-h-0 flex-1 flex-col select-none text-sm",
 						className,
 					)}
 				>
@@ -1840,7 +1875,7 @@ export const FileTree = memo(
 								{t("fileTree.selectedCount", { count: selected.size })}
 							</span>
 							<div className="ml-auto flex items-center gap-0.5">
-								{onMovePaths ? (
+								{onMoveTo ? (
 									<Tooltip>
 										<TooltipTrigger asChild>
 											<Button
@@ -1851,7 +1886,15 @@ export const FileTree = memo(
 												aria-label={t("fileTree.moveSelected", {
 													count: selected.size,
 												})}
-												onClick={runBatchMove}
+												onClick={(e) => {
+													const rect = (
+														e.currentTarget as HTMLElement
+													).getBoundingClientRect();
+													openMovePicker(orderedSelected(), {
+														x: rect.left,
+														y: rect.top,
+													});
+												}}
 											>
 												<FolderInput className="size-3.5" />
 											</Button>
@@ -1900,6 +1943,49 @@ export const FileTree = memo(
 							</div>
 						</div>
 					) : null}
+					<Popover
+						open={movePickerOpen}
+						onOpenChange={(open) => {
+							if (!open) setMovePickerOpen(false);
+						}}
+					>
+						<PopoverAnchor asChild>
+							<div
+								className="absolute size-0"
+								style={
+									moveAnchorPos
+										? {
+												left: moveAnchorPos.x,
+												top: moveAnchorPos.y,
+											}
+										: undefined
+								}
+							/>
+						</PopoverAnchor>
+						<MoveDestinationPicker
+							vaultPath={vaultPath}
+							nodes={nodes}
+							sourcePaths={moveTargets}
+							selectedFolder={moveSelectedFolder}
+							newFolder={moveNewFolder}
+							busy={moveBusy}
+							onNewFolderChange={setMoveNewFolder}
+							onConfirm={async (dest) => {
+								if (!onMoveTo) return;
+								setMoveBusy(true);
+								try {
+									await onMoveTo(moveTargets, dest);
+								} finally {
+									setMoveBusy(false);
+									setMovePickerOpen(false);
+									setMoveTargets([]);
+									setMoveAnchorPos(null);
+									setSelected(new Set());
+									setAnchor(null);
+								}
+							}}
+						/>
+					</Popover>
 					<div
 						ref={treeScrollRef}
 						className="agentero-scroll min-h-0 flex-1 overflow-y-auto py-1"
@@ -1987,6 +2073,116 @@ export const FileTree = memo(
 		);
 	}),
 );
+
+type MoveDestinationPickerProps = {
+	vaultPath: string | null;
+	nodes: FileNode[];
+	sourcePaths: string[];
+	selectedFolder: string;
+	newFolder: string;
+	busy: boolean;
+	onNewFolderChange: (value: string) => void;
+	onConfirm: (dest: string) => void | Promise<void>;
+};
+
+function MoveDestinationPicker({
+	vaultPath,
+	nodes,
+	sourcePaths,
+	selectedFolder,
+	newFolder,
+	busy,
+	onNewFolderChange,
+	onConfirm,
+}: MoveDestinationPickerProps) {
+	const { t } = useTranslation("sidebar");
+	const folders = usePapersOrgFolders(vaultPath, nodes, sourcePaths);
+	const typed = newFolder.trim();
+	const dest = typed
+		? normalizePath(typed.startsWith("papers") ? typed : `papers/${typed}`)
+		: selectedFolder;
+	const destValid = dest.startsWith("papers");
+
+	const handleSelect = (folder: string) => {
+		onNewFolderChange("");
+		void onConfirm(folder);
+	};
+
+	return (
+		<PopoverContent
+			align="start"
+			side="right"
+			sideOffset={4}
+			avoidCollisions
+			className="w-56 p-2"
+		>
+			<div className="space-y-2">
+				<p className="font-medium text-xs text-foreground">
+					{t("fileTree.moveToFolder", { count: sourcePaths.length })}
+				</p>
+				<ScrollArea className="h-40 rounded-md border">
+					<div className="space-y-0.5 p-1">
+						{folders.map((folder) => {
+							const active = !typed && selectedFolder === folder;
+							return (
+								<button
+									key={folder}
+									type="button"
+									disabled={busy}
+									className={cn(
+										"flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors hover:bg-accent",
+										active && "bg-muted",
+									)}
+									onClick={() => handleSelect(folder)}
+								>
+									<span className="flex-1 truncate font-mono">
+										{folder === "papers"
+											? t("fileTree.movePicker.papersRoot")
+											: folder}
+									</span>
+									{active ? (
+										<Check className="size-3 shrink-0 text-primary" />
+									) : null}
+								</button>
+							);
+						})}
+					</div>
+				</ScrollArea>
+				<div className="space-y-1">
+					<Label
+						htmlFor="move-new-folder"
+						className="text-[10px] text-muted-foreground"
+					>
+						{t("fileTree.movePicker.newFolder")}
+					</Label>
+					<div className="relative">
+						<FolderPlus className="-translate-y-1/2 absolute top-1/2 left-2 size-3 text-muted-foreground" />
+						<Input
+							id="move-new-folder"
+							value={newFolder}
+							onChange={(e) => onNewFolderChange(e.target.value)}
+							placeholder={t("fileTree.movePicker.newFolderHint")}
+							disabled={busy}
+							spellCheck={false}
+							className="h-7 pl-6 text-xs font-mono"
+							onKeyDown={(e) => {
+								if (e.key === "Enter" && destValid) {
+									e.preventDefault();
+									void onConfirm(dest);
+								}
+							}}
+						/>
+					</div>
+					{typed && !destValid ? (
+						<p className="text-[10px] text-destructive">
+							{t("fileTree.movePicker.invalidFolderPath")}
+						</p>
+					) : null}
+				</div>
+			</div>
+		</PopoverContent>
+	);
+}
 
 export type { VaultSidebarHeaderProps } from "@/components/sidebar/vault-sidebar-header";
 export { VaultSidebarHeader } from "@/components/sidebar/vault-sidebar-header";
