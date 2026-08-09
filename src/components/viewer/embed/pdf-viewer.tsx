@@ -104,6 +104,7 @@ import type {
 } from "@/components/viewer/embed/pdf-viewer-types";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
 import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
+import { usePdfFind } from "@/components/viewer/embed/use-pdf-find";
 import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
 import i18n from "@/i18n";
@@ -568,13 +569,10 @@ function PdfViewerInner({
 	const [translateError, setTranslateError] = useState<string | null>(null);
 	const translateStreamingRef = useRef(false);
 
-	const [findOpen, setFindOpen] = useState(false);
-	const [findQuery, setFindQuery] = useState("");
 	const [outline, setOutline] = useState<PdfBookmarkObject[]>([]);
 	const [showOutline, setShowOutline] = useState(false);
 	const [pdfColorScheme, setPdfColorScheme] =
 		useState<PdfColorScheme>(readPdfColorScheme);
-	const findInputRef = useRef<HTMLInputElement>(null);
 
 	const pageFocusedRef = useRef(false);
 	const restoredRef = useRef(false);
@@ -708,6 +706,18 @@ function PdfViewerInner({
 		onCardClose: resetChromeForClosedCard,
 		stopTranslateSession,
 	});
+
+	const {
+		findOpen,
+		findQuery,
+		setFindQuery,
+		findInputRef,
+		findTotal,
+		findActiveIndex,
+		findNext,
+		findPrev,
+		closeFind,
+	} = usePdfFind({ hostRef, search, searchState, scroll });
 
 	const togglePdfColorScheme = useCallback(() => {
 		setPdfColorScheme((current) => {
@@ -2974,20 +2984,6 @@ function PdfViewerInner({
 		rePlaceActiveCardOnScroll,
 	]);
 
-	// Run a debounced full-document search as the query changes.
-	useEffect(() => {
-		if (!search) return;
-		const q = findQuery.trim();
-		if (!q) {
-			search.stopSearch();
-			return;
-		}
-		const id = setTimeout(() => {
-			void search.searchAllPages(q);
-		}, 250);
-		return () => clearTimeout(id);
-	}, [findQuery, search]);
-
 	// Load the document outline (bookmarks / TOC) once available.
 	useEffect(() => {
 		if (!bookmarkCap || totalPages <= 0) return;
@@ -3009,23 +3005,6 @@ function PdfViewerInner({
 			cancelled = true;
 		};
 	}, [bookmarkCap, docId, totalPages, paperAbsPath, paperRelPath]);
-
-	// Cmd/Ctrl+F opens the in-document find bar when the PDF host is focused.
-	useEffect(() => {
-		const host = hostRef.current;
-		if (!host) return;
-		const onKey = (e: KeyboardEvent) => {
-			if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "f") return;
-			if (!host.matches(":hover") && !host.contains(document.activeElement))
-				return;
-			e.preventDefault();
-			setFindOpen(true);
-			search?.startSearch();
-			setTimeout(() => findInputRef.current?.focus(), 0);
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [search]);
 
 	const saveEditor = useCallback(
 		(text: string) => {
@@ -3475,21 +3454,6 @@ function PdfViewerInner({
 		return () => clearTimeout(id);
 	}, [paperKey, currentPage]);
 
-	const scrollToResult = (idx: number) => {
-		const r = searchState.results[idx];
-		if (r && scroll)
-			scroll.scrollToPage({
-				pageNumber: r.pageIndex + 1,
-				behavior: "instant",
-			});
-	};
-
-	const closeFind = () => {
-		setFindOpen(false);
-		setFindQuery("");
-		search?.stopSearch();
-	};
-
 	const goToPage = (n: number) => {
 		if (!scroll || totalPages <= 0) return;
 		const clamped = Math.min(totalPages, Math.max(1, Math.floor(n)));
@@ -3734,10 +3698,10 @@ function PdfViewerInner({
 				inputRef={findInputRef}
 				query={findQuery}
 				onQueryChange={setFindQuery}
-				total={searchState.total}
-				activeResultIndex={searchState.activeResultIndex}
-				onFindNext={() => scrollToResult(search?.nextResult() ?? -1)}
-				onFindPrev={() => scrollToResult(search?.previousResult() ?? -1)}
+				total={findTotal}
+				activeResultIndex={findActiveIndex}
+				onFindNext={findNext}
+				onFindPrev={findPrev}
 				onClose={closeFind}
 			/>
 			<PdfToolbar
