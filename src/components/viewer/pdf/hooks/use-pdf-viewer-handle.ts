@@ -23,11 +23,11 @@ import type {
 	LayoutAnalysisTask,
 	StartLayoutAnalysisOptions,
 } from "@/components/viewer/pdf/hooks/use-pdf-layout-analysis";
-import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/pdf-region-crop";
+import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/region-crop";
 import type {
 	PdfViewerHandle,
 	PdfViewerProps,
-} from "@/components/viewer/pdf/pdf-viewer-types";
+} from "@/components/viewer/pdf/types";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import { deletePdfAskThread, type PdfAskThread } from "@/lib/pdf/ask";
 import { isHighlightObject } from "@/lib/pdf/highlight/annotation-store";

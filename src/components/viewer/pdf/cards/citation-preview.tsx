@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
 
 const CARD_WIDTH = 300;
 const CARD_ESTIMATED_HEIGHT = 116;
@@ -9,7 +10,7 @@ export function PdfCitationPreview({
 	onPointerEnter,
 	onPointerLeave,
 }: {
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	previewText: string;
 	onPointerEnter: () => void;
 	onPointerLeave: () => void;

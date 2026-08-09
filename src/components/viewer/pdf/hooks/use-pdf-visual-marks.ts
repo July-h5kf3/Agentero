@@ -40,13 +40,13 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { PdfAskThreads } from "@/components/viewer/pdf/hooks/use-pdf-ask-threads";
-import { isPdfDocumentCloseRaceError } from "@/components/viewer/pdf/pdf-host-dom";
-import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/pdf-region-crop";
+import { isPdfDocumentCloseRaceError } from "@/components/viewer/pdf/host-dom";
+import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/region-crop";
 import type {
 	CardScreenPoint,
 	SelectionMenuState,
 	VisualDraftEditorState,
-} from "@/components/viewer/pdf/pdf-viewer-types";
+} from "@/components/viewer/pdf/types";
 import { cancelAgentRun } from "@/lib/agent";
 import { agentSessionStore } from "@/lib/agent/agent-session-store";
 import {

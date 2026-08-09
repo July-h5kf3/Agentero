@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -16,6 +15,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { cn } from "@/lib/core/utils";
 import {
 	HIGHLIGHT_COLORS,
@@ -25,7 +25,7 @@ import {
 
 type SelectionMenuProps = {
 	/** Screen point near the top-center of the selection (toolbar anchor) */
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	/** Create a highlight in the chosen color */
 	onHighlight: (color: HighlightColor) => void;
 	/** Copy the selected text to the clipboard */

@@ -51,11 +51,14 @@ import { PdfCardStack } from "@/components/viewer/pdf/chrome/pdf-card-stack";
 import { PdfFindBar } from "@/components/viewer/pdf/chrome/pdf-find-bar";
 import { PdfOutlinePanel } from "@/components/viewer/pdf/chrome/pdf-outline-panel";
 import { PdfToolbar } from "@/components/viewer/pdf/chrome/pdf-toolbar";
-import { usePdfEngineContext } from "@/components/viewer/pdf/engine-provider";
 import {
-	pageElByIndex,
-	rectRightScreen,
-} from "@/components/viewer/pdf/geometry";
+	PDF_COLOR_SCHEME_EVENT,
+	type PdfColorScheme,
+	readPdfColorScheme,
+	writePdfColorScheme,
+} from "@/components/viewer/pdf/color-scheme";
+import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
+import { usePdfEngineContext } from "@/components/viewer/pdf/engine-provider";
 import { usePdfAskThreads } from "@/components/viewer/pdf/hooks/use-pdf-ask-threads";
 import { usePdfCards } from "@/components/viewer/pdf/hooks/use-pdf-cards";
 import { usePdfCitations } from "@/components/viewer/pdf/hooks/use-pdf-citations";
@@ -75,18 +78,12 @@ import {
 	type PdfPageLayoutSlice,
 	type PdfPageMarksSlice,
 	type PdfPageModeSlice,
-} from "@/components/viewer/pdf/layers/pdf-page-layers";
-import {
-	PDF_COLOR_SCHEME_EVENT,
-	type PdfColorScheme,
-	readPdfColorScheme,
-	writePdfColorScheme,
-} from "@/components/viewer/pdf/pdf-color-scheme";
+} from "@/components/viewer/pdf/layers/page-layers";
 import type {
 	EditorState,
 	PdfViewerInnerProps,
 	PdfViewerProps,
-} from "@/components/viewer/pdf/pdf-viewer-types";
+} from "@/components/viewer/pdf/types";
 import { ActiveCardScrollSync } from "@/components/viewer/pdf/viewport/active-card-scroll-sync";
 import { DockviewViewport } from "@/components/viewer/pdf/viewport/dockview-viewport";
 import { WheelZoomHandler } from "@/components/viewer/pdf/viewport/wheel-zoom-handler";
@@ -127,7 +124,7 @@ import { openPath } from "@/lib/workspace/actions";
 export type {
 	PdfViewerHandle,
 	PdfViewerProps,
-} from "@/components/viewer/pdf/pdf-viewer-types";
+} from "@/components/viewer/pdf/types";
 
 /**
  * PDF viewer built on EmbedPDF (headless, PDFium/WASM). The engine is shared

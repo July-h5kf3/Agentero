@@ -1,8 +1,8 @@
 import { createPortal } from "react-dom";
 import { AnnotationEditor } from "@/components/viewer/pdf/cards/annotation-editor";
 import { AskPopover } from "@/components/viewer/pdf/cards/ask-popover";
+import { PdfCitationPreview } from "@/components/viewer/pdf/cards/citation-preview";
 import { FormulaAnnotationCard } from "@/components/viewer/pdf/cards/formula-annotation-card";
-import { PdfCitationPreview } from "@/components/viewer/pdf/cards/pdf-citation-preview";
 import { SelectionMenu } from "@/components/viewer/pdf/cards/selection-menu";
 import { TranslateCard } from "@/components/viewer/pdf/cards/translate-card";
 import { VisualAnnotationEditor } from "@/components/viewer/pdf/cards/visual-annotation-editor";
@@ -14,7 +14,7 @@ import type {
 	FormulaAnnotationPreviewState,
 	SelectionMenuState,
 	VisualDraftEditorState,
-} from "@/components/viewer/pdf/pdf-viewer-types";
+} from "@/components/viewer/pdf/types";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import type { PdfAskThread } from "@/lib/pdf/ask";
 import type { HighlightColor } from "@/lib/pdf/highlight/palette";

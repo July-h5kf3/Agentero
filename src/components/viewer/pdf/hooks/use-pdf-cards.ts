@@ -17,8 +17,8 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { pageElByIndex } from "@/components/viewer/pdf/geometry";
-import type { CardScreenPoint } from "@/components/viewer/pdf/pdf-viewer-types";
+import { pageElByIndex } from "@/components/viewer/pdf/coords";
+import type { CardScreenPoint } from "@/components/viewer/pdf/types";
 import {
 	isVisualMarkKind,
 	type PdfVisualSessionTrace,

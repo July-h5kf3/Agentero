@@ -2,8 +2,8 @@ import katex from "katex";
 import { FileText, FunctionSquare, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-
 import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { cn } from "@/lib/core/utils";
 import type { EquationSymbol } from "@/lib/pdf/equation-annotation";
 import { symbolTexSource } from "@/lib/pdf/equation-annotation";
@@ -53,7 +53,7 @@ export function FormulaAnnotationCard({
 	onPointerEnter,
 	onPointerLeave,
 }: {
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	symbols: readonly EquationSymbol[];
 	onOpenFile?: () => void;
 	onClose: () => void;

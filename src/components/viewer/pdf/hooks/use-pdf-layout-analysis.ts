@@ -35,14 +35,14 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
-import { pageElByIndex } from "@/components/viewer/pdf/geometry";
+import { EMPTY_LAYOUT_REGIONS_BY_PAGE } from "@/components/viewer/pdf/constants";
+import { pageElByIndex } from "@/components/viewer/pdf/coords";
 import type { BeginVisualAnnotationOptions } from "@/components/viewer/pdf/hooks/use-pdf-visual-marks";
-import { EMPTY_LAYOUT_REGIONS_BY_PAGE } from "@/components/viewer/pdf/pdf-page-constants";
 import type {
 	FormulaAnnotationPreviewState,
 	SelectionMenuState,
 	VisualDraftEditorState,
-} from "@/components/viewer/pdf/pdf-viewer-types";
+} from "@/components/viewer/pdf/types";
 import i18n from "@/i18n";
 import {
 	BackgroundTaskCancelledError,

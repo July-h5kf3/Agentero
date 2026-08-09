@@ -1,14 +1,14 @@
 import { MessageSquarePlus, NotebookPen, Trash2Icon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
 import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 
 type VisualAnnotationEditorProps = {
 	/** Screen point near the selected region. */
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	/** Existing note when re-opening a draft; empty for a fresh crop. */
 	initialComment?: string;
 	/** Save as note-only visual annotation (same as normal 批注备注). */

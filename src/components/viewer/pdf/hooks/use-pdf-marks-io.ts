@@ -25,7 +25,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type { PdfViewerProps } from "@/components/viewer/pdf/pdf-viewer-types";
+import type { PdfViewerProps } from "@/components/viewer/pdf/types";
 import { isTauri } from "@/lib/core/tauri";
 import {
 	listPdfVisualTraces,

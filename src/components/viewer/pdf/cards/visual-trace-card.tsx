@@ -27,6 +27,7 @@ import {
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { useAgentSessionStore } from "@/lib/agent/agent-session-store";
 import { agentTextFromParts, type ChatLine } from "@/lib/agent/chat-state";
@@ -46,7 +47,7 @@ type CardMode = "note" | "chat";
 
 type VisualTraceCardProps = {
 	trace: PdfVisualSessionTrace;
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	preferRight?: boolean;
 	error?: string | null;
 	/**

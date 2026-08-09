@@ -26,15 +26,15 @@ import {
 	useState,
 } from "react";
 import {
+	anchorFromEmbedSelection,
 	pageElByIndex,
 	rectTopCenterScreen,
-} from "@/components/viewer/pdf/geometry";
+} from "@/components/viewer/pdf/coords";
 import {
 	hasNativeSelectionOutsideHost,
 	isEditableClipboardTarget,
-} from "@/components/viewer/pdf/pdf-host-dom";
-import type { SelectionMenuState } from "@/components/viewer/pdf/pdf-viewer-types";
-import { anchorFromEmbedSelection } from "@/components/viewer/pdf/selection-anchor";
+} from "@/components/viewer/pdf/host-dom";
+import type { SelectionMenuState } from "@/components/viewer/pdf/types";
 import {
 	clearActiveSelection,
 	publishSelection,

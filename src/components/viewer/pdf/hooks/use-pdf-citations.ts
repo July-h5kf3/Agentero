@@ -23,12 +23,9 @@ import {
 	useRef,
 	useState,
 } from "react";
-import {
-	pageElByIndex,
-	rectRightScreen,
-} from "@/components/viewer/pdf/geometry";
+import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
 import { useDestinationPreviewResolver } from "@/components/viewer/pdf/layers/citation-links";
-import type { CitationPreviewState } from "@/components/viewer/pdf/pdf-viewer-types";
+import type { CitationPreviewState } from "@/components/viewer/pdf/types";
 import { openExternalUrl } from "@/lib/core/open-external";
 
 /** Grace period so the pointer can travel from the link into the card. */

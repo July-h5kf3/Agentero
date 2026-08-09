@@ -1,14 +1,14 @@
 import { NotebookPen, Trash2Icon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
 import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 
 type AnnotationEditorProps = {
 	/** Screen point near the highlight (from popoverScreenPoint) */
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	/** Existing note text when editing; empty for a fresh annotation */
 	initialComment?: string;
 	/** Save the (possibly empty) note; empty means "no comment / plain highlight" */

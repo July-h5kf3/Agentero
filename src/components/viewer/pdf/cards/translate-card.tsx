@@ -1,12 +1,12 @@
 import { Languages, MinusIcon, Settings2Icon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
 
 type TranslateCardProps = {
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	preferRight?: boolean;
 	/** Translation text (may stream in) */
 	result: string;

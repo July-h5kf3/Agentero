@@ -86,33 +86,37 @@ export type PdfViewerProps = {
 
 export type PdfViewerInnerProps = PdfViewerProps & { docId: string };
 
-/** Screen anchor for a floating card, including which side to open on. */
-export type CardScreenPoint = {
+/** Viewport-space point (client px) used by every floating overlay. */
+export type ScreenPoint = {
 	x: number;
 	y: number;
+};
+
+/** Screen anchor for a floating card, including which side to open on. */
+export type CardScreenPoint = ScreenPoint & {
 	preferRight?: boolean;
 };
 
 export type SelectionMenuState = {
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	anchor: PdfAskAnchor;
 	pages: FormattedSelection[];
 };
 
 export type CitationPreviewState = {
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	previewText: string;
 };
 
 export type EditorState = {
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	pageIndex: number;
 	id: string;
 	comment: string;
 };
 
 export type VisualDraftEditorState = {
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	page: number;
 	region: PdfAskNormalizedRect;
 	image: PromptImage;
@@ -125,7 +129,7 @@ export type VisualDraftEditorState = {
 
 /** Hover card for formula regions when `{paper}/Annotation.md` has symbols. */
 export type FormulaAnnotationPreviewState = {
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	regionId: string;
 	page: number;
 	region: PdfAskNormalizedRect;

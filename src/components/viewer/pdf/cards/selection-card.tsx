@@ -12,6 +12,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { clamp } from "@/lib/core/math";
 import { cn } from "@/lib/core/utils";
 
@@ -78,7 +79,7 @@ type PlaceSelectionCardResult = {
  * visual max height. Compact previews that later expand stay on one side.
  */
 export function placeSelectionCard(
-	screen: { x: number; y: number },
+	screen: ScreenPoint,
 	opts: PlaceSelectionCardOptions,
 ): PlaceSelectionCardResult {
 	const preferredWidth = opts.width;
@@ -159,7 +160,7 @@ export function placeSelectionCard(
 }
 
 type SelectionCardProps = {
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	/** Visual width class / clamp target (px number for placement). */
 	width?: number;
 	/** Preferred max height; actual height is min(this, viewport remainder). */

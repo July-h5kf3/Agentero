@@ -18,6 +18,7 @@ import {
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { cn } from "@/lib/core/utils";
 import { threadTitle } from "@/lib/pdf/ask/schema";
@@ -29,7 +30,7 @@ import {
 
 type AskPopoverProps = {
 	thread: PdfAskThread;
-	screen: { x: number; y: number };
+	screen: ScreenPoint;
 	/** Match gutter pin side so the card stays next to the pin. */
 	preferRight?: boolean;
 	streaming: boolean;
