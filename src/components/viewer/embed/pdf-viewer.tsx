@@ -166,9 +166,9 @@ import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import {
 	type Citation,
+	loadPaperRefsAuto,
 	looksLikeCitationMarker,
 	matchCitationByMarker,
-	paperRefsList,
 } from "@/lib/paper/refs";
 import {
 	createNoteTrace,
@@ -1204,7 +1204,7 @@ function PdfViewerInner({
 		clearCitationHover(docId);
 		if (!vaultPath || !paperRelPath) return;
 		let cancelled = false;
-		void paperRefsList(vaultPath, paperRelPath)
+		void loadPaperRefsAuto(vaultPath, paperRelPath)
 			.then((sidecar) => {
 				if (!cancelled) setCitations(sidecar?.citations ?? []);
 			})

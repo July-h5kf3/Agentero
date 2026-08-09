@@ -21,6 +21,7 @@ import {
 } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { downloadPaperAssets } from "@/lib/paper/lookup";
+import { loadPaperRefsAuto } from "@/lib/paper/refs";
 import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import {
 	ensureLocalFsScope,
@@ -271,6 +272,12 @@ export async function loadTabResources(
 				vaultPath,
 				treeFindNode(tree, paperDir),
 			);
+		}
+		if (isTauri() && vaultPath) {
+			const rel = toVaultRelative(vaultPath, paperDir)
+				.replace(/\\/g, "/")
+				.replace(/^\/+|\/+$/g, "");
+			if (rel) void loadPaperRefsAuto(vaultPath, rel).catch(() => {});
 		}
 		const notesPath = notesPathForPaper(paperDir);
 		let notesSeed = NOTES_PLACEHOLDER;

@@ -69,6 +69,38 @@ export async function paperRefsParse(
 	);
 }
 
+const pendingAutoParse = new Map<string, Promise<CiteSidecar | null>>();
+
+function autoParseKey(vaultPath: string, path: string): string {
+	return `${vaultPath}::${path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")}`;
+}
+
+/**
+ * Load the reference sidecar for a paper, automatically parsing it in the
+ * background if it does not yet exist. Concurrent calls for the same paper
+ * share one parse attempt; failures are swallowed.
+ */
+export async function loadPaperRefsAuto(
+	vaultPath: string,
+	path: string,
+): Promise<CiteSidecar | null> {
+	const k = autoParseKey(vaultPath, path);
+	const existing = pendingAutoParse.get(k);
+	if (existing) return existing;
+
+	const promise = (async () => {
+		let sidecar = await paperRefsList(vaultPath, path).catch(() => null);
+		if (!sidecar) {
+			sidecar = await paperRefsParse(vaultPath, path, false).catch(() => null);
+		}
+		return sidecar;
+	})();
+
+	pendingAutoParse.set(k, promise);
+	promise.finally(() => pendingAutoParse.delete(k));
+	return promise;
+}
+
 /** Identifier usable by magic-wand import for an unmatched citation. */
 export function citationImportIdentifier(citation: Citation): string | null {
 	const { arxivId, doi } = citation.metadata;
