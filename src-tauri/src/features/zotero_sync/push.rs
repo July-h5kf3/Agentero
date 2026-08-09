@@ -15,7 +15,7 @@
 
 use super::codec;
 use crate::core::error::AppError;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -114,6 +114,12 @@ pub fn push_notes(
 }
 
 /// Create or replace this parent item's Agentero-marked child note.
+///
+/// Matching is deliberately loose (`agentero:sync paper=<id>` signature,
+/// escaped or not): Zotero may have escaped an earlier, malformed push, and
+/// the note must still be reclaimed instead of duplicated. When several
+/// matches exist (damage from earlier versions), the first is updated and the
+/// rest are moved to Zotero's trash. Identical content is left untouched.
 fn upsert_marked_note(
     tx: &Connection,
     parent_item_id: i64,
@@ -129,36 +135,33 @@ fn upsert_marked_note(
         )
         .map_err(|_| AppError::message(format!("Zotero parent item {parent_item_id} not found")))?;
 
-    // Existing Agentero note for exactly this paper under this parent?
-    let marker_like = format!("%<!-- agentero:sync paper={paper_id} -->%");
-    let existing: Option<i64> = tx
-        .query_row(
-            "SELECT n.itemID FROM itemNotes n
+    // Every Agentero note for exactly this paper under this parent — raw or
+    // escaped marker forms alike. `_`/`%` in paper ids must not act as LIKE
+    // wildcards (ids like `10_1016_j_neucom…` exist).
+    let marker_like = format!(
+        "%{}%",
+        like_escape(&format!("agentero:sync paper={paper_id}"))
+    );
+    let mut stmt = tx
+        .prepare(
+            "SELECT n.itemID, n.note FROM itemNotes n
              WHERE n.parentItemID = ?1
                AND n.itemID NOT IN (SELECT itemID FROM deletedItems)
-               AND n.note LIKE ?2
-             ORDER BY n.itemID LIMIT 1",
-            params![parent_item_id, marker_like],
-            |r| r.get(0),
+               AND n.note LIKE ?2 ESCAPE '\\'
+             ORDER BY n.itemID",
         )
-        .optional()?;
+        .map_err(|e| AppError::message(format!("prepare note lookup: {e}")))?;
+    let mut existing: Vec<(i64, String)> = stmt
+        .query_map(params![parent_item_id, marker_like], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .map_err(|e| AppError::message(format!("lookup existing notes: {e}")))?
+        .collect::<Result<_, _>>()
+        .map_err(|e| AppError::message(format!("read existing notes: {e}")))?;
+    drop(stmt);
 
-    match existing {
-        Some(note_id) => {
-            tx.execute(
-                "UPDATE itemNotes SET note = ?2 WHERE itemID = ?1",
-                params![note_id, html],
-            )
-            .map_err(|e| AppError::message(format!("update note {note_id}: {e}")))?;
-            tx.execute(
-                "UPDATE items SET dateModified = CURRENT_TIMESTAMP,
-                                   clientDateModified = CURRENT_TIMESTAMP
-                 WHERE itemID = ?1",
-                params![note_id],
-            )
-            .map_err(|e| AppError::message(format!("touch note item {note_id}: {e}")))?;
-        }
-        None => {
+    match existing.len() {
+        0 => {
             let note_type_id: i64 = tx
                 .query_row(
                     "SELECT itemTypeID FROM itemTypes WHERE typeName = 'note'",
@@ -182,6 +185,33 @@ fn upsert_marked_note(
             )
             .map_err(|e| AppError::message(format!("insert itemNotes row: {e}")))?;
         }
+        _ => {
+            let (keep_id, keep_note) = existing.remove(0);
+            // Content unchanged → no write (avoids pointless churn each sync).
+            if keep_note != html {
+                tx.execute(
+                    "UPDATE itemNotes SET note = ?2 WHERE itemID = ?1",
+                    params![keep_id, html],
+                )
+                .map_err(|e| AppError::message(format!("update note {keep_id}: {e}")))?;
+                tx.execute(
+                    "UPDATE items SET dateModified = CURRENT_TIMESTAMP,
+                                       clientDateModified = CURRENT_TIMESTAMP
+                     WHERE itemID = ?1",
+                    params![keep_id],
+                )
+                .map_err(|e| AppError::message(format!("touch note item {keep_id}: {e}")))?;
+            }
+            // Earlier versions could create duplicates; reclaim them into the
+            // Zotero trash (recoverable), never hard-delete.
+            for (dup_id, _) in &existing {
+                tx.execute(
+                    "INSERT OR IGNORE INTO deletedItems (itemID) VALUES (?1)",
+                    params![dup_id],
+                )
+                .map_err(|e| AppError::message(format!("trash duplicate note {dup_id}: {e}")))?;
+            }
+        }
     }
 
     // Touch the parent so Zotero's item list shows an updated timestamp.
@@ -193,6 +223,18 @@ fn upsert_marked_note(
     )
     .map_err(|e| AppError::message(format!("touch parent item {parent_item_id}: {e}")))?;
     Ok(())
+}
+
+/// Escape LIKE wildcards so paper ids match literally.
+fn like_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if matches!(c, '%' | '_' | '\\') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// Copy `zotero.sqlite` (+wal/shm) into `<zotero_dir>/agentero-backups/`,

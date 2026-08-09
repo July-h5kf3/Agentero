@@ -13,6 +13,7 @@ use crate::features::catalog::papers;
 use crate::features::import::map::{map_zotero_item, PaperMeta};
 use crate::features::import::zotero_db::{append_markdown_blocks, SyncItem};
 use serde::Serialize;
+use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy)]
@@ -86,19 +87,32 @@ pub(crate) fn pull(
 
         let notes_path = vault.join(&record.path).join("NOTES.md");
         let watermark = record.zotero_last_synced.clone();
+
+        // Self-heal before anything else: earlier versions leaked our own
+        // pushed notes back into NOTES.md as escaped garbage blocks. Removing
+        // them here makes every future sync start from a clean file.
+        if opts.notes {
+            let raw = fs::read_to_string(&notes_path).unwrap_or_default();
+            let cleaned = codec::strip_leaked_sync_blocks(&raw);
+            if cleaned != raw {
+                let _ = fs::write(&notes_path, cleaned);
+            }
+        }
         let vault_changed = file_newer_than(&notes_path, watermark.as_deref());
 
         if opts.notes {
             let fresh_notes: Vec<String> = item
                 .notes
                 .iter()
-                .filter(|n| !codec::is_sync_marked(&n.html))
+                // Never re-import our own sync notes — in ANY damage state
+                // (intact markers, Zotero-escaped, Markdown-escaped).
+                .filter(|n| !codec::looks_like_sync_note(&n.html))
                 .map(|n| codec::html_to_markdown(&n.html))
                 .filter(|s| !s.is_empty())
                 .collect();
             if !fresh_notes.is_empty() {
                 let zotero_changed = item.notes.iter().any(|n| {
-                    !codec::is_sync_marked(&n.html)
+                    !codec::looks_like_sync_note(&n.html)
                         && newer_than(n.date_modified.as_deref(), watermark.as_deref())
                 });
                 if watermark.is_some() && zotero_changed && vault_changed {

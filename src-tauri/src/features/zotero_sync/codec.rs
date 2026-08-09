@@ -3,6 +3,12 @@
 //! Pushed notes are wrapped in HTML comment markers so subsequent syncs can
 //! recognize (and replace) Agentero-owned content inside Zotero without ever
 //! touching user-written notes.
+//!
+//! Zotero 7 format requirement (verified against a real library): rich-text
+//! notes must carry the `<div class="zotero-note znv1">` wrapper, otherwise
+//! Zotero treats the content as a legacy *plain-text* note — displaying our
+//! HTML tags literally and escaping them (`&lt;p&gt;`) on the next save,
+//! which destroys the markers.
 
 /// Opening marker prefix: `<!-- agentero:sync paper=<id> -->`.
 const MARKER_OPEN_PREFIX: &str = "<!-- agentero:sync paper=";
@@ -10,10 +16,20 @@ const MARKER_OPEN_SUFFIX: &str = " -->";
 /// Closing marker.
 pub const MARKER_CLOSE: &str = "<!-- /agentero:sync -->";
 
-/// Wrap converted HTML with sync markers for the given paper id.
+/// Signature shared by every marker form — raw HTML, Zotero-escaped
+/// (`&lt;!-- agentero:sync paper=…`), Markdown-escaped (`\<!-- …`) or worse:
+/// only angle brackets and dashes ever get escaped, the paper-id part stays
+/// intact. Anything containing this signature is Agentero sync content.
+pub const SYNC_SIGNATURE: &str = "agentero:sync paper=";
+
+/// Wrap converted HTML with sync markers for the given paper id, inside the
+/// Zotero 7 rich-note wrapper so the editor renders (and preserves) it as
+/// HTML instead of treating it as legacy plain text.
 pub fn wrap_sync_html(paper_id: &str, html: &str) -> String {
     format!(
-        "{MARKER_OPEN_PREFIX}{paper_id}{MARKER_OPEN_SUFFIX}\n{}\n{MARKER_CLOSE}",
+        "<div class=\"zotero-note znv1\"><div data-schema-version=\"9\">\
+         {MARKER_OPEN_PREFIX}{paper_id}{MARKER_OPEN_SUFFIX}\n{}\n{MARKER_CLOSE}\
+         </div></div>",
         html.trim()
     )
 }
@@ -21,6 +37,92 @@ pub fn wrap_sync_html(paper_id: &str, html: &str) -> String {
 /// True when the note HTML carries a complete Agentero sync marker pair.
 pub fn is_sync_marked(html: &str) -> bool {
     html.contains(MARKER_OPEN_PREFIX) && html.contains(MARKER_CLOSE)
+}
+
+/// True for anything that is (or was) Agentero sync content, in any damage
+/// state: intact markers, Zotero-escaped markers, or Markdown-escaped leaked
+/// blocks inside NOTES.md. Used to never re-import our own pushed notes.
+pub fn looks_like_sync_note(text: &str) -> bool {
+    text.contains(SYNC_SIGNATURE)
+}
+
+/// Remove leaked sync blocks from a NOTES.md. A leaked block is a
+/// `---`-separated segment carrying the sync signature (our own pushed note
+/// pulled back in a previous, broken round). Frontmatter and every segment
+/// without the signature are preserved verbatim. No-op on clean files.
+pub fn strip_leaked_sync_blocks(md: &str) -> String {
+    if !looks_like_sync_note(md) {
+        return md.to_string();
+    }
+    // Keep frontmatter verbatim; only the body is segmented.
+    let (front, body) = split_off_frontmatter(md);
+    let mut segments: Vec<String> = vec![String::new()];
+    let mut in_fence = false;
+    for line in body.split_inclusive('\n') {
+        let trimmed = line.trim();
+        let is_fence = trimmed.starts_with("```") || trimmed.starts_with("~~~");
+        if is_fence {
+            in_fence = !in_fence;
+        }
+        if !in_fence && !is_fence && trimmed == "---" {
+            segments.push(String::new());
+        } else if let Some(last) = segments.last_mut() {
+            last.push_str(line);
+        }
+    }
+    let kept: Vec<&str> = segments
+        .iter()
+        .map(|s| s.trim_matches(['\r', '\n']))
+        .filter(|s| !s.is_empty() && !looks_like_sync_note(s))
+        .collect();
+    let mut out = front;
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    if !kept.is_empty() {
+        out.push_str(&kept.join("\n\n---\n\n"));
+        out.push('\n');
+    }
+    out
+}
+
+/// Split a document into (frontmatter including fences, rest). When there is
+/// no frontmatter the first element is empty.
+fn split_off_frontmatter(md: &str) -> (String, String) {
+    let trimmed = md.trim_start_matches('\u{feff}');
+    let lead = &md[..md.len() - trimmed.len()];
+    let Some(rest) = trimmed.strip_prefix("---") else {
+        return (String::new(), md.to_string());
+    };
+    let Some(rest2) = rest.strip_prefix(['\n', '\r']) else {
+        return (String::new(), md.to_string());
+    };
+    let mut search = rest2;
+    loop {
+        if let Some(after) = search.strip_prefix("---") {
+            if after.is_empty() || after.starts_with('\n') || after.starts_with('\r') {
+                let split = md.len() - after.len();
+                let (front, body) = md.split_at(split);
+                return (
+                    format!("{lead}{front}"),
+                    body.trim_start_matches(['\r', '\n']).to_string(),
+                );
+            }
+        }
+        let Some(idx) = search.find("\n---") else {
+            return (String::new(), md.to_string());
+        };
+        let after = &search[idx + 4..];
+        if after.is_empty() || after.starts_with('\n') || after.starts_with('\r') {
+            let split = md.len() - after.len();
+            let (front, body) = md.split_at(split);
+            return (
+                format!("{lead}{front}"),
+                body.trim_start_matches(['\r', '\n']).to_string(),
+            );
+        }
+        search = &search[idx + 1..];
+    }
 }
 
 /// Extract the paper id embedded in a marked note, if any.
@@ -285,6 +387,73 @@ mod tests {
         assert!(is_sync_marked(&html));
         assert_eq!(marked_paper_id(&html).as_deref(), Some("1706.03762"));
         assert_eq!(marked_inner_html(&html).as_deref(), Some("<p>hello</p>"));
+    }
+
+    #[test]
+    fn wrap_uses_zotero7_rich_note_format() {
+        // Without the znv1 wrapper Zotero treats the note as legacy plain
+        // text and displays/escapes our HTML literally (verified against a
+        // real library). This format is load-bearing — do not remove.
+        let html = wrap_sync_html("x", "<p>hello</p>");
+        assert!(
+            html.starts_with("<div class=\"zotero-note znv1\"><div data-schema-version=\"9\">"),
+            "got: {html}"
+        );
+        assert!(html.ends_with("</div></div>"), "got: {html}");
+        assert!(looks_like_sync_note(&html));
+    }
+
+    #[test]
+    fn sync_signature_survives_every_escape_form() {
+        // Raw markers.
+        assert!(looks_like_sync_note(
+            "<!-- agentero:sync paper=2210.03629 -->\n<p>x</p>"
+        ));
+        // Zotero-escaped (legacy plain-text treatment).
+        assert!(looks_like_sync_note(
+            "<div class=\"zotero-note znv1\"><p>&lt;!-- agentero:sync paper=2210.03629 --&gt;</p></div>"
+        ));
+        // Markdown-escaped leak inside NOTES.md (htmd output).
+        assert!(looks_like_sync_note(
+            "\\<!-- agentero:sync paper=2210.03629 -->\n\n\\<h1>Title\\</h1>"
+        ));
+        // Double-escaped recursion.
+        assert!(looks_like_sync_note(
+            "&amp;lt;!-- agentero:sync paper=2210.03629 --&amp;gt;"
+        ));
+        // Genuine user notes never match.
+        assert!(!looks_like_sync_note("my reading notes about sync paper=1"));
+    }
+
+    #[test]
+    fn strip_leaked_blocks_keeps_user_content_and_frontmatter() {
+        let md = "---\naliases: [x]\n---\n\n# T\n\n> abs\n\n---\n\nmy real note\n\n---\n\n\\<!-- agentero:sync paper=2210.03629 -->\n\n\\<h1>ReAct\\</h1>\n\n\\<blockquote>\n\n\\<p>garbage\\</p>\n";
+        let cleaned = strip_leaked_sync_blocks(md);
+        assert!(!looks_like_sync_note(&cleaned), "got: {cleaned}");
+        assert!(
+            cleaned.starts_with("---\naliases: [x]\n---"),
+            "got: {cleaned}"
+        );
+        assert!(cleaned.contains("# T"), "got: {cleaned}");
+        assert!(cleaned.contains("my real note"), "got: {cleaned}");
+        assert!(!cleaned.contains("garbage"), "got: {cleaned}");
+    }
+
+    #[test]
+    fn strip_leaked_blocks_is_noop_on_clean_files() {
+        let md = "---\naliases: [x]\n---\n\n# T\n\n> abs\n\n---\n\nnote with --- dashes\n";
+        assert_eq!(strip_leaked_sync_blocks(md), md);
+    }
+
+    #[test]
+    fn strip_leaked_blocks_handles_multi_segment_garbage() {
+        // Garbage whose own round-trips contain `---` lines: every segment
+        // still carries the signature, so all of it goes.
+        let md = "# T\n\nuser\n\n---\n\n\\<!-- agentero:sync paper=a -->\n\npart1\n\n---\n\nagentero:sync paper=a part2\n";
+        let cleaned = strip_leaked_sync_blocks(md);
+        assert!(cleaned.contains("user"), "got: {cleaned}");
+        assert!(!cleaned.contains("part1"), "got: {cleaned}");
+        assert!(!cleaned.contains("part2"), "got: {cleaned}");
     }
 
     #[test]

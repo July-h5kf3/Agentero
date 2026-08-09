@@ -529,6 +529,11 @@ fn note_blocks(item: &ReadItem, migrate_notes: bool, migrate_annotations: bool) 
     let mut blocks = Vec::new();
     if migrate_notes {
         for html in &item.note_html {
+            // Never import Agentero's own sync notes back into the vault
+            // (intact, escaped or otherwise damaged marker forms alike).
+            if crate::features::zotero_sync::codec::looks_like_sync_note(html) {
+                continue;
+            }
             let md = htmd::convert(html).unwrap_or_else(|_| html.clone());
             let md = md.trim().to_string();
             if !md.is_empty() {

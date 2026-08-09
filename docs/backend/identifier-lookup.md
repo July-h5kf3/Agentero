@@ -827,7 +827,9 @@ arXiv URL 推导：
 
 - **预检**：`BEGIN IMMEDIATE` 写锁探测，SQLITE_BUSY → 报错「请先关闭 Zotero」。
 - **备份**：每次推送前复制 `zotero.sqlite`（+wal/shm）到 `<zoteroDir>/agentero-backups/zotero-<时间戳>.sqlite`，保留最近 5 份。
-- **标记块协议**：NOTES.md → `pulldown-cmark` 转 HTML（先净化为可读内容：剥离 YAML frontmatter、去掉纸壳——标题与摘要已是 Zotero 条目字段、删除内部 `---` 分隔线避免 `<hr />` 泛滥、清理 htmd 零宽空格、`> [!type]` callout 转加粗标签、`[[双链]]` 转纯文本），包裹 `<!-- agentero:sync paper=<id> -->…<!-- /agentero:sync -->`；按标记精确匹配该父条目下的已有标记笔记 → 整块替换，无则新建子笔记（`items` note 行：同 libraryID + 8 位 base32 key + `itemNotes` 行）。**永不触碰无标记的用户笔记**。
+- **标记块协议**：NOTES.md → `pulldown-cmark` 转 HTML（先净化为可读内容：剥离 YAML frontmatter、去掉纸壳——标题与摘要已是 Zotero 条目字段、删除内部 `---` 分隔线避免 `<hr />` 泛滥、清理 htmd 零宽空格、`> [!type]` callout 转加粗标签、`[[双链]]` 转纯文本），包裹 `<!-- agentero:sync paper=<id> -->…<!-- /agentero:sync -->`，并**必须**再包一层 Zotero 7 富文本笔记格式 `<div class="zotero-note znv1"><div data-schema-version="9">…</div></div>`——缺少该包装时 Zotero 会把内容当作遗留纯文本笔记：标签当文字显示、下次保存整体转义（`&lt;p&gt;`）并摧毁标记（已在真实库验证）。
+- **去重与认领**：按宽松签名 `agentero:sync paper=<id>`（LIKE 通配符已转义）匹配——原始与已被转义的标记都能认领；命中多条时更新最早一条、其余移入 Zotero 回收站（`deletedItems`，可恢复）；内容与库中一致则不写入（避免每轮无谓 churn）。**永不触碰无标记的用户笔记**。
+- **回流防御与自愈**：拉取/迁移跳过一切含同步签名的笔记（无论标记完整、被 Zotero 转义还是被 Markdown 转义）；拉取前先对 NOTES.md 自愈——剔除 `---` 分隔的泄漏同步块（历史版本回流造成的垃圾），frontmatter 与用户内容逐字保留。
 - **事务**：整轮单事务，任一条失败整体回滚（备份可恢复）。
 - **已知边界**（已对真实 Zotero 7 库验证触发器）：`items`/`itemNotes` 无写入 `syncQueue` 的触发器 → 推送的笔记**本地 Zotero 可见**，但需在 Zotero 内编辑过才会被其云同步上传。UI 推送警示中明示。彻底方案（伴生 Zotero 插件经官方 JS API 读写）为后续升级路径。
 
