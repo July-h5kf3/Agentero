@@ -7,8 +7,15 @@
 import i18n from "@/i18n";
 import { clearSelections } from "@/lib/agent/selection-store";
 import { clearVisualDrafts } from "@/lib/agent/visual-context-store";
-import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
+import {
+	notifyAction,
+	notifyError,
+	notifySuccess,
+	notifyWarning,
+} from "@/lib/core/notify";
+import { dirnameOf } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
+import { isPaperDirectory, isPapersRoot, isUnderPapers } from "@/lib/paper";
 import {
 	isLibraryVirtualPath,
 	isTrashVirtualPath,
@@ -24,6 +31,7 @@ import {
 	setLibraryScopePath,
 } from "@/lib/paper/library-store";
 import { setZoteroOpen } from "@/lib/shell/ui-store";
+import type { FileNode } from "@/lib/vault";
 import {
 	createVault,
 	createVaultDirectory,
@@ -55,10 +63,12 @@ import { openInTerminal, revealInFileManager } from "@/lib/vault/reveal";
 import type { TreeCreateKind } from "@/lib/vault/store";
 import {
 	bumpTreeGeneration,
+	clearCutPaths,
 	getVaultPath,
 	refreshRecentVaults,
 	refreshTree,
 	setCreateDraft,
+	setCutPaths,
 	setTree,
 	setTreeLoading,
 	setTreeSelectedPath,
@@ -479,6 +489,249 @@ export async function movePathsTo(
 	} catch (e) {
 		notifyError(
 			e instanceof Error ? e.message : i18n.t("sidebar:fileTree.moveFailed"),
+		);
+	} finally {
+		setVaultBusy(false);
+	}
+}
+
+/** Normalize a path for case-insensitive comparison. */
+function pathKey(path: string): string {
+	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/** Find a tree node by absolute path (case-insensitive). */
+function findTreeNode(tree: FileNode[], target: string): FileNode | undefined {
+	const key = pathKey(target);
+	let found: FileNode | undefined;
+	const walk = (nodes: FileNode[]) => {
+		for (const n of nodes) {
+			if (pathKey(n.path) === key) {
+				found = n;
+				return;
+			}
+			if (n.children) walk(n.children);
+		}
+	};
+	walk(tree);
+	return found;
+}
+
+/** Stage non-virtual vault paths for a subsequent paste (Cut). */
+export function cutSelectedPaths(rawPaths: string[]): void {
+	const vaultPath = getVaultPath();
+	if (!vaultPath) {
+		notifyError(i18n.t("sidebar:fileTree.needsVault"));
+		return;
+	}
+	if (!isTauri()) {
+		notifyError(i18n.t("sidebar:fileTree.cutDesktopOnly"));
+		return;
+	}
+	if (isRemoteVaultHandle(vaultPath)) {
+		notifyWarning(i18n.t("sidebar:fileTree.remoteCutPasteDisabled"));
+		return;
+	}
+	const rootKey = pathKey(vaultPath);
+	const valid = rawPaths
+		.map((p) => p.replace(/\\/g, "/").replace(/\/+$/, ""))
+		.filter(
+			(p) =>
+				p &&
+				pathKey(p).startsWith(`${rootKey}/`) &&
+				!isLibraryVirtualPath(p) &&
+				!isTrashVirtualPath(p),
+		);
+	if (valid.length === 0) {
+		notifyError(i18n.t("sidebar:fileTree.cutNeedsSelection"));
+		return;
+	}
+	setCutPaths(valid);
+	notifyAction(i18n.t("sidebar:fileTree.cutItems", { count: valid.length }), {
+		id: "file-tree-cut",
+		duration: 6000,
+		actionLabel: i18n.t("sidebar:fileTree.clearCut"),
+		onAction: () => clearCutPaths(),
+	});
+}
+
+/** Resolve the destination parent folder for a paste target. */
+function resolvePasteDestination(
+	vaultPath: string,
+	tree: FileNode[],
+	targetPath: string | null | undefined,
+): { abs: string; rel: string; isPaperLeaf: boolean } | null {
+	if (
+		!targetPath ||
+		isLibraryVirtualPath(targetPath) ||
+		isTrashVirtualPath(targetPath)
+	) {
+		// No selection / virtual target → paste at vault root.
+		return { abs: vaultPath, rel: "", isPaperLeaf: false };
+	}
+	const norm = targetPath.replace(/\\/g, "/").replace(/\/+$/, "");
+	const rootKey = pathKey(vaultPath);
+	if (pathKey(norm) === rootKey) {
+		return { abs: vaultPath, rel: "", isPaperLeaf: false };
+	}
+	const node = findTreeNode(tree, norm);
+	const isPaperLeaf =
+		node?.kind === "directory" && isPaperDirectory(node.path, node.children);
+	if (node?.kind === "directory" && !isPaperLeaf) {
+		return {
+			abs: norm,
+			rel: vaultRelativePath(vaultPath, norm) || "",
+			isPaperLeaf: false,
+		};
+	}
+	// File or paper leaf → use parent directory.
+	const parentAbs = dirnameOf(norm);
+	if (!parentAbs || pathKey(parentAbs) === rootKey) {
+		return { abs: vaultPath, rel: "", isPaperLeaf };
+	}
+	return {
+		abs: parentAbs,
+		rel: vaultRelativePath(vaultPath, parentAbs) || "",
+		isPaperLeaf,
+	};
+}
+
+/** Paste previously cut paths into the given target (folder, file, or vault root). */
+export async function pasteCutPaths(
+	targetPath: string | null | undefined,
+): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath) {
+		notifyError(i18n.t("sidebar:fileTree.needsVault"));
+		return;
+	}
+	if (!isTauri()) {
+		notifyError(i18n.t("sidebar:fileTree.pasteDesktopOnly"));
+		return;
+	}
+	if (isRemoteVaultHandle(vaultPath)) {
+		notifyWarning(i18n.t("sidebar:fileTree.remoteCutPasteDisabled"));
+		return;
+	}
+
+	const { cutPaths } = vaultStore.getState();
+	if (cutPaths.length === 0) return;
+
+	const { tree } = vaultStore.getState();
+	const dest = resolvePasteDestination(vaultPath, tree, targetPath);
+	if (!dest) {
+		notifyError(i18n.t("sidebar:fileTree.pasteNeedsSelection"));
+		return;
+	}
+
+	const destRel = normalizeVaultRel(dest.rel);
+	const destUnderPapers = destRel === "papers" || destRel.startsWith("papers/");
+	const rootKey = pathKey(vaultPath);
+
+	setVaultBusy(true);
+	let failed = 0;
+	let blocked = 0;
+	const remaining: string[] = [];
+
+	try {
+		for (const srcAbs of cutPaths) {
+			const normSrc = srcAbs.replace(/\\/g, "/").replace(/\/+$/, "");
+			if (!normSrc || pathKey(normSrc) === rootKey) {
+				failed++;
+				remaining.push(srcAbs);
+				continue;
+			}
+			const srcRel = vaultRelativePath(vaultPath, normSrc);
+			if (!srcRel) {
+				failed++;
+				remaining.push(srcAbs);
+				continue;
+			}
+
+			// Reject moving papers/ root itself.
+			if (isPapersRoot(srcRel)) {
+				failed++;
+				remaining.push(srcAbs);
+				continue;
+			}
+
+			// Reject descendant moves (pasting into the source or its child).
+			const destAbsKey = pathKey(dest.abs);
+			const srcKey = pathKey(normSrc);
+			if (destAbsKey === srcKey || destAbsKey.startsWith(`${srcKey}/`)) {
+				failed++;
+				remaining.push(srcAbs);
+				continue;
+			}
+
+			// Keep items currently under papers/ inside papers/ to preserve catalog integrity.
+			if (isUnderPapers(srcRel) && !destUnderPapers) {
+				notifyWarning(
+					i18n.t("sidebar:fileTree.paperMoveOutsidePapers", {
+						name: basenameOf(srcRel),
+					}),
+				);
+				blocked++;
+				remaining.push(srcAbs);
+				continue;
+			}
+
+			const base = basenameOf(srcRel);
+			const toRel = destRel ? `${destRel}/${base}` : base;
+			const toAbs = joinVaultPath(vaultPath, toRel);
+			const pendingEventPaths = [normSrc, toAbs];
+			trackInternalRenamePaths(pendingEventPaths, Number.POSITIVE_INFINITY);
+
+			try {
+				if (destUnderPapers && isUnderPapers(srcRel)) {
+					const result = await movePaperFolder(
+						vaultPath,
+						srcRel,
+						destRel || "papers",
+						dirtyVaultPaths(vaultPath),
+					);
+					syncMovedPaths(
+						vaultPath,
+						normSrc,
+						toAbs,
+						srcRel,
+						result.newRel,
+						result.linkUpdate,
+					);
+				} else {
+					const result = await moveVaultPath(
+						vaultPath,
+						srcRel,
+						toRel,
+						dirtyVaultPaths(vaultPath),
+					);
+					syncMovedPaths(vaultPath, normSrc, toAbs, srcRel, toRel, result);
+				}
+			} catch {
+				trackInternalRenamePaths(pendingEventPaths, Date.now() + 2000);
+				failed++;
+				remaining.push(srcAbs);
+			}
+		}
+
+		// Clear successfully moved items; keep failed/blocked ones staged so the
+		// user sees what did not move.
+		setCutPaths(remaining);
+		await refreshTree(vaultPath);
+		await refreshLibrary();
+		if (!isRemoteVaultHandle(vaultPath)) {
+			await rebuildWikiAndNotify(vaultPath);
+		}
+		if (failed > 0 || blocked > 0) {
+			notifyWarning(
+				i18n.t("sidebar:fileTree.pastedWithErrors", {
+					count: failed + blocked,
+				}),
+			);
+		}
+	} catch (e) {
+		notifyError(
+			e instanceof Error ? e.message : i18n.t("sidebar:fileTree.pasteFailed"),
 		);
 	} finally {
 		setVaultBusy(false);

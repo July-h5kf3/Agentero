@@ -54,6 +54,8 @@ type VaultStore = VaultTreeDerived & {
 	/** Inline new file/folder draft in the tree (IDE-style). */
 	createDraft: TreeCreateDraft | null;
 	recentVaults: string[];
+	/** Absolute paths staged by Cut (⌘X) until pasted or cancelled. */
+	cutPaths: string[];
 };
 
 function deriveFromTree(
@@ -80,6 +82,7 @@ export const vaultStore = createStore<VaultStore>(() => ({
 	treeSelectedPath: null,
 	createDraft: null,
 	recentVaults: [],
+	cutPaths: [],
 	...deriveFromTree([], null),
 }));
 
@@ -106,7 +109,11 @@ export function getVaultPath(): string | null {
 
 export function setVaultPath(path: string | null): void {
 	const { tree } = vaultStore.getState();
-	vaultStore.setState({ vaultPath: path, ...deriveFromTree(tree, path) });
+	vaultStore.setState({
+		vaultPath: path,
+		cutPaths: [],
+		...deriveFromTree(tree, path),
+	});
 }
 
 export function setTree(tree: FileNode[]): void {
@@ -136,6 +143,14 @@ export function setTreeSelectedPath(
 
 export function setCreateDraft(draft: TreeCreateDraft | null): void {
 	vaultStore.setState({ createDraft: draft });
+}
+
+export function setCutPaths(paths: string[]): void {
+	vaultStore.setState({ cutPaths: paths });
+}
+
+export function clearCutPaths(): void {
+	vaultStore.setState({ cutPaths: [] });
 }
 
 export function refreshRecentVaults(): void {

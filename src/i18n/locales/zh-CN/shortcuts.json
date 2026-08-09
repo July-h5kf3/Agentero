@@ -17,6 +17,8 @@
 		"revealInFinder": "在 Finder 中显示",
 		"openInTerminal": "在终端中打开",
 		"deleteTreeItem": "删除选中项",
+		"cutTreeItem": "剪切选中项",
+		"pasteTreeItem": "粘贴剪切项",
 		"collapseTreeCurrent": "折叠选中文件夹",
 		"collapseTreeDefault": "折叠至仅 papers/",
 		"magicWand": "按标识符添加论文",

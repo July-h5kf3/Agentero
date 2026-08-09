@@ -322,6 +322,8 @@ export default function App() {
 		deleteTreeItem: deleteSelectedPath,
 		collapseTreeCurrent: () => fileTreeHandle()?.collapseSelected(),
 		collapseTreeDefault: () => fileTreeHandle()?.collapseToDefault(),
+		cutTreeItem: () => fileTreeHandle()?.cutSelected(),
+		pasteTreeItem: () => fileTreeHandle()?.pasteIntoSelected(),
 		magicWand: openMagicWand,
 		quickOpen: () => openPalette("go"),
 		commandPalette: () => openPalette("commands"),

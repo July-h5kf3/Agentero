@@ -42,11 +42,13 @@ import {
 	cancelCreate,
 	confirmCreate,
 	createNewVault,
+	cutSelectedPaths,
 	emptyTrash,
 	movePathsTo,
 	openRecentVault,
 	openRemoteVault,
 	openVault,
+	pasteCutPaths,
 	removeRecent,
 	startCreate,
 	startRenamePath,
@@ -97,6 +99,7 @@ export function VaultSidebar() {
 	const createDraft = useVaultStore((s) => s.createDraft);
 	const busy = useVaultStore((s) => s.busy);
 	const recentVaults = useVaultStore((s) => s.recentVaults);
+	const cutPaths = useVaultStore((s) => s.cutPaths);
 	const ioBusy = useLibraryStore((s) => s.ioBusy);
 	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
 	const lookupOpenSignal = useUiStore((s) => s.lookupOpenSignal);
@@ -180,6 +183,9 @@ export function VaultSidebar() {
 					onRenamePath={startRenamePath}
 					onMovePaths={requestMovePaths}
 					onMoveTo={onMoveTo}
+					onCutPaths={cutSelectedPaths}
+					onPasteInto={(target) => void pasteCutPaths(target)}
+					cutPaths={cutPaths}
 					onDropLocalPdfs={dropLocalPdfs}
 					onSelectFile={selectFileNode}
 					onSelectLibrary={selectLibrary}

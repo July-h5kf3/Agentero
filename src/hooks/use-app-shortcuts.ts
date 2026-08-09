@@ -28,11 +28,14 @@ export function useAppShortcuts(
 			if (!id) return;
 
 			// Editor-native combos — only claim them outside text fields:
-			// ⌘⌫ delete-to-line-start; ⌘← / ⇧⌘← jump/select to line start (macOS).
+			// ⌘⌫ delete-to-line-start; ⌘← / ⇧⌘← jump/select to line start (macOS);
+			// ⌘X / ⌘V should keep native cut/paste while editing text.
 			if (
 				id === "deleteTreeItem" ||
 				id === "collapseTreeCurrent" ||
-				id === "collapseTreeDefault"
+				id === "collapseTreeDefault" ||
+				id === "cutTreeItem" ||
+				id === "pasteTreeItem"
 			) {
 				const el = event.target;
 				if (

@@ -353,6 +353,10 @@ type FileTreeProps = {
 	onMovePaths?: (paths: string[]) => void;
 	/** Drag-and-drop move: relocate paths into an existing folder (no dialog). */
 	onMoveTo?: (paths: string[], destParentRel: string) => void;
+	onCutPaths?: (paths: string[]) => void;
+	onPasteInto?: (targetPath: string) => void;
+	/** Absolute paths currently staged by Cut (for row dimming). */
+	cutPaths?: string[];
 	/**
 	 * OS PDF drop onto a `papers/` org folder → open confirm dialog in parent.
 	 * `parentDir` is vault-relative (e.g. `papers` or `papers/nlp`).
@@ -370,12 +374,16 @@ type FileTreeProps = {
 	className?: string;
 };
 
-/** Imperative tree fold controls (global shortcuts / command palette). */
+/** Imperative tree controls (global shortcuts / command palette). */
 export type FileTreeHandle = {
 	/** Collapse the selected folder, or its parent if the row is a leaf / already closed. */
 	collapseSelected: () => void;
 	/** Only expand papers/ (list direct children; do not expand subfolders). */
 	collapseToDefault: () => void;
+	/** Cut the current multi-selection (or selected path if no multi-selection). */
+	cutSelected: () => void;
+	/** Paste cut items into the currently selected path. */
+	pasteIntoSelected: () => void;
 };
 
 type TreeContextMenu = {
@@ -413,6 +421,9 @@ export const FileTree = memo(
 			onRenamePath,
 			onMovePaths,
 			onMoveTo,
+			onCutPaths,
+			onPasteInto,
+			cutPaths = [],
 			onDropLocalPdfs,
 			onLoadDirChildren,
 			className,
@@ -540,6 +551,11 @@ export const FileTree = memo(
 			walk(nodes);
 			return map;
 		}, [nodes]);
+
+		const cutPathKeys = useMemo(
+			() => new Set(cutPaths.map((p) => pathKey(p))),
+			[cutPaths],
+		);
 
 		/** Case-insensitive path → node (for selection resolve / ancestor expand). */
 		const byPathKey = useMemo(() => {
@@ -798,15 +814,6 @@ export const FileTree = memo(
 			});
 		}, [selected, selectedPath, byPathKey, vaultPath]);
 
-		useImperativeHandle(
-			ref,
-			() => ({
-				collapseSelected,
-				collapseToDefault,
-			}),
-			[collapseSelected, collapseToDefault],
-		);
-
 		useEffect(() => {
 			if (!treeSelectedPath) return;
 			// New selection always re-enables auto-reveal (e.g. open paper).
@@ -944,6 +951,36 @@ export const FileTree = memo(
 		const orderedSelected = useCallback(
 			() => selectableOrder.filter((p) => selected.has(p)),
 			[selectableOrder, selected],
+		);
+
+		const cutSelected = useCallback(() => {
+			const paths =
+				selected.size > 0
+					? orderedSelected()
+					: selectedPath
+						? [selectedPath]
+						: [];
+			if (paths.length > 0) {
+				onCutPaths?.(paths);
+			}
+		}, [selected.size, selectedPath, orderedSelected, onCutPaths]);
+
+		const pasteIntoSelected = useCallback(() => {
+			const target = selectedPath;
+			if (target) {
+				onPasteInto?.(target);
+			}
+		}, [selectedPath, onPasteInto]);
+
+		useImperativeHandle(
+			ref,
+			() => ({
+				collapseSelected,
+				collapseToDefault,
+				cutSelected,
+				pasteIntoSelected,
+			}),
+			[collapseSelected, collapseToDefault, cutSelected, pasteIntoSelected],
 		);
 
 		const runBatchDelete = useCallback(() => {
@@ -1284,6 +1321,8 @@ export const FileTree = memo(
 		const revealShortcut = formatShortcutById("revealInFinder");
 		const openInTerminalShortcut = formatShortcutById("openInTerminal");
 		const deleteShortcut = formatShortcutById("deleteTreeItem");
+		const cutShortcut = formatShortcutById("cutTreeItem");
+		const pasteShortcut = formatShortcutById("pasteTreeItem");
 
 		const handleDeleteFromMenu = useCallback(() => {
 			if (!contextMenu) return;
@@ -1299,6 +1338,20 @@ export const FileTree = memo(
 			setContextMenu(null);
 			onMovePaths(targets);
 		}, [contextMenu, menuTargets, onMovePaths]);
+
+		const handleCutFromMenu = useCallback(() => {
+			if (!contextMenu || !onCutPaths) return;
+			const targets = menuTargets(contextMenu.path);
+			setContextMenu(null);
+			onCutPaths(targets);
+		}, [contextMenu, menuTargets, onCutPaths]);
+
+		const handlePasteFromMenu = useCallback(() => {
+			if (!contextMenu || !onPasteInto) return;
+			const path = contextMenu.path;
+			setContextMenu(null);
+			onPasteInto(path);
+		}, [contextMenu, onPasteInto]);
 
 		const handleRenameFromMenu = useCallback(() => {
 			if (!contextMenu || !onRenamePath) return;
@@ -1336,6 +1389,17 @@ export const FileTree = memo(
 		const isPaperMenu =
 			menuNode?.kind === "directory" &&
 			isPaperDirectory(menuNode.path, menuNode.children);
+		const menuTargetIsVirtual =
+			contextMenu?.path === LIBRARY_VIRTUAL_PATH ||
+			contextMenu?.path === TRASH_VIRTUAL_PATH;
+		const canPasteAtTarget =
+			cutPaths.length > 0 &&
+			!menuTargetIsVirtual &&
+			Boolean(contextMenu?.path) &&
+			!cutPathKeys.has(pathKey(contextMenu?.path ?? "")) &&
+			!cutPaths.some((p) =>
+				pathKey(contextMenu?.path ?? "").startsWith(`${pathKey(p)}/`),
+			);
 		const handleOpenNotesFromMenu = useCallback(() => {
 			if (!contextMenu || !onOpenPaperNotes) return;
 			const path = contextMenu.path;
@@ -1429,6 +1493,42 @@ export const FileTree = memo(
 								}}
 							>
 								<span>{t("fileTree.copyPath")}</span>
+							</button>
+						) : null}
+						{onCutPaths && !menuTargetIsVirtual ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={handleCutFromMenu}
+							>
+								<span>
+									{menuCount > 1
+										? t("fileTree.cutSelected", { count: menuCount })
+										: t("fileTree.cut")}
+								</span>
+								<span className="text-muted-foreground text-xs tracking-wide">
+									{cutShortcut}
+								</span>
+							</button>
+						) : null}
+						{canPasteAtTarget ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={handlePasteFromMenu}
+							>
+								<span>
+									{menuCount > 1
+										? t("fileTree.paste")
+										: t("fileTree.pasteInto", {
+												name: menuNode?.name ?? t("fileTree.paste"),
+											})}
+								</span>
+								<span className="text-muted-foreground text-xs tracking-wide">
+									{pasteShortcut}
+								</span>
 							</button>
 						) : null}
 						{menuCount === 1 ? (
@@ -1581,7 +1681,7 @@ export const FileTree = memo(
 			</div>
 		);
 
-		const renderPaperRow = (node: FileNode): ReactNode => {
+		const renderPaperRow = (node: FileNode, isCut: boolean): ReactNode => {
 			const rel = relPathForNode(node.path);
 			const meta = paperMetaByRelPath?.get(rel) ?? null;
 			const downloadReasons = paperAssetDownloadReasons(node, meta);
@@ -1603,7 +1703,11 @@ export const FileTree = memo(
 				: t("fileTree.downloadAssets");
 			const showActions = showDownload || showRead;
 			return (
-				<FileTreeFile path={node.path} name={label}>
+				<FileTreeFile
+					path={node.path}
+					name={label}
+					className={cn(isCut && "opacity-50")}
+				>
 					<span className="size-4 shrink-0" />
 					<FileTreeIcon>
 						<ScrollText className="size-4 text-muted-foreground" />
@@ -1687,12 +1791,18 @@ export const FileTree = memo(
 		};
 
 		const renderNodeRow = (node: FileNode, paperLeaf: boolean): ReactNode => {
-			if (paperLeaf) return renderPaperRow(node);
+			const isCut = cutPathKeys.has(pathKey(node.path));
+			if (paperLeaf) return renderPaperRow(node, isCut);
 			if (node.kind === "directory") {
 				const pendingLoad =
 					Boolean(node.childrenPending) || loadingDirs.has(node.path);
 				return (
-					<div className="relative flex w-full items-center">
+					<div
+						className={cn(
+							"relative flex w-full items-center",
+							isCut && "opacity-50",
+						)}
+					>
 						<div className="min-w-0 flex-1">
 							<FileTreeFolderRow path={node.path} name={node.name} />
 						</div>
@@ -1711,6 +1821,7 @@ export const FileTree = memo(
 					path={node.path}
 					name={node.name}
 					icon={<Icon className="size-4 text-muted-foreground" />}
+					className={cn(isCut && "opacity-50")}
 				/>
 			);
 		};

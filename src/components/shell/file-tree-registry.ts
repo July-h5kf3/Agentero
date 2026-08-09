@@ -1,6 +1,6 @@
 /**
- * File-tree imperative handle registry (collapse commands from the palette /
- * shortcuts without threading the ref through the command layer).
+ * File-tree imperative handle registry (collapse / cut / paste commands from
+ * the palette / shortcuts without threading the ref through the command layer).
  */
 
 import type { FileTreeHandle } from "@/components/sidebar/file-tree";

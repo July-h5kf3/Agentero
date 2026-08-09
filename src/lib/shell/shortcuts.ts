@@ -12,6 +12,8 @@ export type ShortcutId =
 	| "revealInFinder"
 	| "openInTerminal"
 	| "deleteTreeItem"
+	| "cutTreeItem"
+	| "pasteTreeItem"
 	/** ⌘← — collapse selected file-tree folder (or its parent) */
 	| "collapseTreeCurrent"
 	/** ⇧⌘← — reset tree to only papers/ expanded (children listed, not open) */
@@ -148,6 +150,22 @@ export const SHORTCUTS: ShortcutDef[] = [
 		group: "Vault",
 		// ⌘⌫ — delete selected file tree item (with confirm)
 		key: "Backspace",
+		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "cutTreeItem",
+		group: "Vault",
+		// ⌘X — cut selected file tree item(s)
+		key: "x",
+		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "pasteTreeItem",
+		group: "Vault",
+		// ⌘V — paste cut file tree item(s) into selected destination
+		key: "v",
 		meta: true,
 		whenSettingsClosed: true,
 	},
