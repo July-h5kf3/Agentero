@@ -56,7 +56,17 @@ export function openMagicWand(): void {
 	bumpLookupOpenSignal();
 }
 
-export async function lookupSubmit(texts: string[]): Promise<void> {
+export async function lookupSubmit(
+	texts: string[],
+	opts?: {
+		/** Open the first imported paper in the workspace (default true). */
+		openImported?: boolean;
+		/** Destination folder override (defaults to the current lookup parent). */
+		parentDir?: string;
+		/** Runs after import + refresh finished (per text). */
+		onComplete?: () => Promise<void> | void;
+	},
+): Promise<void> {
 	const vaultPath = getVaultPath();
 	if (!vaultPath) {
 		throw new Error(i18n.t("sidebar:lookup.needsVault"));
@@ -77,7 +87,7 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 				setDetail(i18n.t("app:tasks.lookupFetching", { id: input }));
 				const result = await addPapersByIdentifiers({
 					vaultRoot: vaultPath,
-					parentDir: currentLookupParentDir(),
+					parentDir: opts?.parentDir ?? currentLookupParentDir(),
 					texts: [input],
 					settings,
 					progressTaskId: id,
@@ -111,7 +121,7 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 									.replace(/\\/g, "/")
 									.replace(/^\/+|\/+$/g, ""),
 							);
-					openPaper(paperAbs);
+					if (opts?.openImported !== false) openPaper(paperAbs);
 					setDetail(
 						i18n.t("app:tasks.lookupRefreshing", { title: first.title }),
 					);
@@ -184,6 +194,8 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 						});
 					}
 				}
+
+				if (opts?.onComplete) await opts.onComplete();
 			},
 			{ concurrency: settings.batchImportConcurrency },
 		).catch((e) => {

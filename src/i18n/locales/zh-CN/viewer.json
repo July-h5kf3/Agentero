@@ -145,7 +145,11 @@
 		"openLink": "打开链接",
 		"inspect": "查看引用详情",
 		"previewLabel": "{{marker}} 的引用预览",
-		"previewUnresolved": "打开参考文献侧栏查看这条引用。"
+		"previewUnresolved": "打开参考文献侧栏查看这条引用。",
+		"importToFolder": "导入到文件夹",
+		"newFolder": "新文件夹",
+		"newFolderHint": "如 papers/nlp",
+		"invalidFolderPath": "路径必须位于 papers/ 之下"
 	},
 	"figures": {
 		"title": "解析",

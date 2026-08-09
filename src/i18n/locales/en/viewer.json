@@ -145,7 +145,11 @@
 		"openLink": "Open link",
 		"inspect": "Inspect reference",
 		"previewLabel": "Reference preview for {{marker}}",
-		"previewUnresolved": "Open References to inspect this citation."
+		"previewUnresolved": "Open References to inspect this citation.",
+		"importToFolder": "Import into folder",
+		"newFolder": "New folder",
+		"newFolderHint": "e.g. papers/nlp",
+		"invalidFolderPath": "Path must stay under papers/"
 	},
 	"figures": {
 		"title": "Analysis",
