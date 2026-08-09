@@ -87,9 +87,11 @@ import {
 	TableRowElement,
 } from "@/components/editor/nodes/block/table-node";
 import { MentionElement } from "@/components/editor/nodes/inline/mention-node";
-import { CodeLeaf } from "@/components/editor/nodes/leaf/code-leaf";
-import { HighlightLeaf } from "@/components/editor/nodes/leaf/highlight-leaf";
-import { KbdLeaf } from "@/components/editor/nodes/leaf/kbd-leaf";
+import {
+	CodeLeaf,
+	HighlightLeaf,
+	KbdLeaf,
+} from "@/components/editor/nodes/leaf";
 import { CalloutPlugin } from "@/components/editor/plugins/callout-plugin";
 import { FindReplaceKit } from "@/components/editor/plugins/find-replace-kit";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
