@@ -71,10 +71,8 @@ import {
 	type PdfPageMarksSlice,
 	type PdfPageModeSlice,
 } from "@/components/viewer/embed/pdf-page-layers";
-import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
 import type {
 	EditorState,
-	PdfViewerHandle,
 	PdfViewerInnerProps,
 	PdfViewerProps,
 } from "@/components/viewer/embed/pdf-viewer-types";
@@ -89,6 +87,7 @@ import { usePdfOutline } from "@/components/viewer/embed/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
 import { usePdfSelectionTranslate } from "@/components/viewer/embed/use-pdf-selection-translate";
 import { usePdfTextSelection } from "@/components/viewer/embed/use-pdf-text-selection";
+import { usePdfViewerHandle } from "@/components/viewer/embed/use-pdf-viewer-handle";
 import { usePdfVisualMarks } from "@/components/viewer/embed/use-pdf-visual-marks";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
 import {
@@ -98,7 +97,7 @@ import {
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import { isVisualMarkKind, tracePreview } from "@/lib/pdf/agent-trace";
-import { deletePdfAskThread, toSummaries } from "@/lib/pdf/ask";
+import { toSummaries } from "@/lib/pdf/ask";
 import { threadHasUserQuestion } from "@/lib/pdf/ask/schema";
 import type { PdfAskNormalizedRect, PdfAskThread } from "@/lib/pdf/ask/types";
 import { equationAnnotationPath } from "@/lib/pdf/equation-annotation";
@@ -108,11 +107,7 @@ import {
 	HIGHLIGHT_HEX_LIST,
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
-import {
-	getPdfAiRuntime,
-	layoutAnalysisStore,
-	setFocusedLayoutRegion,
-} from "@/lib/pdf/layout";
+import { getPdfAiRuntime, layoutAnalysisStore } from "@/lib/pdf/layout";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
@@ -1088,123 +1083,26 @@ function PdfViewerInner({
 		setEditor(null);
 	}, [editor, deleteHighlightAnnotation]);
 
-	// Register the imperative handle for the annotations panel.
-	// Parent often passes an inline onHandle; keep it in a ref. Read scroll via
-	// scrollRef so EmbedPDF's fresh scope object does not re-register every paint.
-	const onHandleRef = useRef(onHandle);
-	onHandleRef.current = onHandle;
-	// biome-ignore lint/correctness/useExhaustiveDependencies: highlightsRef is an injected mirror ref — depending on it would re-register the handle on every highlight change.
-	useEffect(() => {
-		const register = onHandleRef.current;
-		if (!register) return;
-		const handle: PdfViewerHandle = {
-			getHighlights: () => highlightsRef.current,
-			scrollToHighlight: (id) => {
-				const obj = annotationCap
-					?.forDocument(docId)
-					.getAnnotationById(id)?.object;
-				if (!obj || !isHighlightObject(obj)) return;
-				// Instant: smooth jumps across distant pages feel like slow render.
-				scrollRef.current?.scrollToPage({
-					pageNumber: obj.pageIndex + 1,
-					behavior: "instant",
-				});
-				annotationCap?.forDocument(docId).selectAnnotation(obj.pageIndex, id);
-			},
-			editComment: (id) => openEditorForAnnotation(id),
-			deleteHighlight: (id) => {
-				const obj = annotationCap
-					?.forDocument(docId)
-					.getAnnotationById(id)?.object;
-				if (obj && isHighlightObject(obj))
-					annotationCap?.forDocument(docId).deleteAnnotation(obj.pageIndex, id);
-			},
-			scrollToAsk: (id) => {
-				const thread = threadsRef.current.find((th) => th.id === id);
-				if (!thread) return;
-				scrollRef.current?.scrollToPage({
-					pageNumber: thread.anchor.page,
-					behavior: "instant",
-				});
-				// openThread → openCard places after page mount (retry if virtualized).
-				openThread({ ...thread, status: "open" });
-			},
-			deleteAsk: (id) => {
-				setThreads((prev) => prev.filter((th) => th.id !== id));
-				if (paperAbsPath) void deletePdfAskThread(paperAbsPath, id);
-			},
-			scrollToVisualTrace: (id) => {
-				const tr = visualTracesRef.current.find((item) => item.id === id);
-				if (!tr) return;
-				scrollRef.current?.scrollToPage({
-					pageNumber: tr.page,
-					behavior: "instant",
-				});
-				openCard({ kind: "visual", id: tr.id });
-			},
-			deleteVisualTrace: (id) => {
-				deleteVisualTraceById(id);
-			},
-			toggleVisualAnnotation: toggleRegionSelect,
-			analyzeLayout: () => {
-				// Prefer source/layout.json → merge → sidebar. Full ONNX (PDF→JSON)
-				// only when there is no sidecar (or force is set elsewhere).
-				startLayoutAnalysisRef.current({
-					force: false,
-					openFigures: true,
-					showOverlay: true,
-					asBackgroundTask: true,
-					notifyOnError: true,
-				});
-			},
-			scrollToLayoutRegion: (region) => {
-				scrollRef.current?.scrollToPage({
-					pageNumber: region.pageIndex + 1,
-					behavior: "instant",
-				});
-				setFocusedLayoutRegion(docId, region.id);
-			},
-			renderRegion: async ({ pageIndex, bbox, maxEdgePx }) => {
-				const eng = engineRef.current;
-				const docs = docCapRef.current;
-				if (!eng || !docs) return null;
-				if (!docs.isDocumentOpen(docId)) return null;
-				const document = docs.getDocument(docId);
-				if (!document) return null;
-				try {
-					const image = await renderPdfRegionPromptImage({
-						engine: eng,
-						document,
-						pageIndex,
-						region: bbox,
-						maxEdgePx: maxEdgePx ?? 360,
-					});
-					if (!docs.isDocumentOpen(docId)) return null;
-					return image;
-				} catch {
-					return null;
-				}
-			},
-		};
-		register(handle);
-		return () => {
-			layoutTaskRef.current?.abort({
-				type: "no-document",
-				message: "unmount",
-			});
-			layoutTaskRef.current = null;
-			register(null);
-		};
-	}, [
-		annotationCap,
+	usePdfViewerHandle({
 		docId,
 		paperAbsPath,
+		onHandle,
+		annotationCap,
+		scrollRef,
+		engineRef,
+		docCapRef,
+		highlightsRef,
+		threadsRef,
+		visualTracesRef,
+		setThreads,
+		layoutTaskRef,
+		startLayoutAnalysisRef,
 		openEditorForAnnotation,
 		openThread,
 		openCard,
 		deleteVisualTraceById,
 		toggleRegionSelect,
-	]);
+	});
 
 	// Keep the page-number input in sync with the observed current page.
 	useEffect(() => {

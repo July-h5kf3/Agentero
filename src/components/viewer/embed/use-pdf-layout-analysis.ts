@@ -86,7 +86,9 @@ import {
 import { normalizePathKey } from "@/lib/vault/path";
 
 /** In-flight EmbedPDF layout task (abortable, at most one per document). */
-type LayoutAnalysisTask = Awaited<ReturnType<typeof runDocumentLayoutAnalysis>>;
+export type LayoutAnalysisTask = Awaited<
+	ReturnType<typeof runDocumentLayoutAnalysis>
+>;
 
 /** Options for the manual Figures button, the handle, and the silent auto-run. */
 export type StartLayoutAnalysisOptions = {
