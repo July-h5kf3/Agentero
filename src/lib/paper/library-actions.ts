@@ -170,7 +170,6 @@ export async function downloadPaperAssetsAction(node: FileNode): Promise<void> {
 				await refreshLibrary();
 				enqueuePaperLayoutAnalysis({
 					paperAbsPath: joinVaultPath(vaultPath, rel),
-					paperLabel: rel,
 				});
 				return r;
 			},
@@ -279,7 +278,6 @@ export async function downloadAllMissingAssets(): Promise<void> {
 						});
 						enqueuePaperLayoutAnalysis({
 							paperAbsPath: joinVaultPath(vaultPath, rel),
-							paperLabel: rel,
 						});
 					} catch (e) {
 						if (signal.aborted) throw e;

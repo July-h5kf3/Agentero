@@ -9,9 +9,11 @@ import {
 	isBackgroundTaskCancelledError,
 } from "@/lib/core/background-tasks";
 import { logger } from "@/lib/core/logger";
+import { loadPaperMetadata } from "@/lib/paper/load-meta";
 import { analyzePaperLayoutHeadless } from "@/lib/pdf/layout/headless-analyze";
 import { readLayoutSidecar } from "@/lib/pdf/layout/io";
 import { layoutAnalysisStore } from "@/lib/pdf/layout/store";
+import { getVaultPath } from "@/lib/vault/store";
 
 /** Papers already queued or running headless analysis this session. */
 const queuedPapers = new Set<string>();
@@ -26,16 +28,11 @@ function normalizePaperKey(paperAbsPath: string): string {
  */
 export function enqueuePaperLayoutAnalysis(opts: {
 	paperAbsPath: string;
-	/** Short label for the tasks panel (vault-rel path / title). */
+	/** Short label for the tasks panel. Falls back to the paper title from the catalog, then the folder name. */
 	paperLabel?: string;
 }): void {
 	const paperAbsPath = normalizePaperKey(opts.paperAbsPath);
 	if (!paperAbsPath || queuedPapers.has(paperAbsPath)) return;
-
-	const label =
-		opts.paperLabel?.trim() ||
-		paperAbsPath.split("/").filter(Boolean).pop() ||
-		paperAbsPath;
 
 	queuedPapers.add(paperAbsPath);
 
@@ -45,6 +42,15 @@ export function enqueuePaperLayoutAnalysis(opts: {
 			if (cached?.regions?.length) {
 				queuedPapers.delete(paperAbsPath);
 				return;
+			}
+
+			let label = opts.paperLabel?.trim();
+			if (!label) {
+				const meta = await loadPaperMetadata(paperAbsPath, getVaultPath());
+				label =
+					meta?.title?.trim() ||
+					paperAbsPath.split("/").filter(Boolean).pop() ||
+					paperAbsPath;
 			}
 
 			await enqueueBackgroundTask(

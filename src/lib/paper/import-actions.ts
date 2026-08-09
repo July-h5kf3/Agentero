@@ -144,7 +144,7 @@ export async function lookupSubmit(
 					if (abs) {
 						enqueuePaperLayoutAnalysis({
 							paperAbsPath: abs,
-							paperLabel: paper.path || paper.title,
+							paperLabel: paper.title?.trim() || paper.path,
 						});
 					}
 				}
@@ -187,7 +187,6 @@ export async function lookupSubmit(
 								await refreshLibrary();
 								enqueuePaperLayoutAnalysis({
 									paperAbsPath: joinVaultPath(vaultPath, rel),
-									paperLabel: rel,
 								});
 							},
 							{ concurrency: settings.batchImportConcurrency },
@@ -302,7 +301,7 @@ export async function importLocalPdf(opts?: {
 				if (paper.paperDir) {
 					enqueuePaperLayoutAnalysis({
 						paperAbsPath: paper.paperDir.replace(/[\\/]+$/, ""),
-						paperLabel: paper.path || paper.title,
+						paperLabel: paper.title?.trim() || paper.path,
 					});
 				}
 			}

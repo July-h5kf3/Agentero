@@ -58,6 +58,7 @@ function maybeTriggerDeferredParse(
 	paperDir: string,
 	vaultPath: string | null,
 	treeNode: FileNode | undefined,
+	paperMeta?: PaperMetadata | null,
 ): void {
 	if (!isTauri() || !vaultPath || !treeNode) return;
 	if (
@@ -87,7 +88,7 @@ function maybeTriggerDeferredParse(
 			});
 			enqueuePaperLayoutAnalysis({
 				paperAbsPath: joinVaultPath(vaultPath, rel),
-				paperLabel: rel,
+				paperLabel: paperMeta?.title?.trim(),
 			});
 		},
 	).catch(() => {});
@@ -143,7 +144,7 @@ async function resolvePaperPdfSource(
 				});
 				enqueuePaperLayoutAnalysis({
 					paperAbsPath: joinVaultPath(vaultPath, rel),
-					paperLabel: rel,
+					paperLabel: meta?.title?.trim(),
 				});
 				return r;
 			},
@@ -271,6 +272,7 @@ export async function loadTabResources(
 				paperDir,
 				vaultPath,
 				treeFindNode(tree, paperDir),
+				meta,
 			);
 		}
 		if (isTauri() && vaultPath) {

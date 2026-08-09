@@ -3847,11 +3847,8 @@ function PdfViewerInner({
 	// land in the background-tasks panel. ONNX still serial (concurrency:1).
 	useEffect(() => {
 		if (!paperAbsPath) return;
-		enqueuePaperLayoutAnalysis({
-			paperAbsPath,
-			paperLabel: paperRelPath || undefined,
-		});
-	}, [paperAbsPath, paperRelPath]);
+		enqueuePaperLayoutAnalysis({ paperAbsPath });
+	}, [paperAbsPath]);
 
 	// Active viewer: pull layout into the tab store once sidecar exists.
 	// Headless may still be writing it for this paper (or a sibling tab);
