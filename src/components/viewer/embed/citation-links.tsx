@@ -123,7 +123,7 @@ export const CitationLinkLayer = memo(function CitationLinkLayer({
 		<>
 			{links.map((link) => (
 				<button
-					key={link.id}
+					key={`${link.id}-${link.rect.origin.x}-${link.rect.origin.y}-${link.rect.size.width}-${link.rect.size.height}`}
 					type="button"
 					tabIndex={-1}
 					aria-label={label}
