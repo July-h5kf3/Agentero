@@ -178,9 +178,14 @@ pub fn clean_note_markdown(md: &str) -> String {
 /// exists among the parent item's own (non-Agentero) notes: pull copied those
 /// notes into NOTES.md, so pushing them back would show the same text twice
 /// (once as the original note, once inside the sync note).
+///
+/// The paper shell (title + abstract) is deliberately KEPT: push is a
+/// faithful mirror of NOTES.md (Zotero's note title is derived from it, and
+/// silently dropping content was unpredictable). Frontmatter is vault
+/// metadata and is always stripped. Use [`strip_shell`] on the result to
+/// decide whether anything beyond the shell remains worth pushing.
 pub fn clean_note_markdown_dedup(md: &str, existing_note_texts: &[String]) -> String {
     let body = strip_frontmatter(md);
-    let body = strip_shell(&body);
     let existing: Vec<String> = existing_note_texts
         .iter()
         .map(|t| normalize_for_compare(t))
@@ -249,12 +254,14 @@ fn is_hr_line(trimmed: &str) -> bool {
     matches!(first, '-' | '*' | '_') && trimmed.len() >= 3 && trimmed.chars().all(|c| c == first)
 }
 
-/// Drop the paper shell — the title heading + abstract blockquote that Zotero
-/// already stores as item fields. Prefer the first `---` separator written by
-/// the shell/append logic as the shell boundary; when there is none, strip the
-/// intact shell shape (leading `# ` title + the blockquote right after it).
-/// Anything that does not match the shell shape is left untouched.
-fn strip_shell(md: &str) -> String {
+/// Drop the paper shell — the title heading + abstract blockquote. Push uses
+/// this only to decide whether anything beyond the shell remains (shell-only
+/// notes are not worth mirroring); the pushed content itself keeps the shell.
+/// Prefer the first `---` separator written by the shell/append logic as the
+/// shell boundary; when there is none, strip the intact shell shape (leading
+/// `# ` title + the blockquote right after it). Anything that does not match
+/// the shell shape is left untouched.
+pub fn strip_shell(md: &str) -> String {
     // Case 1: first `---` line outside code fences ends the shell.
     let mut offset = 0usize;
     let mut in_fence = false;
@@ -548,8 +555,8 @@ mod tests {
         let html = markdown_to_zotero_html(md);
         assert!(!html.contains("aliases"), "got: {html}");
         assert!(!html.contains("<hr"), "got: {html}");
-        // The leading title heading is shell (Zotero has a title field).
-        assert!(!html.contains("<h1>Title</h1>"), "got: {html}");
+        // Push is a faithful mirror: the shell stays in the note.
+        assert!(html.contains("<h1>Title</h1>"), "got: {html}");
         assert!(html.contains("body"), "got: {html}");
     }
 
@@ -570,19 +577,24 @@ mod tests {
     }
 
     #[test]
-    fn zotero_html_drops_shell_and_separators() {
+    fn zotero_html_keeps_shell_drops_separators() {
         // Real NOTES.md shape: frontmatter + title + abstract, then `---`,
         // then reading notes separated by more `---`.
         let md = "---\naliases: [x]\n---\n\n# Some Paper\n\n> the abstract\n\n---\n\nfirst note\n\n---\n\nsecond note";
         let html = markdown_to_zotero_html(md);
-        // Shell (title + abstract) and every separator must be gone.
-        assert!(!html.contains("Some Paper"), "got: {html}");
-        assert!(!html.contains("the abstract"), "got: {html}");
+        // Frontmatter and every separator must be gone; shell is mirrored.
         assert!(!html.contains("<hr"), "got: {html}");
         assert!(!html.contains("aliases"), "got: {html}");
+        assert!(html.contains("Some Paper"), "got: {html}");
+        assert!(html.contains("the abstract"), "got: {html}");
         // The actual reading notes survive.
         assert!(html.contains("first note"), "got: {html}");
         assert!(html.contains("second note"), "got: {html}");
+        // strip_shell (push skip-decision) still sees "content beyond shell".
+        let cleaned = clean_note_markdown(md);
+        let beyond = strip_shell(&cleaned);
+        assert!(beyond.contains("first note"), "got: {beyond}");
+        assert!(!beyond.contains("Some Paper"), "got: {beyond}");
     }
 
     #[test]
@@ -613,11 +625,11 @@ mod tests {
 ---\n\n\
 第二段笔记\u{200b}。";
         let html = markdown_to_zotero_html(md);
-        // Shell and separators gone.
-        assert!(!html.contains("Attention Is All You Need"), "got: {html}");
-        assert!(!html.contains("提出了 Transformer"), "got: {html}");
-        assert!(!html.contains("aliases"), "got: {html}");
+        // Separators gone; shell and content mirrored.
         assert!(!html.contains("<hr"), "got: {html}");
+        assert!(!html.contains("aliases"), "got: {html}");
+        assert!(html.contains("Attention Is All You Need"), "got: {html}");
+        assert!(html.contains("提出了 Transformer"), "got: {html}");
         // Content kept and cleaned.
         assert!(html.contains("<strong>Note</strong>"), "got: {html}");
         assert!(html.contains("自注意力避免了循环"), "got: {html}");
@@ -634,20 +646,19 @@ mod tests {
         let md = "---\r\naliases: [a]\r\n---\r\n\r\n# T\r\n\r\n> abs\r\n\r\n---\r\n\r\nnote body";
         let html = markdown_to_zotero_html(md);
         assert!(!html.contains("aliases"), "got: {html}");
-        assert!(!html.contains("<h1>T</h1>"), "got: {html}");
-        assert!(!html.contains("abs"), "got: {html}");
+        assert!(!html.contains("<hr"), "got: {html}");
+        assert!(html.contains("<h1>T</h1>"), "got: {html}");
         assert!(html.contains("note body"), "got: {html}");
     }
 
     #[test]
     fn code_fence_protects_separators() {
-        // `---` inside a fenced code block must survive both the shell strip and
-        // the hr removal.
+        // `---` inside a fenced code block must survive the hr removal and
+        // must not be mistaken for a shell boundary.
         let md = "# T\n\n> abs\n\n```yaml\nkey: value\n---\nother: 1\n```\n\nafter fence";
         let html = markdown_to_zotero_html(md);
-        // Shell stripped via the intact-shell fallback (no real separator).
-        assert!(!html.contains("<h1>T</h1>"), "got: {html}");
-        assert!(!html.contains("abs"), "got: {html}");
+        // Shell mirrored.
+        assert!(html.contains("<h1>T</h1>"), "got: {html}");
         // Code block content incl. its `---` survives.
         assert!(html.contains("key: value"), "got: {html}");
         assert!(html.contains("---"), "got: {html}");
@@ -656,13 +667,16 @@ mod tests {
     }
 
     #[test]
-    fn no_separator_strips_intact_shell_only() {
-        // User typed notes directly after the abstract (no `---` yet).
+    fn no_separator_keeps_shell() {
+        // User typed notes directly after the abstract (no `---` yet): the
+        // whole file is mirrored; strip_shell still isolates the user part.
         let md = "# Title\n\n> the abstract\n\nmy handwritten note";
         let html = markdown_to_zotero_html(md);
-        assert!(!html.contains("<h1>Title</h1>"), "got: {html}");
-        assert!(!html.contains("the abstract"), "got: {html}");
+        assert!(html.contains("<h1>Title</h1>"), "got: {html}");
+        assert!(html.contains("the abstract"), "got: {html}");
         assert!(html.contains("my handwritten note"), "got: {html}");
+        let beyond = strip_shell(&clean_note_markdown(md));
+        assert_eq!(beyond, "my handwritten note");
     }
 
     #[test]
@@ -675,11 +689,14 @@ mod tests {
     }
 
     #[test]
-    fn shell_only_cleans_to_empty() {
-        // Fresh paper, no reading notes: push skips empty inner html.
+    fn shell_only_has_nothing_beyond_shell() {
+        // Fresh paper, no reading notes: the mirror keeps the shell, but the
+        // push skip-decision (strip_shell) sees nothing worth pushing.
         let md = "---\naliases: [x]\n---\n\n# Title\n\n> abstract only";
-        let html = markdown_to_zotero_html(md);
-        assert!(html.trim().is_empty(), "got: {html}");
+        let cleaned = clean_note_markdown(md);
+        assert!(cleaned.contains("# Title"), "got: {cleaned}");
+        let beyond = strip_shell(&cleaned);
+        assert!(beyond.trim().is_empty(), "got: {beyond}");
     }
 
     #[test]

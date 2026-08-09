@@ -94,8 +94,14 @@ pub fn push_notes(
         };
         let cleaned = codec::clean_note_markdown_dedup(&notes_md, &existing);
         if cleaned.trim().is_empty() {
-            // Nothing left to mirror (shell-only note, or every block already
-            // lives in its own Zotero note): reclaim a stale marked note.
+            // Truly nothing to mirror — leave Zotero untouched.
+            continue;
+        }
+        // Shell-only notes (title + abstract, no reading notes yet) are not
+        // worth mirroring. Only when the shell shape is actually detected is
+        // it safe to reclaim a stale marked note.
+        let beyond_shell = codec::strip_shell(&cleaned);
+        if beyond_shell != cleaned && beyond_shell.trim().is_empty() {
             if let Err(e) = trash_marked_note(&tx, cand.zotero_item_id, &cand.paper_id) {
                 failures.push(format!("{}: {e}", cand.path));
             }
