@@ -49,7 +49,7 @@ type UseEditorContextMenuOptions = {
 		request: Omit<WikiRenameHeadingRequest, "path">,
 	) => Promise<void>;
 	/** Re-anchor the `[[` menu after the wikilink link template is inserted. */
-	updateWikiCompletionDraft: () => void;
+	scheduleCompletionProbe: () => void;
 };
 
 export type EditorContextMenu = {
@@ -87,7 +87,7 @@ export function useEditorContextMenu({
 	dirtyRef,
 	filePathRef,
 	onRenameHeading,
-	updateWikiCompletionDraft,
+	scheduleCompletionProbe,
 }: UseEditorContextMenuOptions): EditorContextMenu {
 	const selectionRef = useRef<RangeRef | null>(null);
 	const [selectionExpanded, setSelectionExpanded] = useState(false);
@@ -232,15 +232,15 @@ export function useEditorContextMenu({
 				editor.tf.focus({ at: editor.selection ?? selection });
 			}
 			if (template.wikiLinkDraft) {
-				window.requestAnimationFrame(updateWikiCompletionDraft);
+				scheduleCompletionProbe();
 			}
 		},
 		[
 			editor,
 			editorContainerRef,
 			readOnly,
+			scheduleCompletionProbe,
 			takeSelection,
-			updateWikiCompletionDraft,
 		],
 	);
 

@@ -241,8 +241,7 @@ export function MarkdownEditor({
 		slashCommandDraft,
 		completionControllerRef,
 		slashCommandControllerRef,
-		updateWikiCompletionDraft,
-		updateSlashCommandDraft,
+		scheduleCompletionProbe,
 		handleMenuKeyDown,
 		setWikiCompletionDraft,
 		setSlashCommandDraft,
@@ -256,16 +255,10 @@ export function MarkdownEditor({
 	useEffect(refreshTocMounted, [refreshTocMounted]);
 
 	const handleChange = useCallback(() => {
-		window.requestAnimationFrame(updateWikiCompletionDraft);
-		window.requestAnimationFrame(updateSlashCommandDraft);
+		scheduleCompletionProbe();
 		noteDocumentChanged();
 		refreshTocMounted();
-	}, [
-		noteDocumentChanged,
-		refreshTocMounted,
-		updateSlashCommandDraft,
-		updateWikiCompletionDraft,
-	]);
+	}, [noteDocumentChanged, refreshTocMounted, scheduleCompletionProbe]);
 
 	const {
 		syncWikiLinkPresentation,
@@ -416,7 +409,7 @@ export function MarkdownEditor({
 		dirtyRef,
 		filePathRef,
 		onRenameHeading,
-		updateWikiCompletionDraft,
+		scheduleCompletionProbe,
 	});
 
 	const docCtx = useMemo(
@@ -435,7 +428,7 @@ export function MarkdownEditor({
 	const handleEditorValueChange = useCallback(() => {
 		const presentationMarkdown = consumePresentationMarkdown();
 		if (presentationMarkdown !== null) {
-			window.requestAnimationFrame(updateWikiCompletionDraft);
+			scheduleCompletionProbe();
 			scheduleWikiLinkPresentationSync();
 			if (serialize() === presentationMarkdown) return;
 		}
@@ -444,9 +437,9 @@ export function MarkdownEditor({
 	}, [
 		consumePresentationMarkdown,
 		handleChange,
+		scheduleCompletionProbe,
 		scheduleWikiLinkPresentationSync,
 		serialize,
-		updateWikiCompletionDraft,
 	]);
 	const contextMenuCapabilities = editorContextMenuCapabilities({
 		headingRenameAvailable: Boolean(headingContext),
@@ -463,8 +456,7 @@ export function MarkdownEditor({
 						syncWikiLinkPresentation(editor.selection);
 						// Re-anchor or dismiss completion from caret moves (not only
 						// document edits) so arrow navigation cannot leave a stale menu.
-						window.requestAnimationFrame(updateWikiCompletionDraft);
-						window.requestAnimationFrame(updateSlashCommandDraft);
+						scheduleCompletionProbe();
 						scheduleSelectionContextPublish();
 					}}
 					onValueChange={handleEditorValueChange}
@@ -500,8 +492,7 @@ export function MarkdownEditor({
 											onScrollCapture={() => {
 												// Reposition instead of hard-dismiss: arrow-key list
 												// updates can reflow and fire scroll without leaving [[.
-												window.requestAnimationFrame(updateWikiCompletionDraft);
-												window.requestAnimationFrame(updateSlashCommandDraft);
+												scheduleCompletionProbe();
 											}}
 											onContextMenuCapture={handleEditorContextMenu}
 											onKeyDownCapture={readOnly ? undefined : handleKeyDown}
