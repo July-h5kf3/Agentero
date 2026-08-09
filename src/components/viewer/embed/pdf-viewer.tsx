@@ -1,14 +1,8 @@
 import { createPluginRegistration } from "@embedpdf/core";
 import { EmbedPDF } from "@embedpdf/core/react";
-import type {
-	PdfHighlightAnnoObject,
-	PdfLinkAnnoObject,
-} from "@embedpdf/models";
-import { PdfAnnotationSubtype } from "@embedpdf/models";
 import { AiManagerPluginPackage } from "@embedpdf/plugin-ai-manager/react";
 import {
 	AnnotationPluginPackage,
-	type AnnotationTransferItem,
 	useAnnotationCapability,
 } from "@embedpdf/plugin-annotation/react";
 import {
@@ -38,7 +32,6 @@ import {
 } from "@embedpdf/plugin-scroll/react";
 import { SearchPluginPackage, useSearch } from "@embedpdf/plugin-search/react";
 import {
-	type FormattedSelection,
 	SelectionPluginPackage,
 	useSelectionCapability,
 } from "@embedpdf/plugin-selection/react";
@@ -60,7 +53,6 @@ import { PdfCardStack } from "@/components/viewer/embed/chrome/pdf-card-stack";
 import { PdfFindBar } from "@/components/viewer/embed/chrome/pdf-find-bar";
 import { PdfOutlinePanel } from "@/components/viewer/embed/chrome/pdf-outline-panel";
 import { PdfToolbar } from "@/components/viewer/embed/chrome/pdf-toolbar";
-import { isLinkObject } from "@/components/viewer/embed/citation-links";
 import { DockviewViewport } from "@/components/viewer/embed/dockview-viewport";
 import { usePdfEngineContext } from "@/components/viewer/embed/engine-provider";
 import {
@@ -101,6 +93,7 @@ import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-an
 import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
 import { usePdfCitations } from "@/components/viewer/embed/use-pdf-citations";
 import { usePdfFind } from "@/components/viewer/embed/use-pdf-find";
+import { usePdfHighlights } from "@/components/viewer/embed/use-pdf-highlights";
 import { usePdfOutline } from "@/components/viewer/embed/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
@@ -163,22 +156,12 @@ import {
 	equationAnnotationPath,
 	loadEquationAnnotation,
 } from "@/lib/pdf/equation-annotation";
-import {
-	hasAnnotationsFile,
-	highlightViewFromObject,
-	isHighlightObject,
-	loadAnnotationItems,
-	saveAnnotationItems,
-} from "@/lib/pdf/highlight/annotation-store";
-import { migrateHighlightMarks } from "@/lib/pdf/highlight/migrate-marks";
+import { isHighlightObject } from "@/lib/pdf/highlight/annotation-store";
 import {
 	DEFAULT_HIGHLIGHT_COLOR,
-	HIGHLIGHT_HEX,
 	HIGHLIGHT_HEX_LIST,
-	HIGHLIGHT_OPACITY,
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
-import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import {
 	enqueuePaperLayoutAnalysis,
 	getLayoutDocumentResult,
@@ -206,7 +189,6 @@ import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
 	marksDir,
-	type NormalizedRect,
 	pinFromRects,
 	pinObscuresBodyText,
 	type SelectionPin,
@@ -479,11 +461,29 @@ function PdfViewerInner({
 	const [zoomField, setZoomField] = useState(() =>
 		formatPdfZoomPercentage(zoomLevel),
 	);
-	const [highlights, setHighlights] = useState<PdfHighlight[]>([]);
-	/** Normalized annotation rects for pin placement, keyed by annotation id. */
-	const [highlightAnchors, setHighlightAnchors] = useState(
-		() => new Map<string, NormalizedRect>(),
-	);
+	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
+	const paperKey = paperRelPath || paperAbsPath || null;
+
+	// ---- Highlights (EmbedPDF annotations) ----
+
+	const {
+		highlights,
+		highlightsRef,
+		highlightAnchors,
+		citationLinks,
+		createHighlights,
+		updateHighlightComment,
+		deleteHighlightAnnotation,
+	} = usePdfHighlights({
+		annotationCap,
+		docCap,
+		docId,
+		paperAbsPath,
+		paperKey,
+		totalPages,
+		onHighlightsChangeRef,
+	});
+
 	const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(
 		null,
 	);
@@ -567,17 +567,12 @@ function PdfViewerInner({
 
 	const pageFocusedRef = useRef(false);
 	const restoredRef = useRef(false);
-	const importedRef = useRef(false);
-	const importingRef = useRef(false);
 	const marksLoadedRef = useRef(false);
-	const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const hostRef = useRef<HTMLDivElement>(null);
 	const zoomRef = useRef(zoomLevel);
 	zoomRef.current = zoomLevel;
 	const zoomFieldFocusedRef = useRef(false);
 	const zoomFieldCancelRef = useRef(false);
-	const highlightsRef = useRef(highlights);
-	highlightsRef.current = highlights;
 	const threadsRef = useRef(threads);
 	threadsRef.current = threads;
 	const translatesRef = useRef(translates);
@@ -623,8 +618,6 @@ function PdfViewerInner({
 	const activeSessionRef = useRef<string | null>(null);
 	const translateSessionRef = useRef<string | null>(null);
 
-	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
-	const paperKey = paperRelPath || paperAbsPath || null;
 	const pdfDark = pdfColorScheme === "dark";
 
 	const discardIfEmptyDraft = useCallback((threadId: string | null) => {
@@ -894,115 +887,6 @@ function PdfViewerInner({
 				: null,
 		[formulaAnnotationPreview],
 	);
-	// ---- Highlights (EmbedPDF annotations) ----
-
-	const [citationLinks, setCitationLinks] = useState<
-		Map<number, PdfLinkAnnoObject[]>
-	>(new Map());
-
-	const rebuildHighlights = useCallback(() => {
-		if (!annotationCap) return;
-		const scope = annotationCap.forDocument(docId);
-		const all = scope.getAnnotations();
-		const doc = docCap?.getDocument(docId);
-		const objects = all.map((a) => a.object).filter(isHighlightObject);
-		const list = objects.map((o) => highlightViewFromObject(o, paperKey ?? ""));
-		setHighlights(list);
-		onHighlightsChangeRef.current?.(list);
-		// Pin anchors: normalize each annotation rect here, where the objects are
-		// already in hand, so pin geometry never reads plugin state during render.
-		const anchors = new Map<string, NormalizedRect>();
-		for (const o of objects) {
-			const size = doc?.pages[o.pageIndex]?.size;
-			if (!size?.width || !size?.height) continue;
-			anchors.set(o.id, {
-				x: o.rect.origin.x / size.width,
-				y: o.rect.origin.y / size.height,
-				w: o.rect.size.width / size.width,
-				h: o.rect.size.height / size.height,
-			});
-		}
-		setHighlightAnchors(anchors);
-		const links = new Map<number, PdfLinkAnnoObject[]>();
-		for (const tracked of all) {
-			const o = tracked.object;
-			if (isLinkObject(o) && o.target) {
-				const arr = links.get(o.pageIndex);
-				if (arr) arr.push(o);
-				else links.set(o.pageIndex, [o]);
-			}
-		}
-		setCitationLinks(links);
-	}, [annotationCap, docCap, docId, paperKey]);
-
-	const scheduleSave = useCallback(() => {
-		if (!paperAbsPath || !annotationCap) return;
-		if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-		saveTimerRef.current = setTimeout(async () => {
-			try {
-				const items = await annotationCap
-					.forDocument(docId)
-					.exportAnnotations()
-					.toPromise();
-				await saveAnnotationItems(paperAbsPath, items);
-			} catch {
-				// transient export failures are non-fatal; next change retries
-			}
-		}, 600);
-	}, [paperAbsPath, annotationCap, docId]);
-
-	useEffect(() => {
-		if (!annotationCap) return;
-		const scope = annotationCap.forDocument(docId);
-		const off = scope.onAnnotationEvent((event) => {
-			rebuildHighlights();
-			if (event.type !== "loaded" && !importingRef.current) scheduleSave();
-		});
-		rebuildHighlights();
-		return () => off();
-	}, [annotationCap, docId, rebuildHighlights, scheduleSave]);
-
-	useEffect(() => {
-		if (importedRef.current || !annotationCap || !docCap || totalPages <= 0)
-			return;
-		importedRef.current = true;
-		void (async () => {
-			const scope = annotationCap.forDocument(docId);
-			let items: AnnotationTransferItem[] = paperAbsPath
-				? await loadAnnotationItems(paperAbsPath)
-				: [];
-			if (
-				paperAbsPath &&
-				!items.length &&
-				!(await hasAnnotationsFile(paperAbsPath))
-			) {
-				const doc = docCap.getDocument(docId);
-				const migrated = await migrateHighlightMarks(
-					paperAbsPath,
-					(pageIndex) => doc?.pages[pageIndex]?.size ?? null,
-				);
-				if (migrated.length) {
-					items = migrated;
-					await saveAnnotationItems(paperAbsPath, migrated);
-				}
-			}
-			if (items.length) {
-				importingRef.current = true;
-				scope.importAnnotations(items);
-				setTimeout(() => {
-					importingRef.current = false;
-					rebuildHighlights();
-				}, 0);
-			}
-		})();
-	}, [
-		annotationCap,
-		docCap,
-		docId,
-		totalPages,
-		paperAbsPath,
-		rebuildHighlights,
-	]);
 
 	// ---- Ask / Translate persistence + streaming ----
 
@@ -2607,32 +2491,6 @@ function PdfViewerInner({
 		selectionCap?.clear(docId);
 	}, [selectionCap, docId]);
 
-	const createHighlights = useCallback(
-		(pages: FormattedSelection[], color: HighlightColor, quote: string) => {
-			const scope = annotationCap?.forDocument(docId);
-			if (!scope) return [] as { pageIndex: number; id: string }[];
-			const created: { pageIndex: number; id: string }[] = [];
-			for (const page of pages) {
-				const id = crypto.randomUUID();
-				const obj: PdfHighlightAnnoObject = {
-					type: PdfAnnotationSubtype.HIGHLIGHT,
-					id,
-					pageIndex: page.pageIndex,
-					rect: page.rect,
-					segmentRects: page.segmentRects,
-					strokeColor: HIGHLIGHT_HEX[color],
-					opacity: HIGHLIGHT_OPACITY,
-					created: new Date(),
-					custom: { app: "agentero", paletteKey: color, quote },
-				};
-				scope.createAnnotation(page.pageIndex, obj);
-				created.push({ pageIndex: page.pageIndex, id });
-			}
-			return created;
-		},
-		[annotationCap, docId],
-	);
-
 	const handleHighlight = useCallback(
 		(color: HighlightColor) => {
 			if (!selectionMenu) return;
@@ -2992,24 +2850,18 @@ function PdfViewerInner({
 	const saveEditor = useCallback(
 		(text: string) => {
 			if (!editor) return;
-			annotationCap
-				?.forDocument(docId)
-				.updateAnnotation(editor.pageIndex, editor.id, {
-					contents: text.trim() || undefined,
-				});
+			updateHighlightComment(editor.pageIndex, editor.id, text);
 			setEditor(null);
 		},
-		[editor, annotationCap, docId],
+		[editor, updateHighlightComment],
 	);
 
 	/** Header delete on the text annotation editor — remove highlight and close. */
 	const deleteEditorAnnotation = useCallback(() => {
 		if (!editor) return;
-		annotationCap
-			?.forDocument(docId)
-			.deleteAnnotation(editor.pageIndex, editor.id);
+		deleteHighlightAnnotation(editor.pageIndex, editor.id);
 		setEditor(null);
-	}, [editor, annotationCap, docId]);
+	}, [editor, deleteHighlightAnnotation]);
 
 	/**
 	 * Run layout analysis for this document.
@@ -3294,6 +3146,7 @@ function PdfViewerInner({
 	onHandleRef.current = onHandle;
 	const startLayoutAnalysisRef = useRef(startLayoutAnalysis);
 	startLayoutAnalysisRef.current = startLayoutAnalysis;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: highlightsRef is an injected mirror ref — depending on it would re-register the handle on every highlight change.
 	useEffect(() => {
 		const register = onHandleRef.current;
 		if (!register) return;
