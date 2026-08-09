@@ -85,8 +85,11 @@ export function wrapFrontmatter(interior: string): string {
 }
 
 /** Count top-level `key:` lines for the collapsed Properties badge. */
-export function countFrontmatterProperties(interior: string): number {
-	const parsed = parseFrontmatterProperties(interior);
+export function countFrontmatterProperties(
+	interior: string,
+	/** Pass an existing parse to avoid parsing the same source twice. */
+	parsed: FrontmatterParseResult = parseFrontmatterProperties(interior),
+): number {
 	if (parsed.ok) return parsed.properties.length;
 	let count = 0;
 	for (const line of interior.split(/\r?\n/)) {

@@ -86,7 +86,10 @@ export function FrontmatterPanel({
 	const [mode, setMode] = useState<EditorMode>("form");
 	const panelId = useId();
 	const parsed = useMemo(() => parseFrontmatterProperties(value), [value]);
-	const propertyCount = countFrontmatterProperties(value);
+	const propertyCount = useMemo(
+		() => countFrontmatterProperties(value, parsed),
+		[parsed, value],
+	);
 	const hasContent = value.trim().length > 0;
 	const formAvailable = parsed.ok;
 	const showSource = mode === "source" || !formAvailable;
