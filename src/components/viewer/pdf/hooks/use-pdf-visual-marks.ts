@@ -13,7 +13,7 @@
  *
  * Boundaries:
  * - the draft card state (`visualDraftEditor`) is owned by
- *   {@link usePdfLayoutAnalysis}, because it is mutually exclusive with the
+ *   {@link usePdfLayoutHover}, because it is mutually exclusive with the
  *   formula glossary card; this hook never sets it, it only asks that owner to
  *   open / close one (`openVisualDraftEditor` / `closeVisualDraftEditor`);
  * - the persisted mark array lives in {@link usePdfMarksIo}: setters and the
@@ -120,7 +120,7 @@ export type UsePdfVisualMarksOptions = {
 	/** Ask cluster: same default agent seat as a text ask turn. */
 	resolvePdfAskAgent: PdfAskThreads["resolvePdfAskAgent"];
 	/**
-	 * Draft card, owned by {@link usePdfLayoutAnalysis} together with the formula
+	 * Draft card, owned by {@link usePdfLayoutHover} together with the formula
 	 * glossary card so their mutual exclusivity cannot be split across files.
 	 */
 	visualDraftEditor: VisualDraftEditorState | null;
@@ -138,7 +138,7 @@ export type UsePdfVisualMarksOptions = {
 	/**
 	 * Mirrors of `regionSelecting` / `visualCropPending`, written here and read by
 	 * the layout-hover guard. Created by the parent because
-	 * {@link usePdfLayoutAnalysis} is declared first and needs the same ref objects.
+	 * {@link usePdfLayoutHover} is declared first and needs the same ref objects.
 	 */
 	regionSelectingRef: RefObject<boolean>;
 	visualCropPendingRef: RefObject<boolean>;

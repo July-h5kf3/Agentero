@@ -64,7 +64,10 @@ import { usePdfCards } from "@/components/viewer/pdf/hooks/use-pdf-cards";
 import { usePdfCitations } from "@/components/viewer/pdf/hooks/use-pdf-citations";
 import { usePdfFind } from "@/components/viewer/pdf/hooks/use-pdf-find";
 import { usePdfHighlights } from "@/components/viewer/pdf/hooks/use-pdf-highlights";
-import { usePdfLayoutAnalysis } from "@/components/viewer/pdf/hooks/use-pdf-layout-analysis";
+import { usePdfLayoutHover } from "@/components/viewer/pdf/hooks/use-pdf-layout-hover";
+import { usePdfLayoutRegions } from "@/components/viewer/pdf/hooks/use-pdf-layout-regions";
+import { usePdfLayoutRun } from "@/components/viewer/pdf/hooks/use-pdf-layout-run";
+import { usePdfLayoutTranslate } from "@/components/viewer/pdf/hooks/use-pdf-layout-translate";
 import { usePdfMarksIo } from "@/components/viewer/pdf/hooks/use-pdf-marks-io";
 import { usePdfOutline } from "@/components/viewer/pdf/hooks/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/pdf/hooks/use-pdf-page-text";
@@ -765,14 +768,27 @@ function PdfViewerInner({
 		if (!isVisualMarkKind(activeCard?.kind)) return null;
 		return visualTraces.find((tr) => tr.id === activeCard.id) ?? null;
 	}, [visualTraces, activeCard]);
-	// ---- Layout analysis (figures / formula hover + bulk translate) ----
-	// Owns both hover cards: a region-crop draft and the formula glossary are
-	// mutually exclusive, so their states and every guard live in one file.
-
+	// ---- Layout analysis ----
+	// Four hooks: region buckets, the analysis run, hover (sole owner of the two
+	// mutually exclusive hover cards) and the bulk-translate job.
 	const {
 		layoutOverlayVisible,
+		layoutRawRegions,
 		hoverableRegionsByPage,
 		rawRegionsByPage,
+	} = usePdfLayoutRegions(docId);
+
+	const { startLayoutAnalysisRef, layoutTaskRef } = usePdfLayoutRun({
+		docId,
+		paperAbsPath,
+		paperRelPath,
+		isActive,
+		totalPages,
+		layoutCap,
+		layoutCapRef,
+	});
+
+	const {
 		equationSymbols,
 		visualDraftEditor,
 		formulaAnnotationPreview,
@@ -788,28 +804,24 @@ function PdfViewerInner({
 		markFormulaHoverEnter,
 		scheduleFormulaHide,
 		rePlaceFormulaAnnotationOnScroll,
-		startLayoutAnalysisRef,
-		layoutTaskRef,
-		layoutTranslateJob,
-		layoutTranslateRunning,
-		layoutTranslateActive,
-		layoutTranslateLabel,
-		toggleLayoutTranslate,
-	} = usePdfLayoutAnalysis({
+	} = usePdfLayoutHover({
 		docId,
 		paperAbsPath,
-		paperRelPath,
-		isActive,
-		totalPages,
 		hostRef,
 		zoomLevel,
-		layoutCap,
-		layoutCapRef,
 		selectionMenuRef,
 		regionSelectingRef,
 		visualCropPendingRef,
 		beginVisualAnnotationRef,
 	});
+
+	const {
+		layoutTranslateJob,
+		layoutTranslateRunning,
+		layoutTranslateActive,
+		layoutTranslateLabel,
+		toggleLayoutTranslate,
+	} = usePdfLayoutTranslate({ docId, layoutRawRegions });
 
 	const visualDraftRegion = useMemo(
 		() =>

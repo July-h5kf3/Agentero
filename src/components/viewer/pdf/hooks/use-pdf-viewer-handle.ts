@@ -22,7 +22,7 @@ import {
 import type {
 	LayoutAnalysisTask,
 	StartLayoutAnalysisOptions,
-} from "@/components/viewer/pdf/hooks/use-pdf-layout-analysis";
+} from "@/components/viewer/pdf/hooks/use-pdf-layout-run";
 import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/region-crop";
 import type {
 	PdfViewerHandle,
@@ -65,7 +65,7 @@ export type UsePdfViewerHandleOptions = {
 	threadsRef: RefObject<PdfAskThread[]>;
 	visualTracesRef: RefObject<PdfVisualSessionTrace[]>;
 	setThreads: Dispatch<SetStateAction<PdfAskThread[]>>;
-	/** Layout cluster; owned by {@link usePdfLayoutAnalysis}. */
+	/** Layout cluster; owned by {@link usePdfLayoutRun}. */
 	layoutTaskRef: RefObject<LayoutAnalysisTask | null>;
 	startLayoutAnalysisRef: RefObject<
 		(opts?: StartLayoutAnalysisOptions) => void
