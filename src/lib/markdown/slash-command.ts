@@ -12,10 +12,7 @@ import {
 	type TElement,
 	type TText,
 } from "platejs";
-import {
-	type EditorLinkTemplateKind,
-	insertEditorLinkTemplate,
-} from "@/lib/markdown/editor-context-menu";
+import { insertEditorLinkTemplate } from "@/lib/markdown/editor-context-menu";
 import { findWikiCompletionTrigger } from "@/lib/wiki-completion";
 
 export type SlashCommandId =
@@ -324,15 +321,6 @@ function insertMermaidCodeBlock(editor: SlateEditor): void {
 	});
 }
 
-function insertLinkTemplate(
-	editor: SlateEditor,
-	kind: EditorLinkTemplateKind,
-): void {
-	const selection = editor.selection;
-	if (!selection) return;
-	insertEditorLinkTemplate(editor, kind, selection);
-}
-
 function insertObsidianCallout(
 	editor: SlateEditor,
 	blockPath: number[],
@@ -407,10 +395,14 @@ export function executeSlashCommand(
 			insertMermaidCodeBlock(editor);
 			break;
 		case "internalLink":
-			insertLinkTemplate(editor, "wiki");
-			break;
 		case "externalLink":
-			insertLinkTemplate(editor, "external");
+			if (editor.selection) {
+				insertEditorLinkTemplate(
+					editor,
+					commandId === "internalLink" ? "wiki" : "external",
+					editor.selection,
+				);
+			}
 			break;
 		case "callout":
 			return insertObsidianCallout(editor, live.blockPath);
