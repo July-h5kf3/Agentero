@@ -68,11 +68,45 @@ export const libraryStore = createStore<LibraryStore>(() => ({
 	paperMetaByRelPath: new Map(),
 }));
 
+function tagsFingerprint(tags: PaperMetadata["tags"]): string {
+	if (!tags?.length) return "";
+	return tags
+		.map((t) => (typeof t === "string" ? t : `${t.name}:${t.color ?? ""}`))
+		.join("|");
+}
+
+/**
+ * Content equality for catalog refreshes: watcher-driven reloads usually
+ * return identical rows, and replacing the array anyway would re-render the
+ * whole library and retrigger heatmap loads for every paper.
+ */
+function samePapers(a: PaperMetadata[], b: PaperMetadata[]): boolean {
+	if (a === b) return true;
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		const x = a[i];
+		const y = b[i];
+		if (x === y) continue;
+		if (
+			x.path !== y.path ||
+			x.updated_at !== y.updated_at ||
+			x.is_read !== y.is_read ||
+			x.title !== y.title ||
+			tagsFingerprint(x.tags) !== tagsFingerprint(y.tags)
+		) {
+			return false;
+		}
+	}
+	return true;
+}
+
 export function setLibraryPapers(
 	next: PaperMetadata[] | ((previous: PaperMetadata[]) => PaperMetadata[]),
 ): void {
 	const papers =
 		typeof next === "function" ? next(libraryStore.getState().papers) : next;
+	const prev = libraryStore.getState();
+	if (papers === prev.papers || samePapers(prev.papers, papers)) return;
 	libraryStore.setState({ papers, paperMetaByRelPath: indexByRelPath(papers) });
 }
 

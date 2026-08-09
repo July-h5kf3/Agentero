@@ -568,6 +568,11 @@ pub fn delete_under_path(vault_root: &Path, path: &str) -> Result<usize, AppErro
             params![path, like],
         )
         .map_err(AppError::from)?;
+    conn.execute(
+        "DELETE FROM pdf_page_counts WHERE path = ?1 OR path LIKE ?2",
+        params![path, like],
+    )
+    .map_err(AppError::from)?;
     Ok(n)
 }
 
@@ -592,6 +597,12 @@ pub fn move_under_path(vault_root: &Path, from: &str, to: &str) -> Result<usize,
             params![to, offset, now, from, like],
         )
         .map_err(AppError::from)?;
+    conn.execute(
+        "UPDATE pdf_page_counts SET path = ?1 || substr(path, ?2) \
+         WHERE path = ?3 OR path LIKE ?4",
+        params![to, offset, from, like],
+    )
+    .map_err(AppError::from)?;
     Ok(n)
 }
 
@@ -617,6 +628,46 @@ pub fn prune_missing(vault_root: &Path) -> Result<usize, AppError> {
         }
     }
     Ok(removed)
+}
+
+/// Cached PDF page counts keyed by vault-relative paper path.
+/// Lets the reading heatmap skip reopening every PDF just to count pages.
+pub fn list_page_counts(
+    vault_root: &Path,
+) -> Result<std::collections::HashMap<String, i64>, AppError> {
+    let conn = ensure_catalog(vault_root)?;
+    let mut stmt = conn
+        .prepare("SELECT path, page_count FROM pdf_page_counts")
+        .map_err(AppError::from)?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+        .map_err(AppError::from)?
+        .collect::<Result<std::collections::HashMap<_, _>, _>>()
+        .map_err(AppError::from)?;
+    Ok(rows)
+}
+
+/// Batch-upsert cached page counts. Deliberately does not touch `papers`
+/// (no `updated_at` bump) so caching never reorders the library.
+pub fn set_page_counts(vault_root: &Path, counts: &[(String, i64)]) -> Result<(), AppError> {
+    if counts.is_empty() {
+        return Ok(());
+    }
+    let conn = ensure_catalog(vault_root)?;
+    let tx = conn.unchecked_transaction().map_err(AppError::from)?;
+    {
+        let mut stmt = tx
+            .prepare(
+                "INSERT INTO pdf_page_counts (path, page_count) VALUES (?1, ?2) \
+                 ON CONFLICT(path) DO UPDATE SET page_count = excluded.page_count",
+            )
+            .map_err(AppError::from)?;
+        for (path, count) in counts {
+            stmt.execute(params![path, count]).map_err(AppError::from)?;
+        }
+    }
+    tx.commit().map_err(AppError::from)?;
+    Ok(())
 }
 
 fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {

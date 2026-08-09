@@ -77,6 +77,8 @@ macro_rules! common_commands {
             crate::features::catalog::commands::paper_set_is_read,
             crate::features::catalog::commands::paper_set_tags,
             crate::features::catalog::commands::paper_rescan,
+            crate::features::catalog::commands::paper_page_counts,
+            crate::features::catalog::commands::paper_set_page_counts,
             crate::features::search::commands::vault_search,
             crate::app::menu::set_locale,
             $($extra),*

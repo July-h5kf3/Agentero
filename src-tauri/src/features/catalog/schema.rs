@@ -4,6 +4,7 @@
 //! - v2: Translator / magic-wand fields (publication, volume, isbn, …)
 //! - v3: `is_read` for paper-reader workflow
 //! - v4: Zotero sync linkage (`zotero_item_id`, `zotero_last_synced`)
+//! - v5: list-order indexes (`updated_at`, `added_at`, `title`) + `pdf_page_counts`
 
 use crate::core::error::AppError;
 use rusqlite::Connection;
@@ -11,7 +12,7 @@ use std::fs;
 use std::path::Path;
 
 /// Current catalog schema version written to `schema_meta`.
-pub const SCHEMA_VERSION: i32 = 4;
+pub const SCHEMA_VERSION: i32 = 5;
 
 const DDL_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -87,6 +88,18 @@ ALTER TABLE papers ADD COLUMN zotero_last_synced TEXT;
 CREATE INDEX IF NOT EXISTS idx_papers_zotero_item_id ON papers(zotero_item_id);
 "#;
 
+/// Schema v5: list-order indexes + persistent PDF page-count cache.
+/// `title COLLATE NOCASE` matches the library's default ORDER BY.
+const MIGRATE_V4_TO_V5: &str = r#"
+CREATE INDEX IF NOT EXISTS idx_papers_updated_at ON papers(updated_at);
+CREATE INDEX IF NOT EXISTS idx_papers_added_at ON papers(added_at);
+CREATE INDEX IF NOT EXISTS idx_papers_title ON papers(title COLLATE NOCASE);
+CREATE TABLE IF NOT EXISTS pdf_page_counts (
+    path       TEXT PRIMARY KEY NOT NULL,
+    page_count INTEGER NOT NULL
+);
+"#;
+
 /// Absolute path to `{vault}/.agentero/catalog.sqlite`.
 pub fn catalog_db_path(vault_root: &Path) -> std::path::PathBuf {
     vault_root.join(".agentero").join("catalog.sqlite")
@@ -101,8 +114,15 @@ pub fn ensure_catalog(vault_root: &Path) -> Result<Connection, AppError> {
     let conn = Connection::open(&db_path)
         .map_err(|e| AppError::message(format!("open catalog {}: {e}", db_path.display())))?;
 
-    conn.execute_batch("PRAGMA foreign_keys = ON;")
-        .map_err(|e| AppError::message(format!("pragma: {e}")))?;
+    // WAL lets readers proceed while the app writes; busy_timeout absorbs
+    // short lock contention instead of failing commands immediately.
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL;\n\
+         PRAGMA synchronous = NORMAL;\n\
+         PRAGMA busy_timeout = 5000;\n\
+         PRAGMA foreign_keys = ON;",
+    )
+    .map_err(|e| AppError::message(format!("pragma: {e}")))?;
 
     migrate(&conn)?;
     Ok(conn)
@@ -186,6 +206,19 @@ fn migrate(conn: &Connection) -> Result<(), AppError> {
             }
         }
         set_schema_version(conn, 4)?;
+    }
+
+    let version = schema_version(conn).unwrap_or(0);
+    if version < 5 {
+        for stmt in MIGRATE_V4_TO_V5.split(';') {
+            let s = stmt.trim();
+            if s.is_empty() {
+                continue;
+            }
+            conn.execute_batch(&format!("{s};"))
+                .map_err(|e| AppError::message(format!("catalog migrate v5: {e}")))?;
+        }
+        set_schema_version(conn, 5)?;
     }
 
     Ok(())

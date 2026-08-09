@@ -16,6 +16,7 @@ import { joinVaultPath } from "@/lib/vault";
 /** Collect activity points for one paper folder (absolute path). */
 export async function loadReadingActivityPoints(
 	paperAbsPath: string,
+	cachedPageCount?: number,
 ): Promise<{ points: ReadingActivityPoint[]; pageCount?: number }> {
 	if (!paperAbsPath) return { points: [] };
 
@@ -23,7 +24,11 @@ export async function loadReadingActivityPoints(
 		listPdfHighlights(paperAbsPath).catch(() => []),
 		listPdfAskThreads(paperAbsPath).catch(() => []),
 		listPdfTranslates(paperAbsPath).catch(() => []),
-		getPdfPageCount(paperAbsPath),
+		// Opening the whole PDF just to count pages is the expensive part —
+		// a persisted count (catalog `pdf_page_counts`) skips it entirely.
+		cachedPageCount != null && cachedPageCount > 0
+			? Promise.resolve(cachedPageCount)
+			: getPdfPageCount(paperAbsPath),
 	]);
 
 	const points: ReadingActivityPoint[] = [];
@@ -65,23 +70,45 @@ export async function loadReadingActivityPoints(
 
 export async function loadReadingHeatmap(
 	paperAbsPath: string,
-): Promise<ReadingHeatmap> {
-	const { points, pageCount } = await loadReadingActivityPoints(paperAbsPath);
-	if (!points.length && !pageCount) return emptyHeatmap();
-	return aggregateReadingHeatmap(points, { pageCount });
+	cachedPageCount?: number,
+): Promise<{ heatmap: ReadingHeatmap; discoveredPageCount?: number }> {
+	const { points, pageCount } = await loadReadingActivityPoints(
+		paperAbsPath,
+		cachedPageCount,
+	);
+	const heatmap =
+		!points.length && !pageCount
+			? emptyHeatmap()
+			: aggregateReadingHeatmap(points, { pageCount });
+	// Only report counts freshly read from the PDF (not cache echoes).
+	const discoveredPageCount =
+		cachedPageCount == null && pageCount != null ? pageCount : undefined;
+	return { heatmap, discoveredPageCount };
 }
+
+export type ReadingHeatmapBatch = {
+	heatmaps: Map<string, ReadingHeatmap>;
+	/** Page counts freshly read from PDFs — persist to the catalog cache. */
+	discoveredPageCounts: Map<string, number>;
+};
 
 /**
  * Load heatmaps for many papers with bounded concurrency.
  * Keys are vault-relative paper paths (or id when path missing).
+ * `opts.pageCounts` (same keys) skips the per-paper full-PDF page read.
  */
 export async function loadReadingHeatmaps(
 	vaultPath: string,
 	papers: ReadonlyArray<{ path?: string; id: string }>,
-	opts?: { concurrency?: number },
-): Promise<Map<string, ReadingHeatmap>> {
+	opts?: {
+		concurrency?: number;
+		pageCounts?: ReadonlyMap<string, number>;
+	},
+): Promise<ReadingHeatmapBatch> {
 	const out = new Map<string, ReadingHeatmap>();
-	if (!vaultPath || !papers.length) return out;
+	const discovered = new Map<string, number>();
+	if (!vaultPath || !papers.length)
+		return { heatmaps: out, discoveredPageCounts: discovered };
 
 	const concurrency = Math.max(1, opts?.concurrency ?? 6);
 	let i = 0;
@@ -98,7 +125,14 @@ export async function loadReadingHeatmaps(
 			}
 			const abs = joinVaultPath(vaultPath, rel);
 			try {
-				out.set(key, await loadReadingHeatmap(abs));
+				const { heatmap, discoveredPageCount } = await loadReadingHeatmap(
+					abs,
+					opts?.pageCounts?.get(key),
+				);
+				out.set(key, heatmap);
+				if (discoveredPageCount != null) {
+					discovered.set(key, discoveredPageCount);
+				}
 			} catch {
 				out.set(key, emptyHeatmap());
 			}
@@ -110,7 +144,7 @@ export async function loadReadingHeatmaps(
 			worker(),
 		),
 	);
-	return out;
+	return { heatmaps: out, discoveredPageCounts: discovered };
 }
 
 export function heatmapCacheKey(paper: { path?: string; id: string }): string {

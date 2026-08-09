@@ -139,6 +139,52 @@ export async function rescanPapers(vaultPath: string): Promise<number> {
 	return r.count;
 }
 
+/**
+ * Cached PDF page counts keyed by vault-relative paper path (catalog table
+ * `pdf_page_counts`). Lets the reading heatmap skip reopening every PDF.
+ * Best-effort: cache misses/failures just fall back to reading the PDF.
+ */
+export async function listPaperPageCounts(
+	vaultPath: string,
+): Promise<Map<string, number>> {
+	if (!isTauri()) return new Map();
+	const { isRemoteVaultHandle } = await import(
+		"@/lib/vault/remote/remote-vault"
+	);
+	if (isRemoteVaultHandle(vaultPath)) return new Map();
+	try {
+		const counts = await invokeApi<Record<string, number>>(
+			"paper_page_counts",
+			{ args: { vaultPath } },
+			{ fallback: "paper_page_counts failed" },
+		);
+		return new Map(Object.entries(counts ?? {}));
+	} catch {
+		return new Map();
+	}
+}
+
+/** Persist newly discovered PDF page counts (best-effort, fire-and-forget). */
+export async function savePaperPageCounts(
+	vaultPath: string,
+	counts: ReadonlyMap<string, number>,
+): Promise<void> {
+	if (!isTauri() || counts.size === 0) return;
+	const { isRemoteVaultHandle } = await import(
+		"@/lib/vault/remote/remote-vault"
+	);
+	if (isRemoteVaultHandle(vaultPath)) return;
+	try {
+		await invokeApi<null>(
+			"paper_set_page_counts",
+			{ args: { vaultPath, counts: Object.fromEntries(counts) } },
+			{ fallback: "paper_set_page_counts failed", allowVoid: true },
+		);
+	} catch {
+		// Cache write failure is invisible by design; next load retries.
+	}
+}
+
 export type TrashResult = {
 	batchId: string;
 	count: number;

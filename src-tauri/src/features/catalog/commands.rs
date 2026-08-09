@@ -260,3 +260,51 @@ pub fn paper_rescan(args: PaperRescanArgs) -> ApiResult<PaperRescanResult> {
         }
     }
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperPageCountsArgs {
+    pub vault_path: String,
+}
+
+/// Cached PDF page counts keyed by vault-relative paper path.
+#[tauri::command]
+pub fn paper_page_counts(
+    args: PaperPageCountsArgs,
+) -> ApiResult<std::collections::HashMap<String, i64>> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return map_err(AppError::message("vault path is not a directory"));
+    }
+    match papers::list_page_counts(&vault) {
+        Ok(counts) => ApiResult::ok(counts),
+        Err(e) => map_err(e),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperSetPageCountsArgs {
+    pub vault_path: String,
+    /// vault-relative paper path → page count.
+    pub counts: std::collections::HashMap<String, i64>,
+}
+
+/// Persist newly discovered PDF page counts (heatmap page-count cache).
+#[tauri::command]
+pub fn paper_set_page_counts(args: PaperSetPageCountsArgs) -> ApiResult<()> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return map_err(AppError::message("vault path is not a directory"));
+    }
+    let counts: Vec<(String, i64)> = args
+        .counts
+        .into_iter()
+        .map(|(path, count)| (path.trim().trim_matches('/').replace('\\', "/"), count))
+        .filter(|(path, count)| !path.is_empty() && *count > 0)
+        .collect();
+    match papers::set_page_counts(&vault, &counts) {
+        Ok(()) => ApiResult::ok(()),
+        Err(e) => map_err(e),
+    }
+}

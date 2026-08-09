@@ -53,7 +53,11 @@ import {
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
 import { formatAuthorsShort, type PaperMetadata } from "@/lib/paper";
-import { filterPapersByScope } from "@/lib/paper/api";
+import {
+	filterPapersByScope,
+	listPaperPageCounts,
+	savePaperPageCounts,
+} from "@/lib/paper/api";
 import {
 	heatmapCacheKey,
 	loadReadingHeatmaps,
@@ -103,6 +107,13 @@ export type PapersLibraryProps = {
  * double-click does not copy before `detail > 1` / `dblclick` can cancel it.
  */
 const CELL_COPY_CLICK_DELAY_MS = 320;
+
+/**
+ * Delay before a keystroke commits to the shared library query.
+ * Keeps typing local to the input so each key does not re-filter/sort the
+ * full catalog (and re-render workspace subscribers of `query`).
+ */
+const SEARCH_DEBOUNCE_MS = 250;
 
 type SortKey = LibraryColumnKey;
 type SortDir = "asc" | "desc";
@@ -477,6 +488,41 @@ export function PapersLibrary({
 		null,
 	);
 
+	/**
+	 * Local mirror of `query`: keystrokes filter the (precomputed) rows here
+	 * immediately, but only commit to the shared query after a debounce so
+	 * workspace subscribers are not re-rendered on every key.
+	 */
+	const [inputValue, setInputValue] = useState(query);
+	const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	useEffect(() => {
+		setInputValue(query);
+		if (searchDebounceRef.current) {
+			clearTimeout(searchDebounceRef.current);
+			searchDebounceRef.current = null;
+		}
+	}, [query]);
+
+	useEffect(
+		() => () => {
+			if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+		},
+		[],
+	);
+
+	const onSearchInputChange = useCallback(
+		(value: string) => {
+			setInputValue(value);
+			if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+			searchDebounceRef.current = setTimeout(() => {
+				searchDebounceRef.current = null;
+				onQueryChange?.(value);
+			}, SEARCH_DEBOUNCE_MS);
+		},
+		[onQueryChange],
+	);
+
 	const cancelPendingCopy = useCallback(() => {
 		if (pendingCopyTimerRef.current != null) {
 			clearTimeout(pendingCopyTimerRef.current);
@@ -592,25 +638,70 @@ export function PapersLibrary({
 		[papers, scopePath],
 	);
 
+	/**
+	 * Heatmap cache survives re-renders and background catalog refreshes
+	 * (which replace `scopedPapers` identity without changing content).
+	 * Only refocusing the Library tab clears it to pick up fresh PDF activity.
+	 */
+	const heatmapCacheRef = useRef<{
+		vault: string | null;
+		map: Map<string, ReadingHeatmap>;
+	}>({ vault: null, map: new Map() });
+	const wasActiveRef = useRef(false);
+
 	/** Load reading heatmaps for the current folder scope (full library or org folder). */
 	useEffect(() => {
+		const justActivated = active && !wasActiveRef.current;
+		wasActiveRef.current = active;
 		if (!active) return;
 		if (!vaultPath || !scopedPapers.length) {
 			setHeatmaps(new Map());
 			return;
 		}
+		const cache = heatmapCacheRef.current;
+		if (cache.vault !== vaultPath) {
+			cache.vault = vaultPath;
+			cache.map = new Map();
+		}
+		if (justActivated) cache.map.clear();
+
+		const cachedNow = new Map<string, ReadingHeatmap>();
+		const missing: PaperMetadata[] = [];
+		for (const p of scopedPapers) {
+			const key = heatmapCacheKey(p);
+			const hit = cache.map.get(key);
+			if (hit) cachedNow.set(key, hit);
+			else missing.push(p);
+		}
+		if (cachedNow.size > 0) setHeatmaps(cachedNow);
+		if (!missing.length) return;
+
 		let cancelled = false;
-		void loadReadingHeatmaps(vaultPath, scopedPapers, { concurrency: 6 }).then(
-			(map) => {
-				if (!cancelled) setHeatmaps(map);
-			},
-		);
+		void (async () => {
+			// Persisted page counts skip the per-paper full-PDF read.
+			const pageCounts = await listPaperPageCounts(vaultPath);
+			const { heatmaps, discoveredPageCounts } = await loadReadingHeatmaps(
+				vaultPath,
+				missing,
+				{ concurrency: 6, pageCounts },
+			);
+			if (cancelled) return;
+			if (discoveredPageCounts.size > 0) {
+				void savePaperPageCounts(vaultPath, discoveredPageCounts);
+			}
+			for (const [key, heat] of heatmaps) cache.map.set(key, heat);
+			setHeatmaps((prev) => {
+				const next = new Map(prev);
+				for (const [key, heat] of heatmaps) next.set(key, heat);
+				return next;
+			});
+		})();
 		return () => {
 			cancelled = true;
 		};
 	}, [vaultPath, scopedPapers, active]);
 
-	const normalizedQuery = (query ?? "").trim().toLocaleLowerCase();
+	const normalizedQuery = (inputValue ?? "").trim().toLocaleLowerCase();
 	const tagFilterSet = useMemo(() => new Set(tagFilter), [tagFilter]);
 
 	/** Unique tags in the current folder scope (for the tags-column filter menu). */
@@ -640,18 +731,21 @@ export function PapersLibrary({
 		);
 	}, []);
 
-	/** Coerce tags + sort keys once per paper; filter/sort reuse them. */
+	/** Coerce tags + sort keys once per paper list change (not per keystroke). */
+	const indexedRows = useMemo(
+		() => scopedPapers.map(buildPaperRow),
+		[scopedPapers],
+	);
+
+	/** Keystroke-level work is filter + sort over precomputed rows only. */
 	const rows = useMemo(() => {
-		const indexed = scopedPapers.map(buildPaperRow);
-		let filtered = indexed;
+		let filtered = indexedRows;
 		if (normalizedQuery) {
-			filtered = filtered.filter((row) => {
-				const title = (row.paper.title ?? "").toLocaleLowerCase();
-				return (
-					title.includes(normalizedQuery) ||
-					row.tagSearch.includes(normalizedQuery)
-				);
-			});
+			filtered = filtered.filter(
+				(row) =>
+					String(row.sort.title).includes(normalizedQuery) ||
+					row.tagSearch.includes(normalizedQuery),
+			);
 		}
 		if (tagFilterSet.size > 0) {
 			filtered = filtered.filter((row) =>
@@ -661,7 +755,7 @@ export function PapersLibrary({
 		const copy = [...filtered];
 		copy.sort((a, b) => comparePaperRows(a, b, sortKey, sortDir));
 		return copy;
-	}, [scopedPapers, sortKey, sortDir, normalizedQuery, tagFilterSet]);
+	}, [indexedRows, normalizedQuery, tagFilterSet, sortKey, sortDir]);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const uiScale = useUiScale();
@@ -763,8 +857,8 @@ export function PapersLibrary({
 												/>
 												<Input
 													type="search"
-													value={query}
-													onChange={(e) => onQueryChange(e.target.value)}
+													value={inputValue}
+													onChange={(e) => onSearchInputChange(e.target.value)}
 													aria-label={t("papersLibrary.search")}
 													className="h-6 border-transparent bg-muted/50 pl-6 pr-1.5 text-xs shadow-none focus-visible:border-input focus-visible:bg-background"
 													onMouseDown={(e) => e.stopPropagation()}

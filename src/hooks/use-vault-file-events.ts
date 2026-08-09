@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
-import { isUnderPapers } from "@/lib/paper/paths";
+import { isPaperAssetPath, isUnderPapers } from "@/lib/paper/paths";
 import {
 	startVaultWatch,
 	stopVaultWatch,
@@ -111,9 +111,11 @@ function payloadAffectsLibrary(
 	if (payload.paths.some((p) => isCatalogStoragePath(vaultPath, p)))
 		return true;
 	// CLI/import tools materialize paper folders and metadata under papers/.
-	// Plain content edits to NOTES.md should not hit the catalog path.
+	// Plain content edits to NOTES.md should not hit the catalog path, and
+	// asset writes (marks/source/assets) never change catalog rows at all.
 	return (
-		payload.kind !== "modify" && payload.paths.some((p) => isUnderPapers(p))
+		payload.kind !== "modify" &&
+		payload.paths.some((p) => isUnderPapers(p) && !isPaperAssetPath(p))
 	);
 }
 

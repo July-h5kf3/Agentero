@@ -19,6 +19,8 @@
 - `tags_json`：字符串或 `{name,color}`（Apple 8 色）
 - `paper_rescan`：盘上有、库内无则补齐
 - 删除：回收站快照；恢复 upsert
+- 连接启用 WAL + `busy_timeout`，写入不阻塞列表读取
+- `pdf_page_counts`：PDF 页数缓存表（随移动/删除同步），阅读热力图不再整文件打开 PDF 数页
 
 ## 命令（摘要）
 
@@ -28,6 +30,7 @@
 | `paper_set_tags` / `paper_set_is_read` | 写 |
 | `paper_rescan` | 盘 → 库 |
 | `paper_export` / `paper_import` | Bib 等 |
+| `paper_page_counts` / `paper_set_page_counts` | 页数缓存读写 |
 
 CLI：`agentero paper …` / `paper tag *`。
 

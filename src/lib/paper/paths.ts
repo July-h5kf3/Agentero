@@ -17,6 +17,17 @@ export function isUnderPapers(path: string | null): boolean {
 	return /(^|\/)papers\//i.test(norm);
 }
 
+/**
+ * True when path is inside a paper folder's internal asset dirs
+ * (`<paper>/source|assets|marks/…`). Highlight/LaTeX/image writes there never
+ * change catalog rows, so they must not trigger library refreshes.
+ */
+export function isPaperAssetPath(path: string | null): boolean {
+	if (!path) return false;
+	const norm = normalizePath(path);
+	return /(^|\/)papers\/.+?\/(source|assets|marks)(\/|$)/i.test(norm);
+}
+
 /** `<paperDir>/NOTES.md` — structured notes for the paper. */
 export function notesPathForPaper(paperDir: string): string {
 	const sep = paperDir.endsWith("/") ? "" : "/";
