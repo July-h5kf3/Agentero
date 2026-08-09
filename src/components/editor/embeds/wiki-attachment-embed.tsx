@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PdfViewer } from "@/components/viewer/embed/pdf-viewer";
+import { EmbedStatus } from "@/components/editor/embeds/embed-status";
+import { PdfViewer } from "@/components/viewer/pdf/pdf-viewer";
 import { createKeyedCache } from "@/lib/core/keyed-cache";
 import { localFileToArrayBuffer } from "@/lib/paper/media";
 import { imageMimeFromPath } from "@/lib/workspace/viewer";
@@ -184,18 +185,10 @@ export function WikiAttachmentEmbed({
 	}, [attachmentBytes, imageResourceKey, targetPath]);
 
 	if (state.kind === "loading") {
-		return (
-			<span className="block px-4 py-3 text-muted-foreground text-sm">
-				{t("embed.loading")}
-			</span>
-		);
+		return <EmbedStatus message={t("embed.loading")} />;
 	}
 	if (state.kind === "error") {
-		return (
-			<span className="block px-4 py-3 text-muted-foreground text-sm">
-				{t("embed.error")}
-			</span>
-		);
+		return <EmbedStatus message={t("embed.error")} />;
 	}
 	if (kind === "image" && state.kind === "ready" && imageSource) {
 		return (
@@ -215,11 +208,7 @@ export function WikiAttachmentEmbed({
 		);
 	}
 	if (kind === "image" && state.kind === "ready") {
-		return (
-			<span className="block px-4 py-3 text-muted-foreground text-sm">
-				{t("embed.loading")}
-			</span>
-		);
+		return <EmbedStatus message={t("embed.loading")} />;
 	}
 	if (state.kind !== "ready") return null;
 	return (

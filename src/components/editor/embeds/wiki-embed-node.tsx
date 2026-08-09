@@ -24,6 +24,7 @@ import {
 	useWikiEmbedAncestry,
 	WikiEmbedAncestryProvider,
 } from "@/components/editor/embeds/ancestry-context";
+import { EmbedStatus } from "@/components/editor/embeds/embed-status";
 import { useWikiEmbedProjection } from "@/components/editor/embeds/projection-context";
 import { WikiAnnotationEmbed } from "@/components/editor/embeds/wiki-annotation-embed";
 import { createKeyedCache } from "@/lib/core/keyed-cache";
@@ -184,14 +185,6 @@ function loadEmbedState(
 					detail: error instanceof Error ? error.message : String(error),
 				}),
 			),
-	);
-}
-
-function EmbedStatus({ message }: { message: string }) {
-	return (
-		<span className="block px-4 py-3 text-muted-foreground text-sm">
-			{message}
-		</span>
 	);
 }
 

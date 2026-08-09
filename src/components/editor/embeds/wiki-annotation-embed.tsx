@@ -5,6 +5,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { MessageResponse } from "@/components/ai-elements/message";
+import { EmbedStatus } from "@/components/editor/embeds/embed-status";
 import { createKeyedCache } from "@/lib/core/keyed-cache";
 import { cn } from "@/lib/core/utils";
 import { visualTraceImageAssetRelPath } from "@/lib/pdf/agent-trace/image";
@@ -224,27 +225,17 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 
 	if (state.kind === "loading") {
 		return (
-			<span
-				className={cn(
-					"block px-3 py-2 text-muted-foreground text-sm",
-					className,
-				)}
-			>
-				{t("embed.loading")}
-			</span>
+			<EmbedStatus compact message={t("embed.loading")} className={className} />
 		);
 	}
 
 	if (state.kind === "missing") {
 		return (
-			<span
-				className={cn(
-					"block px-3 py-2 text-muted-foreground text-sm",
-					className,
-				)}
-			>
-				{t("embed.invalidFragment")}
-			</span>
+			<EmbedStatus
+				compact
+				message={t("embed.invalidFragment")}
+				className={className}
+			/>
 		);
 	}
 
