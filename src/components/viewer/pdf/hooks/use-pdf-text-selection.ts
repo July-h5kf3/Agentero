@@ -28,13 +28,13 @@ import {
 import {
 	pageElByIndex,
 	rectTopCenterScreen,
-} from "@/components/viewer/embed/geometry";
+} from "@/components/viewer/pdf/geometry";
 import {
 	hasNativeSelectionOutsideHost,
 	isEditableClipboardTarget,
-} from "@/components/viewer/embed/pdf-host-dom";
-import type { SelectionMenuState } from "@/components/viewer/embed/pdf-viewer-types";
-import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
+} from "@/components/viewer/pdf/pdf-host-dom";
+import type { SelectionMenuState } from "@/components/viewer/pdf/pdf-viewer-types";
+import { anchorFromEmbedSelection } from "@/components/viewer/pdf/selection-anchor";
 import {
 	clearActiveSelection,
 	publishSelection,

@@ -21,17 +21,17 @@ import { SelectionLayer } from "@embedpdf/plugin-selection/react";
 import { TilingLayer } from "@embedpdf/plugin-tiling/react";
 import { memo, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { CitationLinkLayer } from "@/components/viewer/embed/citation-links";
-import { EMBED_PAGE_ATTR } from "@/components/viewer/embed/geometry";
-import { LayoutTranslateOverlay } from "@/components/viewer/embed/layout-translate-overlay";
+import { EMBED_PAGE_ATTR } from "@/components/viewer/pdf/geometry";
+import { CitationLinkLayer } from "@/components/viewer/pdf/layers/citation-links";
+import { LayoutTranslateOverlay } from "@/components/viewer/pdf/layers/layout-translate-overlay";
+import { PdfRegionSelectLayer } from "@/components/viewer/pdf/layers/pdf-region-select-layer";
 import {
 	EMPTY_CITATION_LINKS,
 	EMPTY_PINS,
 	PAGE_LAYER_STYLE,
 	PDF_BASE_LAYER_SCALE_CAP,
 	pdfRasterDpr,
-} from "@/components/viewer/embed/pdf-page-constants";
-import { PdfRegionSelectLayer } from "@/components/viewer/embed/pdf-region-select-layer";
+} from "@/components/viewer/pdf/pdf-page-constants";
 import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
 import { cn } from "@/lib/core/utils";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";

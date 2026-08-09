@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fontSizeForLayoutTranslateBox } from "@/components/viewer/embed/layout-translate-overlay";
+import { fontSizeForLayoutTranslateBox } from "@/components/viewer/pdf/layers/layout-translate-overlay";
 import {
 	layoutRegionSourceText,
 	listTranslatableLayoutRegions,

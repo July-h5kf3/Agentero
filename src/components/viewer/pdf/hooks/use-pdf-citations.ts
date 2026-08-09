@@ -23,12 +23,12 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useDestinationPreviewResolver } from "@/components/viewer/embed/citation-links";
 import {
 	pageElByIndex,
 	rectRightScreen,
-} from "@/components/viewer/embed/geometry";
-import type { CitationPreviewState } from "@/components/viewer/embed/pdf-viewer-types";
+} from "@/components/viewer/pdf/geometry";
+import { useDestinationPreviewResolver } from "@/components/viewer/pdf/layers/citation-links";
+import type { CitationPreviewState } from "@/components/viewer/pdf/pdf-viewer-types";
 import { openExternalUrl } from "@/lib/core/open-external";
 
 /** Grace period so the pointer can travel from the link into the card. */

@@ -6,7 +6,7 @@ import type {
 	FormulaAnnotationPreviewState,
 	SelectionMenuState,
 	VisualDraftEditorState,
-} from "@/components/viewer/embed/pdf-viewer-types";
+} from "@/components/viewer/pdf/pdf-viewer-types";
 import { AnnotationEditor } from "@/components/viewer/pdf-ask/annotation-editor";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import { FormulaAnnotationCard } from "@/components/viewer/pdf-ask/formula-annotation-card";

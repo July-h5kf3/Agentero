@@ -39,14 +39,14 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { isPdfDocumentCloseRaceError } from "@/components/viewer/embed/pdf-host-dom";
-import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
+import type { PdfAskThreads } from "@/components/viewer/pdf/hooks/use-pdf-ask-threads";
+import { isPdfDocumentCloseRaceError } from "@/components/viewer/pdf/pdf-host-dom";
+import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/pdf-region-crop";
 import type {
 	CardScreenPoint,
 	SelectionMenuState,
 	VisualDraftEditorState,
-} from "@/components/viewer/embed/pdf-viewer-types";
-import type { PdfAskThreads } from "@/components/viewer/embed/use-pdf-ask-threads";
+} from "@/components/viewer/pdf/pdf-viewer-types";
 import { cancelAgentRun } from "@/lib/agent";
 import { agentSessionStore } from "@/lib/agent/agent-session-store";
 import {

@@ -33,7 +33,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { PdfViewerProps } from "@/components/viewer/embed/pdf-viewer-types";
+import type { PdfViewerProps } from "@/components/viewer/pdf/pdf-viewer-types";
 import {
 	cancelAgentRun,
 	listAgents,

@@ -19,15 +19,15 @@ import {
 	useEffect,
 	useRef,
 } from "react";
-import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
-import type {
-	PdfViewerHandle,
-	PdfViewerProps,
-} from "@/components/viewer/embed/pdf-viewer-types";
 import type {
 	LayoutAnalysisTask,
 	StartLayoutAnalysisOptions,
-} from "@/components/viewer/embed/use-pdf-layout-analysis";
+} from "@/components/viewer/pdf/hooks/use-pdf-layout-analysis";
+import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/pdf-region-crop";
+import type {
+	PdfViewerHandle,
+	PdfViewerProps,
+} from "@/components/viewer/pdf/pdf-viewer-types";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import { deletePdfAskThread, type PdfAskThread } from "@/lib/pdf/ask";
 import { isHighlightObject } from "@/lib/pdf/highlight/annotation-store";

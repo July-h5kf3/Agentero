@@ -37,8 +37,8 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { isLinkObject } from "@/components/viewer/embed/citation-links";
-import type { PdfViewerProps } from "@/components/viewer/embed/pdf-viewer-types";
+import { isLinkObject } from "@/components/viewer/pdf/layers/citation-links";
+import type { PdfViewerProps } from "@/components/viewer/pdf/pdf-viewer-types";
 import {
 	hasAnnotationsFile,
 	highlightViewFromObject,

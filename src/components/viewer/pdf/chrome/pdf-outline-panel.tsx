@@ -8,7 +8,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { OutlineTree } from "@/components/viewer/embed/outline-tree";
+import { OutlineTree } from "@/components/viewer/pdf/chrome/outline-tree";
 
 type PdfOutlinePanelProps = {
 	/** Document bookmarks; both the toggle and the panel hide when empty. */

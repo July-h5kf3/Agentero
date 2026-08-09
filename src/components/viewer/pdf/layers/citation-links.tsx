@@ -19,7 +19,7 @@ import {
 } from "@embedpdf/models";
 import { useDocumentManagerCapability } from "@embedpdf/plugin-document-manager/react";
 import { memo, useCallback, useRef } from "react";
-import { usePdfEngineContext } from "@/components/viewer/embed/engine-provider";
+import { usePdfEngineContext } from "@/components/viewer/pdf/engine-provider";
 
 export function isLinkObject(
 	object: PdfAnnotationObject,

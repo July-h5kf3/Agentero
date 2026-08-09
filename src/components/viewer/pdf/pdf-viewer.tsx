@@ -46,50 +46,50 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
-import { ActiveCardScrollSync } from "@/components/viewer/embed/active-card-scroll-sync";
-import { PdfBottomBar } from "@/components/viewer/embed/chrome/pdf-bottom-bar";
-import { PdfCardStack } from "@/components/viewer/embed/chrome/pdf-card-stack";
-import { PdfFindBar } from "@/components/viewer/embed/chrome/pdf-find-bar";
-import { PdfOutlinePanel } from "@/components/viewer/embed/chrome/pdf-outline-panel";
-import { PdfToolbar } from "@/components/viewer/embed/chrome/pdf-toolbar";
-import { DockviewViewport } from "@/components/viewer/embed/dockview-viewport";
-import { usePdfEngineContext } from "@/components/viewer/embed/engine-provider";
+import { PdfBottomBar } from "@/components/viewer/pdf/chrome/pdf-bottom-bar";
+import { PdfCardStack } from "@/components/viewer/pdf/chrome/pdf-card-stack";
+import { PdfFindBar } from "@/components/viewer/pdf/chrome/pdf-find-bar";
+import { PdfOutlinePanel } from "@/components/viewer/pdf/chrome/pdf-outline-panel";
+import { PdfToolbar } from "@/components/viewer/pdf/chrome/pdf-toolbar";
+import { usePdfEngineContext } from "@/components/viewer/pdf/engine-provider";
 import {
 	pageElByIndex,
 	rectRightScreen,
-} from "@/components/viewer/embed/geometry";
-import {
-	PDF_COLOR_SCHEME_EVENT,
-	type PdfColorScheme,
-	readPdfColorScheme,
-	writePdfColorScheme,
-} from "@/components/viewer/embed/pdf-color-scheme";
+} from "@/components/viewer/pdf/geometry";
+import { usePdfAskThreads } from "@/components/viewer/pdf/hooks/use-pdf-ask-threads";
+import { usePdfCards } from "@/components/viewer/pdf/hooks/use-pdf-cards";
+import { usePdfCitations } from "@/components/viewer/pdf/hooks/use-pdf-citations";
+import { usePdfFind } from "@/components/viewer/pdf/hooks/use-pdf-find";
+import { usePdfHighlights } from "@/components/viewer/pdf/hooks/use-pdf-highlights";
+import { usePdfLayoutAnalysis } from "@/components/viewer/pdf/hooks/use-pdf-layout-analysis";
+import { usePdfMarksIo } from "@/components/viewer/pdf/hooks/use-pdf-marks-io";
+import { usePdfOutline } from "@/components/viewer/pdf/hooks/use-pdf-outline";
+import { usePdfPageText } from "@/components/viewer/pdf/hooks/use-pdf-page-text";
+import { usePdfSelectionTranslate } from "@/components/viewer/pdf/hooks/use-pdf-selection-translate";
+import { usePdfTextSelection } from "@/components/viewer/pdf/hooks/use-pdf-text-selection";
+import { usePdfViewerHandle } from "@/components/viewer/pdf/hooks/use-pdf-viewer-handle";
+import { usePdfVisualMarks } from "@/components/viewer/pdf/hooks/use-pdf-visual-marks";
 import {
 	type PdfPageHandlers,
 	PdfPageLayers,
 	type PdfPageLayoutSlice,
 	type PdfPageMarksSlice,
 	type PdfPageModeSlice,
-} from "@/components/viewer/embed/pdf-page-layers";
+} from "@/components/viewer/pdf/layers/pdf-page-layers";
+import {
+	PDF_COLOR_SCHEME_EVENT,
+	type PdfColorScheme,
+	readPdfColorScheme,
+	writePdfColorScheme,
+} from "@/components/viewer/pdf/pdf-color-scheme";
 import type {
 	EditorState,
 	PdfViewerInnerProps,
 	PdfViewerProps,
-} from "@/components/viewer/embed/pdf-viewer-types";
-import { usePdfAskThreads } from "@/components/viewer/embed/use-pdf-ask-threads";
-import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
-import { usePdfCitations } from "@/components/viewer/embed/use-pdf-citations";
-import { usePdfFind } from "@/components/viewer/embed/use-pdf-find";
-import { usePdfHighlights } from "@/components/viewer/embed/use-pdf-highlights";
-import { usePdfLayoutAnalysis } from "@/components/viewer/embed/use-pdf-layout-analysis";
-import { usePdfMarksIo } from "@/components/viewer/embed/use-pdf-marks-io";
-import { usePdfOutline } from "@/components/viewer/embed/use-pdf-outline";
-import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
-import { usePdfSelectionTranslate } from "@/components/viewer/embed/use-pdf-selection-translate";
-import { usePdfTextSelection } from "@/components/viewer/embed/use-pdf-text-selection";
-import { usePdfViewerHandle } from "@/components/viewer/embed/use-pdf-viewer-handle";
-import { usePdfVisualMarks } from "@/components/viewer/embed/use-pdf-visual-marks";
-import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
+} from "@/components/viewer/pdf/pdf-viewer-types";
+import { ActiveCardScrollSync } from "@/components/viewer/pdf/viewport/active-card-scroll-sync";
+import { DockviewViewport } from "@/components/viewer/pdf/viewport/dockview-viewport";
+import { WheelZoomHandler } from "@/components/viewer/pdf/viewport/wheel-zoom-handler";
 import {
 	pinActiveSelection,
 	publishSelection,
@@ -127,7 +127,7 @@ import { openPath } from "@/lib/workspace/actions";
 export type {
 	PdfViewerHandle,
 	PdfViewerProps,
-} from "@/components/viewer/embed/pdf-viewer-types";
+} from "@/components/viewer/pdf/pdf-viewer-types";
 
 /**
  * PDF viewer built on EmbedPDF (headless, PDFium/WASM). The engine is shared
