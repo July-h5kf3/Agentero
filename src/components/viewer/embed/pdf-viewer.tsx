@@ -94,6 +94,7 @@ import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
 import { usePdfCitations } from "@/components/viewer/embed/use-pdf-citations";
 import { usePdfFind } from "@/components/viewer/embed/use-pdf-find";
 import { usePdfHighlights } from "@/components/viewer/embed/use-pdf-highlights";
+import { usePdfMarksIo } from "@/components/viewer/embed/use-pdf-marks-io";
 import { usePdfOutline } from "@/components/viewer/embed/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
@@ -128,7 +129,6 @@ import {
 	createRunningTraces,
 	deletePdfVisualTrace,
 	isVisualMarkKind,
-	listPdfVisualTraces,
 	newTraceMessageId,
 	type PdfVisualSessionTrace,
 	traceMessages,
@@ -139,7 +139,6 @@ import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
 import {
 	createEmptyThread,
 	deletePdfAskThread,
-	listPdfAskThreads,
 	newMessageId,
 	toSummaries,
 	writePdfAskThread,
@@ -188,7 +187,6 @@ import {
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
-	marksDir,
 	pinFromRects,
 	pinObscuresBodyText,
 	type SelectionPin,
@@ -196,7 +194,6 @@ import {
 import {
 	createTranslateRecord,
 	deletePdfTranslate,
-	listPdfTranslates,
 	writePdfTranslate,
 } from "@/lib/pdf/translate";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
@@ -535,9 +532,27 @@ function PdfViewerInner({
 	}>({ status: "idle", items: [] });
 	const layoutTranslateAbortRef = useRef<AbortController | null>(null);
 
-	const [threads, setThreads] = useState<PdfAskThread[]>([]);
-	const [translates, setTranslates] = useState<PdfTranslateRecord[]>([]);
-	const [visualTraces, setVisualTraces] = useState<PdfVisualSessionTrace[]>([]);
+	// ---- Persisted marks (ask threads / translates / visual traces) ----
+
+	const {
+		threads,
+		threadsRef,
+		setThreads,
+		translates,
+		translatesRef,
+		setTranslates,
+		visualTraces,
+		visualTracesRef,
+		setVisualTraces,
+		upsertThread,
+		upsertTranslate,
+		upsertVisualTrace,
+	} = usePdfMarksIo({
+		paperAbsPath,
+		isActive,
+		onAsksChangeRef,
+		onVisualTracesChangeRef,
+	});
 	/**
 	 * Per-page 0–1 text rects from PDFium `getPageTextRects` — used to decide
 	 * whether a gutter pin sits on real glyphs (translucent) vs in a free gutter.
@@ -567,18 +582,11 @@ function PdfViewerInner({
 
 	const pageFocusedRef = useRef(false);
 	const restoredRef = useRef(false);
-	const marksLoadedRef = useRef(false);
 	const hostRef = useRef<HTMLDivElement>(null);
 	const zoomRef = useRef(zoomLevel);
 	zoomRef.current = zoomLevel;
 	const zoomFieldFocusedRef = useRef(false);
 	const zoomFieldCancelRef = useRef(false);
-	const threadsRef = useRef(threads);
-	threadsRef.current = threads;
-	const translatesRef = useRef(translates);
-	translatesRef.current = translates;
-	const visualTracesRef = useRef(visualTraces);
-	visualTracesRef.current = visualTraces;
 	const regionSelectingRef = useRef(regionSelecting);
 	regionSelectingRef.current = regionSelecting;
 	const visualCropPendingRef = useRef(visualCropPending);
@@ -620,12 +628,15 @@ function PdfViewerInner({
 
 	const pdfDark = pdfColorScheme === "dark";
 
-	const discardIfEmptyDraft = useCallback((threadId: string | null) => {
-		if (!threadId) return;
-		const th = threadsRef.current.find((t) => t.id === threadId);
-		if (!th || threadHasUserQuestion(th)) return;
-		setThreads((prev) => prev.filter((t) => t.id !== threadId));
-	}, []);
+	const discardIfEmptyDraft = useCallback(
+		(threadId: string | null) => {
+			if (!threadId) return;
+			const th = threadsRef.current.find((t) => t.id === threadId);
+			if (!th || threadHasUserQuestion(th)) return;
+			setThreads((prev) => prev.filter((t) => t.id !== threadId));
+		},
+		[setThreads, threadsRef],
+	);
 
 	const stopTranslateSession = useCallback(() => {
 		const sid = translateSessionRef.current;
@@ -890,16 +901,6 @@ function PdfViewerInner({
 
 	// ---- Ask / Translate persistence + streaming ----
 
-	const upsertThread = useCallback((thread: PdfAskThread) => {
-		setThreads((prev) => {
-			const i = prev.findIndex((t) => t.id === thread.id);
-			if (i < 0) return [thread, ...prev];
-			const next = [...prev];
-			next[i] = thread;
-			return next;
-		});
-	}, []);
-
 	const persist = useCallback(
 		async (thread: PdfAskThread) => {
 			if (!paperAbsPath) return;
@@ -911,16 +912,6 @@ function PdfViewerInner({
 		},
 		[paperAbsPath],
 	);
-
-	const upsertTranslate = useCallback((rec: PdfTranslateRecord) => {
-		setTranslates((prev) => {
-			const i = prev.findIndex((x) => x.id === rec.id);
-			if (i < 0) return [rec, ...prev];
-			const next = [...prev];
-			next[i] = rec;
-			return next;
-		});
-	}, []);
 
 	const persistTranslate = useCallback(
 		async (rec: PdfTranslateRecord) => {
@@ -948,24 +939,8 @@ function PdfViewerInner({
 			setTranslateStreaming(false);
 			setTranslateError(message);
 		},
-		[upsertTranslate],
+		[upsertTranslate, translatesRef],
 	);
-
-	// Load persisted ask threads + translate records + agent-trace marks once.
-	useEffect(() => {
-		if (marksLoadedRef.current || !paperAbsPath) return;
-		marksLoadedRef.current = true;
-		void (async () => {
-			const [ts, trs, traces] = await Promise.all([
-				listPdfAskThreads(paperAbsPath),
-				listPdfTranslates(paperAbsPath),
-				listPdfVisualTraces(paperAbsPath),
-			]);
-			if (ts.length) setThreads(ts);
-			if (trs.length) setTranslates(trs);
-			if (traces.length) setVisualTraces(traces);
-		})();
-	}, [paperAbsPath]);
 
 	// Load `{paper}/Annotation.md` symbol glossary for formula hover cards.
 	useEffect(() => {
@@ -1023,93 +998,6 @@ function PdfViewerInner({
 		};
 	}, [paperAbsPath]);
 
-	// Refresh ask conversation cards + agent-trace pins when this viewer is
-	// active (dock may keep inactive PDFs mounted under pdfKeepMounted —
-	// avoid N× listMarkRaw reads). Covers Agent-panel writes that create ask
-	// threads from 「加入对话」 selections while this tab was open.
-	//
-	// Driven by the Vault watcher: listing re-reads every mark file over serial
-	// IPC, so it must not run on a timer. Results always carry fresh array
-	// identity; only commit state when the content actually changed — otherwise
-	// a refresh re-renders the whole viewer and the pages visibly twitch.
-	const lastMarksPollRef = useRef("{asks:[],traces:[]}");
-	useEffect(() => {
-		if (!paperAbsPath || !marksLoadedRef.current || !isActive) return;
-		let cancelled = false;
-		const refresh = () => {
-			void Promise.all([
-				listPdfAskThreads(paperAbsPath),
-				listPdfVisualTraces(paperAbsPath),
-			]).then(([asks, traces]) => {
-				if (cancelled) return;
-				let fingerprint: string;
-				try {
-					fingerprint = JSON.stringify({ asks, traces });
-				} catch {
-					fingerprint = "";
-				}
-				if (fingerprint && fingerprint === lastMarksPollRef.current) {
-					return;
-				}
-				lastMarksPollRef.current = fingerprint;
-				setThreads(asks);
-				setVisualTraces(traces);
-			});
-		};
-		// Immediate refresh on become-active (covers Agent multi-turn writes
-		// while this tab was backgrounded).
-		refresh();
-		const onFocus = () => refresh();
-		window.addEventListener("focus", onFocus);
-
-		// One Agent turn can rewrite several mark files; coalesce the burst.
-		let burstTimer: number | null = null;
-		const scheduleRefresh = () => {
-			if (burstTimer !== null) return;
-			burstTimer = window.setTimeout(() => {
-				burstTimer = null;
-				refresh();
-			}, 200);
-		};
-		const marksKey = `${normalizePathKey(marksDir(paperAbsPath))}/`;
-		let unsubMarks: (() => void) | undefined;
-		if (isTauri()) {
-			void (async () => {
-				const { listen } = await import("@tauri-apps/api/event");
-				if (cancelled) return;
-				unsubMarks = await listen<VaultFileChangedPayload>(
-					VAULT_FILE_CHANGED_EVENT,
-					({ payload }) => {
-						const paths = [...payload.paths];
-						if (payload.rename) {
-							paths.push(payload.rename.from, payload.rename.to);
-						}
-						const hit = paths.some((p) =>
-							normalizePathKey(p).startsWith(marksKey),
-						);
-						if (hit) scheduleRefresh();
-					},
-				);
-			})();
-		}
-		return () => {
-			cancelled = true;
-			window.removeEventListener("focus", onFocus);
-			if (burstTimer !== null) window.clearTimeout(burstTimer);
-			unsubMarks?.();
-		};
-	}, [paperAbsPath, isActive]);
-
-	// Publish ask threads (with a real question) to the annotations panel.
-	useEffect(() => {
-		onAsksChangeRef.current?.(threads.filter(threadHasUserQuestion));
-	}, [threads]);
-
-	// Publish visual agent-trace marks to the annotations panel.
-	useEffect(() => {
-		onVisualTracesChangeRef.current?.(visualTraces);
-	}, [visualTraces]);
-
 	// Translate cards are ephemeral: once streaming ends, auto-hide unless the
 	// pointer is still over the card, pin, or source highlight.
 	const activeTranslateCardId =
@@ -1138,7 +1026,7 @@ function PdfViewerInner({
 			setThreads((prev) => [thread, ...prev.filter(threadHasUserQuestion)]);
 			return thread;
 		},
-		[paperAbsPath, paperRelPath],
+		[paperAbsPath, paperRelPath, setThreads],
 	);
 
 	const startFromAnchor = useCallback(
@@ -1282,7 +1170,7 @@ function PdfViewerInner({
 				setAskError(e instanceof Error ? e.message : t("pdfAsk.agentFailed"));
 			}
 		},
-		[upsertThread, persist, vaultPath, t],
+		[upsertThread, persist, vaultPath, t, setThreads],
 	);
 
 	const resolvePdfAskAgent = useCallback(async () => {
@@ -1815,15 +1703,6 @@ function PdfViewerInner({
 		};
 	}, [docId]);
 
-	const upsertVisualTrace = useCallback((trace: PdfVisualSessionTrace) => {
-		setVisualTraces((prev) => {
-			const next = [trace, ...prev.filter((tr) => tr.id !== trace.id)];
-			// Keep ref in sync so openCard/placeActiveCard can find a just-created mark.
-			visualTracesRef.current = next;
-			return next;
-		});
-	}, []);
-
 	/**
 	 * Save from the region editor: note-only visual mark (no Agent thread).
 	 * Same UX as text 批注备注 — open the pin in note mode.
@@ -2035,6 +1914,7 @@ function PdfViewerInner({
 			hideActiveCard,
 			cardScreenRef,
 			setCardScreen,
+			setVisualTraces,
 		],
 	);
 
@@ -2068,7 +1948,7 @@ function PdfViewerInner({
 				});
 			}
 		},
-		[paperAbsPath, upsertVisualTrace, activeCardRef],
+		[paperAbsPath, upsertVisualTrace, activeCardRef, visualTracesRef],
 	);
 
 	/** Header「加入侧边栏对话」from an existing visual mark pin. */
@@ -2101,7 +1981,7 @@ function PdfViewerInner({
 			});
 			openRightTab("agent");
 		})();
-	}, [paperAbsPath, paperRelPath, t, activeCardRef]);
+	}, [paperAbsPath, paperRelPath, t, activeCardRef, visualTracesRef]);
 
 	const handleVisualContinue = useCallback(
 		(question: string) => {
@@ -2194,7 +2074,13 @@ function PdfViewerInner({
 				}
 			})();
 		},
-		[resolvePdfAskAgent, requestVisualAgentTurn, paperAbsPath, activeCardRef],
+		[
+			resolvePdfAskAgent,
+			requestVisualAgentTurn,
+			paperAbsPath,
+			activeCardRef,
+			visualTracesRef,
+		],
 	);
 
 	const handleSend = useCallback(
@@ -2219,7 +2105,7 @@ function PdfViewerInner({
 				}
 			})();
 		},
-		[sendToThread, resolvePdfAskAgent, activeCardRef],
+		[sendToThread, resolvePdfAskAgent, activeCardRef, threadsRef],
 	);
 
 	/** Edit last (or any) user turn: drop that message and everything after, then re-send. */
@@ -2255,7 +2141,7 @@ function PdfViewerInner({
 				}
 			})();
 		},
-		[sendToThread, resolvePdfAskAgent, activeCardRef],
+		[sendToThread, resolvePdfAskAgent, activeCardRef, threadsRef],
 	);
 
 	const dismissAskChrome = useCallback(() => {
@@ -2291,7 +2177,14 @@ function PdfViewerInner({
 			}
 		}
 		dismissAskChrome();
-	}, [upsertThread, persist, dismissAskChrome, activeCardRef]);
+	}, [
+		upsertThread,
+		persist,
+		dismissAskChrome,
+		activeCardRef,
+		setThreads,
+		threadsRef,
+	]);
 
 	const handleDelete = useCallback(() => {
 		const id =
@@ -2301,7 +2194,7 @@ function PdfViewerInner({
 			if (paperAbsPath) void deletePdfAskThread(paperAbsPath, id);
 		}
 		dismissAskChrome();
-	}, [paperAbsPath, dismissAskChrome, activeCardRef]);
+	}, [paperAbsPath, dismissAskChrome, activeCardRef, setThreads]);
 
 	const deleteTranslateCard = useCallback(() => {
 		const id =
@@ -2314,7 +2207,13 @@ function PdfViewerInner({
 			if (paperAbsPath) void deletePdfTranslate(paperAbsPath, id);
 		}
 		hideActiveCard();
-	}, [paperAbsPath, stopTranslateSession, hideActiveCard, activeCardRef]);
+	}, [
+		paperAbsPath,
+		stopTranslateSession,
+		hideActiveCard,
+		activeCardRef,
+		setTranslates,
+	]);
 
 	const deleteVisualTraceById = useCallback(
 		(id: string) => {
@@ -2327,7 +2226,7 @@ function PdfViewerInner({
 				hideActiveCard();
 			}
 		},
-		[paperAbsPath, hideActiveCard, activeCardRef],
+		[paperAbsPath, hideActiveCard, activeCardRef, setVisualTraces],
 	);
 
 	const handleDeleteVisualTrace = useCallback(() => {
@@ -2398,7 +2297,7 @@ function PdfViewerInner({
 		if (!isVisualMarkKind(card?.kind)) return;
 		const tr = visualTracesRef.current.find((item) => item.id === card.id);
 		if (tr) void openVisualTraceSession(tr);
-	}, [openVisualTraceSession, activeCardRef]);
+	}, [openVisualTraceSession, activeCardRef, visualTracesRef]);
 
 	const handleStopVisualSession = useCallback(() => {
 		// Shared agent session store is the source of truth after modal↔panel
@@ -2481,7 +2380,14 @@ function PdfViewerInner({
 				openCard({ kind: "visual", id: tr.id });
 			}
 		},
-		[upsertThread, openThread, openCard, openEditorForAnnotation],
+		[
+			upsertThread,
+			openThread,
+			openCard,
+			openEditorForAnnotation,
+			threadsRef,
+			visualTracesRef,
+		],
 	);
 
 	// ---- Selection action menu ----
@@ -2758,6 +2664,7 @@ function PdfViewerInner({
 		markTranslateFailure,
 		openCard,
 		cardHoverSurfaceRef,
+		translatesRef,
 	]);
 
 	// Show the selection action menu when a drag-selection ends.
