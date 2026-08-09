@@ -26,6 +26,7 @@ import {
 } from "@/components/editor/embeds/ancestry-context";
 import { useWikiEmbedProjection } from "@/components/editor/embeds/projection-context";
 import { WikiAnnotationEmbed } from "@/components/editor/embeds/wiki-annotation-embed";
+import { createKeyedCache } from "@/lib/core/keyed-cache";
 import { cn } from "@/lib/core/utils";
 import type { AnnotationRefKind } from "@/lib/pdf/annotation-ref";
 import { joinVaultPath } from "@/lib/vault";
@@ -70,9 +71,17 @@ type CachedEmbedLoad = {
 	state: EmbedLoadState;
 };
 
-const EMBED_CACHE_LIMIT = 128;
-const embedStateCache = new Map<string, EmbedLoadState>();
-const embedRequestCache = new Map<string, Promise<EmbedLoadState>>();
+const embedCache = createKeyedCache<EmbedLoadState>({
+	limit: 128,
+	// Never cache terminal "not found" results: cold-start races (index not
+	// ready yet) must be allowed to succeed on the next mount/retry instead of
+	// permanently showing "找不到嵌入的笔记".
+	shouldRetain: (state) =>
+		state.kind !== "error" &&
+		state.kind !== "loading" &&
+		state.kind !== "missing" &&
+		state.kind !== "ambiguous",
+});
 
 function embedRequestKey(
 	vaultPath: string | null | undefined,
@@ -92,31 +101,6 @@ function embedIdentityKey(
 ): string | null {
 	if (!vaultPath || !sourcePath) return null;
 	return JSON.stringify([vaultPath, sourcePath, target]);
-}
-
-function cachedEmbedState(key: string): EmbedLoadState | undefined {
-	return embedStateCache.get(key);
-}
-
-function retainEmbedState(key: string, state: EmbedLoadState): void {
-	// Never cache terminal "not found" results: cold-start races (index not
-	// ready yet) must be allowed to succeed on the next mount/retry instead of
-	// permanently showing "找不到嵌入的笔记".
-	if (
-		state.kind === "error" ||
-		state.kind === "loading" ||
-		state.kind === "missing" ||
-		state.kind === "ambiguous"
-	) {
-		return;
-	}
-	embedStateCache.delete(key);
-	embedStateCache.set(key, state);
-	while (embedStateCache.size > EMBED_CACHE_LIMIT) {
-		const oldest = embedStateCache.keys().next().value;
-		if (typeof oldest !== "string") break;
-		embedStateCache.delete(oldest);
-	}
 }
 
 function stateFromResponse(response: WikiEmbedResponse): EmbedLoadState {
@@ -181,38 +165,26 @@ function loadEmbedState(
 	target: string,
 	vaultFiles: string[] = [],
 ): Promise<EmbedLoadState> {
-	const cached = cachedEmbedState(key);
-	if (cached) return Promise.resolve(cached);
-	const pending = embedRequestCache.get(key);
-	if (pending) return pending;
-
-	const request = readWikiEmbed(vaultPath, sourcePath, target)
-		.then((response) => {
-			if (response.link.status === "missing" && vaultFiles.length) {
-				const recovered = recoverAnnotationEmbed(
-					target,
-					vaultFiles,
-					sourcePath,
-				);
-				if (recovered) return stateFromResponse(recovered);
-			}
-			return stateFromResponse(response);
-		})
-		.catch(
-			(error): EmbedLoadState => ({
-				kind: "error",
-				detail: error instanceof Error ? error.message : String(error),
-			}),
-		)
-		.then((state) => {
-			retainEmbedState(key, state);
-			return state;
-		})
-		.finally(() => {
-			embedRequestCache.delete(key);
-		});
-	embedRequestCache.set(key, request);
-	return request;
+	return embedCache.load(key, () =>
+		readWikiEmbed(vaultPath, sourcePath, target)
+			.then((response) => {
+				if (response.link.status === "missing" && vaultFiles.length) {
+					const recovered = recoverAnnotationEmbed(
+						target,
+						vaultFiles,
+						sourcePath,
+					);
+					if (recovered) return stateFromResponse(recovered);
+				}
+				return stateFromResponse(response);
+			})
+			.catch(
+				(error): EmbedLoadState => ({
+					kind: "error",
+					detail: error instanceof Error ? error.message : String(error),
+				}),
+			),
+	);
 }
 
 function EmbedStatus({ message }: { message: string }) {
@@ -328,7 +300,7 @@ export function WikiEmbedElement({
 	const [load, setLoad] = useState<CachedEmbedLoad>(() => ({
 		requestKey,
 		state: requestKey
-			? (cachedEmbedState(requestKey) ?? { kind: "loading" })
+			? (embedCache.get(requestKey) ?? { kind: "loading" })
 			: {
 					kind: "error",
 				},
@@ -336,7 +308,7 @@ export function WikiEmbedElement({
 	const fallbackState =
 		load.requestKey === requestKey || !requestKey
 			? undefined
-			: cachedEmbedState(requestKey);
+			: embedCache.get(requestKey);
 	const state =
 		load.requestKey === requestKey
 			? load.state
@@ -352,7 +324,7 @@ export function WikiEmbedElement({
 			return;
 		}
 
-		const cached = cachedEmbedState(requestKey);
+		const cached = embedCache.get(requestKey);
 		if (cached) {
 			setLoad((previous) =>
 				previous.requestKey === requestKey && previous.state === cached

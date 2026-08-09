@@ -5,6 +5,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { MessageResponse } from "@/components/ai-elements/message";
+import { createKeyedCache } from "@/lib/core/keyed-cache";
 import { cn } from "@/lib/core/utils";
 import { visualTraceImageAssetRelPath } from "@/lib/pdf/agent-trace/image";
 import {
@@ -44,8 +45,11 @@ type AnnotationLoadState =
 	| { kind: "missing" }
 	| { kind: "ready"; ref: AnnotationRef };
 
-const annotationRefCache = new Map<string, AnnotationLoadState>();
-const annotationRequestCache = new Map<string, Promise<AnnotationLoadState>>();
+const annotationCache = createKeyedCache<AnnotationLoadState>({
+	limit: ANNOTATION_REF_CACHE_LIMIT,
+	shouldRetain: (state) => state.kind !== "loading",
+	isFresh: (state) => state.kind !== "loading",
+});
 
 function annotationCacheKey(
 	vaultPath: string,
@@ -56,49 +60,19 @@ function annotationCacheKey(
 	return JSON.stringify([vaultPath, targetPath, annotationId, revision]);
 }
 
-function cachedAnnotationState(key: string): AnnotationLoadState | undefined {
-	return annotationRefCache.get(key);
-}
-
-function retainAnnotationState(key: string, state: AnnotationLoadState): void {
-	if (state.kind === "loading") return;
-	annotationRefCache.delete(key);
-	annotationRefCache.set(key, state);
-	while (annotationRefCache.size > ANNOTATION_REF_CACHE_LIMIT) {
-		const oldest = annotationRefCache.keys().next().value;
-		if (typeof oldest !== "string") break;
-		annotationRefCache.delete(oldest);
-	}
-}
-
 function loadAnnotationState(
 	key: string,
 	vaultPath: string,
 	targetPath: string,
 	annotationId: string,
 ): Promise<AnnotationLoadState> {
-	const cached = cachedAnnotationState(key);
-	if (cached && cached.kind !== "loading") return Promise.resolve(cached);
-	const pending = annotationRequestCache.get(key);
-	if (pending) return pending;
-
 	const paperAbs = paperAbsFromWikiTarget(vaultPath, targetPath);
-	const request = lookupAnnotationRef(paperAbs, annotationId, {
-		includeImage: true,
-	})
-		.then(
+	return annotationCache.load(key, () =>
+		lookupAnnotationRef(paperAbs, annotationId, { includeImage: true }).then(
 			(ref): AnnotationLoadState =>
 				ref ? { kind: "ready", ref } : { kind: "missing" },
-		)
-		.then((state) => {
-			retainAnnotationState(key, state);
-			return state;
-		})
-		.finally(() => {
-			annotationRequestCache.delete(key);
-		});
-	annotationRequestCache.set(key, request);
-	return request;
+		),
+	);
 }
 
 /**
@@ -165,12 +139,12 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 		state: AnnotationLoadState;
 	}>(() => ({
 		requestKey,
-		state: cachedAnnotationState(requestKey) ?? { kind: "loading" },
+		state: annotationCache.get(requestKey) ?? { kind: "loading" },
 	}));
 	const fallback =
 		load.requestKey === requestKey
 			? undefined
-			: cachedAnnotationState(requestKey);
+			: annotationCache.get(requestKey);
 	const state: AnnotationLoadState =
 		load.requestKey === requestKey
 			? load.state
@@ -211,7 +185,7 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 	}, [paperAbs]);
 
 	useEffect(() => {
-		const cached = cachedAnnotationState(requestKey);
+		const cached = annotationCache.get(requestKey);
 		if (cached && cached.kind !== "loading") {
 			setLoad((previous) =>
 				previous.requestKey === requestKey && previous.state === cached
