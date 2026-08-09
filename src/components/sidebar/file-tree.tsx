@@ -1399,7 +1399,7 @@ export const FileTree = memo(
 								<span>{t("fileTree.openNotes")}</span>
 							</button>
 						) : null}
-						{menuCount === 1 && onStartCreate ? (
+						{menuCount === 1 && onStartCreate && !isPaperMenu ? (
 							<button
 								type="button"
 								role="menuitem"
@@ -1409,7 +1409,7 @@ export const FileTree = memo(
 								<span>{t("fileTree.newFile")}</span>
 							</button>
 						) : null}
-						{menuCount === 1 && onStartCreate ? (
+						{menuCount === 1 && onStartCreate && !isPaperMenu ? (
 							<button
 								type="button"
 								role="menuitem"
