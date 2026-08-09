@@ -20,7 +20,6 @@ import type {
 	WikiCompletionController,
 	WikiCompletionDraft,
 } from "@/components/editor/overlays/wiki-link-suggestion";
-import { editorCompletionHasFocus } from "@/lib/markdown/completion-focus";
 import { findSlashCommandTrigger } from "@/lib/markdown/slash-command";
 import { findWikiCompletionTrigger } from "@/lib/wiki-completion";
 
@@ -47,12 +46,8 @@ function probeCursor(
 	editor: PlateEditor,
 	container: HTMLElement | null,
 ): CursorProbe | null {
-	if (
-		!container ||
-		!editorCompletionHasFocus(container, document.activeElement)
-	) {
-		return null;
-	}
+	// A menu must not reopen once focus left the editor (e.g. moved to a toolbar).
+	if (!container || !container.contains(document.activeElement)) return null;
 	const slateSelection = editor.selection;
 	if (!slateSelection || !RangeApi.isCollapsed(slateSelection)) return null;
 
