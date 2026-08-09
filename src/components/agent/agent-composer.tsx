@@ -562,7 +562,7 @@ export function AgentComposer({
 							"border-primary/55 bg-primary/5 shadow-[inset_0_0_0_1px] shadow-primary/25 ring-2 ring-primary/35",
 					)}
 					inputGroupClassName={cn(
-						"!flex !h-full min-h-0 !flex-col overflow-visible",
+						"!flex !h-full min-h-0 !flex-col overflow-hidden",
 						// Keep the same surface while any child is disabled or a run is
 						// in progress — never dim / recolor the composer for "processing".
 						"has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30",
@@ -599,7 +599,7 @@ export function AgentComposer({
 							<PopoverAnchor asChild>
 								<div
 									className={cn(
-										"relative flex min-h-0 w-full flex-1",
+										"relative flex min-h-0 w-full flex-1 overflow-hidden",
 										compact
 											? "flex-row items-start gap-1 px-2 pt-2"
 											: "flex-col px-3 pt-3",
@@ -622,31 +622,16 @@ export function AgentComposer({
 											{currentFilePath ? (
 												<button
 													type="button"
-													className={cn(
-														"inline-flex items-center border bg-muted/20 text-foreground text-xs transition-colors hover:bg-muted",
-														compact
-															? "size-7 shrink-0 justify-center rounded-full p-0"
-															: "h-8 max-w-full gap-1.5 rounded-full px-2",
-													)}
+													className="inline-flex size-7 shrink-0 items-center justify-center rounded-full border bg-muted/20 p-0 text-foreground text-xs transition-colors hover:bg-muted"
 													onClick={() => onRemoveContextPath(currentFilePath)}
-													title={t("composer.currentFileRemove")}
+													title={currentFileLabel || currentFilePath}
+													aria-label={t("composer.currentFileRemove")}
 												>
 													<ContextPathIcon
 														path={currentFilePath}
 														directoryPaths={directoryPathSet}
 														paperPaths={paperPathSet}
 													/>
-													{compact ? null : (
-														<>
-															<span
-																className="truncate"
-																title={currentFilePath}
-															>
-																{currentFileLabel}
-															</span>
-															<X className="size-3 shrink-0 text-muted-foreground" />
-														</>
-													)}
 												</button>
 											) : null}
 											{mentionChipPaths.map((path) => {
@@ -1016,7 +1001,7 @@ export function AgentComposer({
 									<PromptInputTextarea
 										autoFocus={autoFocus || undefined}
 										className={cn(
-											"min-h-0 flex-1 overflow-y-auto px-0 py-1 placeholder:text-muted-foreground/80",
+											"agentero-scroll min-h-0 flex-1 overflow-y-auto px-0 py-1 placeholder:text-muted-foreground/80",
 											compact
 												? "max-h-none min-w-0 text-sm leading-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 												: "text-[15px] leading-6",
