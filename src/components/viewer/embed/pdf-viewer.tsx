@@ -90,6 +90,7 @@ import { usePdfHighlights } from "@/components/viewer/embed/use-pdf-highlights";
 import { usePdfMarksIo } from "@/components/viewer/embed/use-pdf-marks-io";
 import { usePdfOutline } from "@/components/viewer/embed/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
+import { usePdfSelectionTranslate } from "@/components/viewer/embed/use-pdf-selection-translate";
 import { usePdfTextSelection } from "@/components/viewer/embed/use-pdf-text-selection";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
 import i18n from "@/i18n";
@@ -185,12 +186,6 @@ import {
 	type SelectionPin,
 } from "@/lib/pdf/selection";
 import {
-	createTranslateRecord,
-	deletePdfTranslate,
-	writePdfTranslate,
-} from "@/lib/pdf/translate";
-import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
-import {
 	formatPdfZoomPercentage,
 	PDF_ZOOM_MAX,
 	PDF_ZOOM_MIN,
@@ -202,12 +197,7 @@ import {
 	requestOpenAgentSession,
 	setAgentPanelMounted,
 } from "@/lib/shell/ui-store";
-import {
-	buildTranslatePrompt,
-	prepareTranslateTask,
-	resolveTranslateAgent,
-	runTranslate,
-} from "@/lib/translate";
+import { resolveTranslateAgent } from "@/lib/translate";
 import {
 	VAULT_FILE_CHANGED_EVENT,
 	type VaultFileChangedPayload,
@@ -563,8 +553,11 @@ function PdfViewerInner({
 	const [visualError, setVisualError] = useState<string | null>(null);
 	/** Keep the just-created Cmd+Enter card expanded until the user dismisses it. */
 	const [visualCardExpanded, setVisualCardExpanded] = useState(false);
-	const [translateStreaming, setTranslateStreaming] = useState(false);
-	const [translateError, setTranslateError] = useState<string | null>(null);
+	/**
+	 * Mirror of the translate cluster's `translateStreaming`. Created here (not in
+	 * {@link usePdfSelectionTranslate}) because `usePdfCards` is declared first and
+	 * needs the same ref object to keep a streaming translate card alive.
+	 */
 	const translateStreamingRef = useRef(false);
 
 	const [pdfColorScheme, setPdfColorScheme] =
@@ -631,8 +624,12 @@ function PdfViewerInner({
 	);
 	/** True while pointer is over the formula hit region or legend card. */
 	const formulaHoverSurfaceRef = useRef(false);
+	/**
+	 * Session token of the single in-flight PDF agent run. Shared by ask and
+	 * translate (either can cancel the other's run), so it stays in the parent and
+	 * is injected into both clusters.
+	 */
 	const activeSessionRef = useRef<string | null>(null);
-	const translateSessionRef = useRef<string | null>(null);
 
 	const pdfDark = pdfColorScheme === "dark";
 
@@ -646,21 +643,23 @@ function PdfViewerInner({
 		[setThreads, threadsRef],
 	);
 
+	/**
+	 * `usePdfCards` must be declared before {@link usePdfSelectionTranslate} (the
+	 * translate cluster opens and hides cards), but cards also cancel a running
+	 * translate and clear its error chrome. Both directions go through refs
+	 * assigned right after the translate hook, so `openCard` / `hideActiveCard`
+	 * keep their identity.
+	 */
+	const stopTranslateSessionRef = useRef<() => void>(() => undefined);
+	const clearTranslateErrorRef = useRef<() => void>(() => undefined);
 	const stopTranslateSession = useCallback(() => {
-		const sid = translateSessionRef.current;
-		if (sid) {
-			void cancelAgentRun(sid).catch(() => undefined);
-			if (activeSessionRef.current === sid) activeSessionRef.current = null;
-			translateSessionRef.current = null;
-		}
-		translateStreamingRef.current = false;
-		setTranslateStreaming(false);
+		stopTranslateSessionRef.current();
 	}, []);
 
 	/** Per-kind chrome reset when a card is opened. */
 	const resetChromeForOpenedCard = useCallback((card: ActiveSelectionCard) => {
 		if (card.kind === "ask") setAskError(null);
-		if (card.kind === "translate") setTranslateError(null);
+		if (card.kind === "translate") clearTranslateErrorRef.current();
 	}, []);
 
 	/** Per-kind chrome reset when the open card is dismissed. */
@@ -670,7 +669,7 @@ function PdfViewerInner({
 				discardIfEmptyDraft(card.id);
 				setAskError(null);
 			}
-			if (card?.kind === "translate") setTranslateError(null);
+			if (card?.kind === "translate") clearTranslateErrorRef.current();
 			if (isVisualMarkKind(card?.kind)) {
 				setVisualError(null);
 				setVisualCardExpanded(false);
@@ -706,6 +705,36 @@ function PdfViewerInner({
 		onCardClose: resetChromeForClosedCard,
 		stopTranslateSession,
 	});
+
+	// ---- Selection → 翻译 (ephemeral card + marks/<id>.json) ----
+
+	const {
+		translateStreaming,
+		translateError,
+		translateSelection,
+		deleteTranslateCard,
+		openTranslateSettings,
+		clearTranslateError,
+		stopTranslateSession: stopTranslateSessionImpl,
+	} = usePdfSelectionTranslate({
+		paperAbsPath,
+		paperRelPath,
+		vaultPath,
+		onOpenSettings,
+		translatesRef,
+		setTranslates,
+		upsertTranslate,
+		activeCard,
+		openCard,
+		hideActiveCard,
+		scheduleHoverHide,
+		cardHoverSurfaceRef,
+		activeCardRef,
+		activeSessionRef,
+		translateStreamingRef,
+	});
+	stopTranslateSessionRef.current = stopTranslateSessionImpl;
+	clearTranslateErrorRef.current = clearTranslateError;
 
 	const {
 		findOpen,
@@ -907,7 +936,7 @@ function PdfViewerInner({
 		[formulaAnnotationPreview],
 	);
 
-	// ---- Ask / Translate persistence + streaming ----
+	// ---- Ask persistence + streaming ----
 
 	const persist = useCallback(
 		async (thread: PdfAskThread) => {
@@ -919,35 +948,6 @@ function PdfViewerInner({
 			}
 		},
 		[paperAbsPath],
-	);
-
-	const persistTranslate = useCallback(
-		async (rec: PdfTranslateRecord) => {
-			if (!paperAbsPath) return;
-			try {
-				await writePdfTranslate(paperAbsPath, rec);
-			} catch {
-				// keep UI responsive
-			}
-		},
-		[paperAbsPath],
-	);
-
-	const markTranslateFailure = useCallback(
-		(id: string, message: string) => {
-			const latest = translatesRef.current.find((r) => r.id === id);
-			if (latest) {
-				upsertTranslate({
-					...latest,
-					error: message,
-					updatedAt: new Date().toISOString(),
-				});
-			}
-			translateStreamingRef.current = false;
-			setTranslateStreaming(false);
-			setTranslateError(message);
-		},
-		[upsertTranslate, translatesRef],
 	);
 
 	// Load `{paper}/Annotation.md` symbol glossary for formula hover cards.
@@ -1005,22 +1005,6 @@ function PdfViewerInner({
 			unsub?.();
 		};
 	}, [paperAbsPath]);
-
-	// Translate cards are ephemeral: once streaming ends, auto-hide unless the
-	// pointer is still over the card, pin, or source highlight.
-	const activeTranslateCardId =
-		activeCard?.kind === "translate" ? activeCard.id : null;
-	useEffect(() => {
-		if (!activeTranslateCardId) return;
-		if (translateStreaming) return;
-		if (cardHoverSurfaceRef.current) return;
-		scheduleHoverHide();
-	}, [
-		activeTranslateCardId,
-		translateStreaming,
-		scheduleHoverHide,
-		cardHoverSurfaceRef,
-	]);
 
 	const openThread = useCallback(
 		(thread: PdfAskThread) => openCard({ kind: "ask", id: thread.id }),
@@ -2204,25 +2188,6 @@ function PdfViewerInner({
 		dismissAskChrome();
 	}, [paperAbsPath, dismissAskChrome, activeCardRef, setThreads]);
 
-	const deleteTranslateCard = useCallback(() => {
-		const id =
-			activeCardRef.current?.kind === "translate"
-				? activeCardRef.current.id
-				: null;
-		stopTranslateSession();
-		if (id) {
-			setTranslates((prev) => prev.filter((r) => r.id !== id));
-			if (paperAbsPath) void deletePdfTranslate(paperAbsPath, id);
-		}
-		hideActiveCard();
-	}, [
-		paperAbsPath,
-		stopTranslateSession,
-		hideActiveCard,
-		activeCardRef,
-		setTranslates,
-	]);
-
 	const deleteVisualTraceById = useCallback(
 		(id: string) => {
 			setVisualTraces((prev) => prev.filter((tr) => tr.id !== id));
@@ -2481,166 +2446,15 @@ function PdfViewerInner({
 	const handleMenuTranslate = useCallback(() => {
 		if (!selectionMenu) return;
 		const anchor = selectionMenu.anchor;
-		const quote = anchor.quote?.trim();
 		setSelectionMenu(null);
 		selectionCap?.clear(docId);
-		if (!quote) return;
-		stopTranslateSession();
-		const paperPath = paperRelPath || paperAbsPath || "paper";
-		const rec = createTranslateRecord({
-			paperPath,
-			page: anchor.page,
-			rects: anchor.rects,
-			quote,
-		});
-		upsertTranslate(rec);
-		// Menu action is not a hover surface; card auto-hides after result.
-		cardHoverSurfaceRef.current = false;
-		openCard({ kind: "translate", id: rec.id });
-		translateStreamingRef.current = true;
-		setTranslateStreaming(true);
-		setTranslateError(null);
-
-		const { providerId, targetLangName } = prepareTranslateTask({
-			text: quote,
-			context: { page: anchor.page, surface: "pdf-selection" },
-		});
-
-		if (providerId === "agent") {
-			const prompt = buildTranslatePrompt({
-				text: quote,
-				targetLangName,
-				page: anchor.page,
-				surface: "pdf-selection",
-			});
-			void (async () => {
-				try {
-					const registry = await listAgents().catch(() => null);
-					const resolved = resolveTranslateAgent(
-						loadSettings().translate,
-						registry,
-					);
-					if (!resolved.agentId) {
-						const msg = t("selection.translateNoAgent");
-						notifyError(msg);
-						markTranslateFailure(rec.id, msg);
-						return;
-					}
-					const accepted = await runOnce({
-						prompt,
-						agentId: resolved.agentId,
-						modelId: resolved.modelId,
-						vaultPath: vaultPath ?? undefined,
-						workflow: "free",
-						autoApprove: true,
-						hideFromChatHistory: true,
-					});
-					const sessionId = accepted.sessionId;
-					translateSessionRef.current = sessionId;
-					activeSessionRef.current = sessionId;
-					const unsubs: UnlistenFn[] = [];
-					const cleanup = () => {
-						for (const u of unsubs) u();
-						if (translateSessionRef.current === sessionId)
-							translateSessionRef.current = null;
-						if (activeSessionRef.current === sessionId)
-							activeSessionRef.current = null;
-						translateStreamingRef.current = false;
-						setTranslateStreaming(false);
-					};
-					unsubs.push(
-						await listenAgentStream((ev) => {
-							if (ev.sessionId !== sessionId) return;
-							if ((ev.kind ?? "message") === "thought") return;
-							const latest =
-								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
-							upsertTranslate({
-								...latest,
-								result: (latest.result ?? "") + ev.chunk,
-								updatedAt: new Date().toISOString(),
-								error: undefined,
-							});
-						}),
-					);
-					unsubs.push(
-						await listenAgentCompleted((ev) => {
-							if (ev.sessionId !== sessionId) return;
-							const latest =
-								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
-							const next = {
-								...latest,
-								result: (ev.content || latest.result || "").trim(),
-								updatedAt: new Date().toISOString(),
-								error: undefined,
-							};
-							upsertTranslate(next);
-							void persistTranslate(next);
-							setTranslateError(null);
-							cleanup();
-						}),
-					);
-					unsubs.push(
-						await listenAgentFailed((ev) => {
-							if (ev.sessionId !== sessionId) return;
-							const msg = ev.error || t("pdfAsk.agentFailed");
-							notifyError(msg);
-							markTranslateFailure(rec.id, msg);
-							cleanup();
-						}),
-					);
-				} catch (e) {
-					const message = e instanceof Error ? e.message : String(e);
-					notifyError(message);
-					markTranslateFailure(rec.id, message);
-				}
-			})();
-			return;
-		}
-
-		void (async () => {
-			try {
-				const result = await runTranslate(
-					{
-						text: quote,
-						context: { page: anchor.page, surface: "pdf-selection" },
-					},
-					{ providerId },
-				);
-				const latest =
-					translatesRef.current.find((r) => r.id === rec.id) ?? rec;
-				const next = {
-					...latest,
-					result: result.trim(),
-					updatedAt: new Date().toISOString(),
-					error: undefined,
-				};
-				upsertTranslate(next);
-				void persistTranslate(next);
-				translateStreamingRef.current = false;
-				setTranslateStreaming(false);
-				setTranslateError(null);
-			} catch (e) {
-				const message = e instanceof Error ? e.message : String(e);
-				notifyError(message);
-				markTranslateFailure(rec.id, message);
-			}
-		})();
+		translateSelection(anchor);
 	}, [
 		selectionMenu,
 		selectionCap,
 		docId,
-		t,
-		vaultPath,
-		paperAbsPath,
-		paperRelPath,
-		stopTranslateSession,
-		upsertTranslate,
-		persistTranslate,
-		markTranslateFailure,
-		openCard,
-		cardHoverSurfaceRef,
-		translatesRef,
 		setSelectionMenu,
+		translateSelection,
 	]);
 
 	// Re-anchor the active pin modal on scroll + zoom. zoomLevel forces
@@ -3417,7 +3231,7 @@ function PdfViewerInner({
 					record: activeTranslate,
 					streaming: translateStreaming,
 					error: translateError,
-					onOpenSettings: () => onOpenSettings?.(),
+					onOpenSettings: openTranslateSettings,
 					onHide: hideActiveCard,
 					onDelete: deleteTranslateCard,
 				}}
