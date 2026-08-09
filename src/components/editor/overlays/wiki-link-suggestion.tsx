@@ -10,20 +10,14 @@ import {
 } from "lucide-react";
 import { RangeApi } from "platejs";
 import { useEditorRef } from "platejs/react";
-import type {
-	MutableRefObject,
-	KeyboardEvent as ReactKeyboardEvent,
-} from "react";
-import {
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import type { MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/context/markdown-doc-context";
+import {
+	type CompletionMenuController,
+	useCompletionMenu,
+} from "@/components/editor/hooks/use-completion-menu";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
 import {
 	annotationSnippet,
@@ -69,9 +63,7 @@ export type WikiCompletionDraft = {
 	top: number;
 };
 
-export type WikiCompletionController = {
-	handleKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => boolean;
-};
+export type WikiCompletionController = CompletionMenuController;
 
 type WikiLinkSuggestionProps = {
 	draft: WikiCompletionDraft | null;
@@ -250,33 +242,6 @@ export function WikiLinkSuggestion({
 		WikiSearchCandidate[]
 	>([]);
 	const [loading, setLoading] = useState(false);
-	const [selectedIndex, setSelectedIndex] = useState(0);
-	const listRef = useRef<HTMLDivElement>(null);
-
-	// Keep highlight inside the listbox only — scrollIntoView can scroll the
-	// editor container and onScrollCapture closes the completion popup.
-	useEffect(() => {
-		const list = listRef.current;
-		if (!list || !candidates[selectedIndex]) return;
-		const option = list.querySelector<HTMLElement>(
-			'[role="option"][aria-selected="true"]',
-		);
-		if (!option) return;
-		const listRect = list.getBoundingClientRect();
-		const optionRect = option.getBoundingClientRect();
-		if (optionRect.bottom > listRect.bottom) {
-			list.scrollTop += optionRect.bottom - listRect.bottom;
-		} else if (optionRect.top < listRect.top) {
-			list.scrollTop -= listRect.top - optionRect.top;
-		}
-	}, [candidates, selectedIndex]);
-
-	useEffect(() => {
-		// Reset highlight only when the completion query identity changes.
-		void requestKey;
-		setSelectedIndex(0);
-	}, [requestKey]);
-
 	useEffect(() => {
 		if (!request) {
 			setCandidateState({ requestKey: null, items: [] });
@@ -431,6 +396,37 @@ export function WikiLinkSuggestion({
 		};
 	}, [filePath, recentCandidates, request, requestKey, wikiNav?.vaultPath]);
 
+	const selectCandidateRef = useRef<
+		(candidate: WikiSearchCandidate, submitKey: "Enter" | "Tab") => boolean
+	>(() => false);
+
+	const { selectedIndex, setSelectedIndex, listRef } = useCompletionMenu({
+		items: candidates,
+		open: Boolean(draft),
+		resetKey: requestKey,
+		onClose,
+		controllerRef,
+		onSubmitKey: (event, candidate) => {
+			if (!isWikiCompletionSubmitKey(event.key) || !candidate) return false;
+			if (
+				selectCandidateRef.current(
+					candidate,
+					event.key === "Tab" ? "Tab" : "Enter",
+				)
+			) {
+				event.preventDefault();
+				return true;
+			}
+			// An alias trigger with an empty query has nothing to confirm, but the
+			// key must not reach the editor and split the token.
+			if (request?.kind === "alias" && !request.query) {
+				event.preventDefault();
+				return true;
+			}
+			return false;
+		},
+	});
+
 	const selectCandidate = useCallback(
 		(candidate: WikiSearchCandidate, submitKey: "Enter" | "Tab" = "Enter") => {
 			if (!draft || !request || candidate.kind !== request.kind) return false;
@@ -548,69 +544,9 @@ export function WikiLinkSuggestion({
 			);
 			return true;
 		},
-		[draft, editor, onClose, onContinue, request],
+		[draft, editor, onClose, onContinue, request, setSelectedIndex],
 	);
-
-	const selectedIndexRef = useRef(selectedIndex);
-	selectedIndexRef.current = selectedIndex;
-	const draftRef = useRef(draft);
-	draftRef.current = draft;
-	const requestRef = useRef(request);
-	requestRef.current = request;
-	const selectCandidateRef = useRef(selectCandidate);
 	selectCandidateRef.current = selectCandidate;
-	const onCloseRef = useRef(onClose);
-	onCloseRef.current = onClose;
-
-	// Stable controller identity: re-binding on every highlight change used to
-	// briefly null `controllerRef` in layout cleanup, and selection re-renders
-	// could race with the next keydown.
-	useLayoutEffect(() => {
-		controllerRef.current = {
-			handleKeyDown: (event) => {
-				if (!draftRef.current) return false;
-				if (event.key === "Escape") {
-					event.preventDefault();
-					onCloseRef.current();
-					return true;
-				}
-				// Always consume vertical arrows while the menu is open so the caret
-				// cannot leave the `[[` token (which would dismiss the popup). Cycle
-				// selection when there are items; still swallow keys when empty/loading.
-				if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-					event.preventDefault();
-					event.stopPropagation();
-					const items = candidatesRef.current;
-					if (items.length) {
-						const delta = event.key === "ArrowDown" ? 1 : -1;
-						setSelectedIndex(
-							(index) => (index + delta + items.length) % items.length,
-						);
-					}
-					return true;
-				}
-				const items = candidatesRef.current;
-				const index = selectedIndexRef.current;
-				if (isWikiCompletionSubmitKey(event.key) && items[index]) {
-					if (selectCandidateRef.current(items[index], event.key)) {
-						event.preventDefault();
-						return true;
-					}
-					if (
-						requestRef.current?.kind === "alias" &&
-						!requestRef.current.query
-					) {
-						event.preventDefault();
-						return true;
-					}
-				}
-				return false;
-			},
-		};
-		return () => {
-			controllerRef.current = null;
-		};
-	}, [controllerRef]);
 
 	if (!draft || !request) return null;
 	return (
