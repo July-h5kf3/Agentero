@@ -26,6 +26,20 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+/**
+ * `findSearchMatches` returns a fresh array each run, so the default reference
+ * equality would mark matches as changed on every keystroke and force a full
+ * re-decorate. Compare the match positions instead.
+ */
+function matchesKey(ranges: TRange[]): string {
+	return ranges
+		.map(
+			(range) =>
+				`${range.anchor.path.join(".")}:${range.anchor.offset}-${range.focus.offset}`,
+		)
+		.join("|");
+}
+
 /** All six bar buttons are the same ghost icon button with a bottom tooltip. */
 function IconAction({
 	label,
@@ -95,6 +109,7 @@ export function FindReplaceBar({
 	const matches = useEditorSelector(
 		(e) => findSearchMatches(e, query),
 		[query],
+		{ equalityFn: (a, b) => matchesKey(a) === matchesKey(b) },
 	);
 	const index = matches.length ? Math.min(activeIndex, matches.length - 1) : -1;
 
