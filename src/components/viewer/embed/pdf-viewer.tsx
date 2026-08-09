@@ -8,7 +8,6 @@ import type {
 import { PdfAnnotationSubtype } from "@embedpdf/models";
 import { AiManagerPluginPackage } from "@embedpdf/plugin-ai-manager/react";
 import {
-	AnnotationLayer,
 	AnnotationPluginPackage,
 	type AnnotationTransferItem,
 	useAnnotationCapability,
@@ -25,39 +24,26 @@ import {
 import {
 	GlobalPointerProvider,
 	InteractionManagerPluginPackage,
-	PagePointerProvider,
 	useInteractionManagerCapability,
 } from "@embedpdf/plugin-interaction-manager/react";
 import {
-	LayoutAnalysisLayer,
 	LayoutAnalysisPluginPackage,
 	useLayoutAnalysis,
 	useLayoutAnalysisCapability,
 } from "@embedpdf/plugin-layout-analysis/react";
-import {
-	RenderLayer,
-	RenderPluginPackage,
-} from "@embedpdf/plugin-render/react";
+import { RenderPluginPackage } from "@embedpdf/plugin-render/react";
 import {
 	Scroller,
 	ScrollPluginPackage,
 	useScroll,
 } from "@embedpdf/plugin-scroll/react";
-import {
-	SearchLayer,
-	SearchPluginPackage,
-	useSearch,
-} from "@embedpdf/plugin-search/react";
+import { SearchPluginPackage, useSearch } from "@embedpdf/plugin-search/react";
 import {
 	type FormattedSelection,
-	SelectionLayer,
 	SelectionPluginPackage,
 	useSelectionCapability,
 } from "@embedpdf/plugin-selection/react";
-import {
-	TilingLayer,
-	TilingPluginPackage,
-} from "@embedpdf/plugin-tiling/react";
+import { TilingPluginPackage } from "@embedpdf/plugin-tiling/react";
 import { ViewportPluginPackage } from "@embedpdf/plugin-viewport/react";
 import {
 	useZoom,
@@ -76,19 +62,16 @@ import { PdfFindBar } from "@/components/viewer/embed/chrome/pdf-find-bar";
 import { PdfOutlinePanel } from "@/components/viewer/embed/chrome/pdf-outline-panel";
 import { PdfToolbar } from "@/components/viewer/embed/chrome/pdf-toolbar";
 import {
-	CitationLinkLayer,
 	isLinkObject,
 	useDestinationPreviewResolver,
 } from "@/components/viewer/embed/citation-links";
 import { DockviewViewport } from "@/components/viewer/embed/dockview-viewport";
 import { usePdfEngineContext } from "@/components/viewer/embed/engine-provider";
 import {
-	EMBED_PAGE_ATTR,
 	pageElByIndex,
 	rectRightScreen,
 	rectTopCenterScreen,
 } from "@/components/viewer/embed/geometry";
-import { LayoutTranslateOverlay } from "@/components/viewer/embed/layout-translate-overlay";
 import {
 	PDF_COLOR_SCHEME_EVENT,
 	type PdfColorScheme,
@@ -100,16 +83,15 @@ import {
 	isEditableClipboardTarget,
 	isPdfDocumentCloseRaceError,
 } from "@/components/viewer/embed/pdf-host-dom";
+import { EMPTY_LAYOUT_REGIONS_BY_PAGE } from "@/components/viewer/embed/pdf-page-constants";
 import {
-	EMPTY_CITATION_LINKS,
-	EMPTY_LAYOUT_REGIONS_BY_PAGE,
-	EMPTY_PINS,
-	PAGE_LAYER_STYLE,
-	PDF_BASE_LAYER_SCALE_CAP,
-	pdfRasterDpr,
-} from "@/components/viewer/embed/pdf-page-constants";
+	type PdfPageHandlers,
+	PdfPageLayers,
+	type PdfPageLayoutSlice,
+	type PdfPageMarksSlice,
+	type PdfPageModeSlice,
+} from "@/components/viewer/embed/pdf-page-layers";
 import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
-import { PdfRegionSelectLayer } from "@/components/viewer/embed/pdf-region-select-layer";
 import type {
 	CitationPreviewState,
 	EditorState,
@@ -123,7 +105,6 @@ import type {
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
 import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
-import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
 import i18n from "@/i18n";
 import {
 	cancelAgentRun,
@@ -213,10 +194,6 @@ import {
 	type LayoutTranslateItem,
 	type LayoutTranslateJobStatus,
 	layoutAnalysisStore,
-	layoutKindBorder,
-	layoutKindFill,
-	layoutKindHex,
-	layoutKindI18nKey,
 	listTranslatableLayoutRegions,
 	type PdfLayoutRegion,
 	rawLayoutRegionsByPage,
@@ -228,7 +205,6 @@ import {
 	toLayoutTranslateItems,
 } from "@/lib/pdf/layout";
 import { setPaperOutline } from "@/lib/pdf/outline-location";
-import { PDF_PAGE_RASTER_DARK_CLASS } from "@/lib/pdf/page-theme";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
@@ -3681,10 +3657,90 @@ function PdfViewerInner({
 		};
 	}, [regionSelecting, selectionCap, interactionCap, docId]);
 
+	const pageMarks = useMemo<PdfPageMarksSlice>(
+		() => ({
+			activeThread,
+			activeTranslate,
+			activeVisualTrace,
+			visualDraftRegion,
+			formulaAnnotationRegion,
+			focusedLayoutRegion,
+			pinsByPage,
+			citationLinks,
+			activeCardId: activeCard?.id ?? null,
+		}),
+		[
+			activeThread,
+			activeTranslate,
+			activeVisualTrace,
+			visualDraftRegion,
+			formulaAnnotationRegion,
+			focusedLayoutRegion,
+			pinsByPage,
+			citationLinks,
+			activeCard?.id,
+		],
+	);
+
+	const pageLayout = useMemo<PdfPageLayoutSlice>(
+		() => ({
+			hoverableRegionsByPage,
+			rawRegionsByPage,
+			layoutOverlayVisible,
+			layoutTranslateItems: layoutTranslateJob.items,
+			equationSymbolCount: equationSymbols.length,
+			visualDraftEphemeral: Boolean(visualDraftEditor?.ephemeral),
+		}),
+		[
+			hoverableRegionsByPage,
+			rawRegionsByPage,
+			layoutOverlayVisible,
+			layoutTranslateJob.items,
+			equationSymbols.length,
+			visualDraftEditor?.ephemeral,
+		],
+	);
+
+	const pageMode = useMemo<PdfPageModeSlice>(
+		() => ({
+			regionSelecting,
+			visualCropPending,
+			visualDraftOpen: Boolean(visualDraftEditor),
+		}),
+		[regionSelecting, visualCropPending, visualDraftEditor],
+	);
+
+	const pageHandlers = useMemo<PdfPageHandlers>(
+		() => ({
+			onOpenPin: handleOpenPin,
+			onCardHoverEnter: markCardHoverEnter,
+			onCardHoverLeave: scheduleHoverHide,
+			onCitationActivate: handleCitationLinkActivate,
+			onCitationHover: handleCitationLinkHover,
+			onRegionSelect: handleVisualRegionSelect,
+			onLayoutHoverEnter: scheduleLayoutHoverOpen,
+			onLayoutHoverLeave: handleLayoutHoverLeave,
+			onDraftHoverEnter: markLayoutDraftHoverEnter,
+			onDraftHoverLeave: scheduleLayoutDraftHide,
+		}),
+		[
+			handleOpenPin,
+			markCardHoverEnter,
+			scheduleHoverHide,
+			handleCitationLinkActivate,
+			handleCitationLinkHover,
+			handleVisualRegionSelect,
+			scheduleLayoutHoverOpen,
+			handleLayoutHoverLeave,
+			markLayoutDraftHoverEnter,
+			scheduleLayoutDraftHide,
+		],
+	);
+
 	/**
-	 * Page renderer for the Scroller. Memoized so plain scroll/zoom re-renders
-	 * (which only change `currentPage`/`zoomLevel`) keep a stable callback
-	 * identity and avoid re-running the per-page pin/filter work.
+	 * Page renderer for the Scroller. The layer stack is a memo component so a
+	 * scroller-layout-only re-render (which calls this for every mounted page)
+	 * can bail out instead of rebuilding ten page subtrees.
 	 */
 	const renderPage = useCallback(
 		({
@@ -3695,342 +3751,21 @@ function PdfViewerInner({
 			pageIndex: number;
 			width: number;
 			height: number;
-		}) => {
-			const pageNumber = pageIndex + 1;
-			const activeAskOnPage =
-				activeThread?.anchor.page === pageNumber ? activeThread : null;
-			const activeTranslateOnPage =
-				activeTranslate?.page === pageNumber ? activeTranslate : null;
-			const activeVisualOnPage =
-				activeVisualTrace?.page === pageNumber ? activeVisualTrace : null;
-			const visualDraftRegionOnPage =
-				visualDraftRegion?.page === pageNumber
-					? visualDraftRegion.region
-					: null;
-			const formulaAnnotationRegionOnPage =
-				formulaAnnotationRegion?.page === pageNumber
-					? formulaAnnotationRegion.region
-					: null;
-			const focusedLayoutOnPage =
-				focusedLayoutRegion?.pageIndex === pageIndex
-					? focusedLayoutRegion
-					: null;
-			const pins = pinsByPage.get(pageNumber) ?? EMPTY_PINS;
-			// Page shell: paper-white in light mode; near-black when PDF dark mode is on
-			// so loading gaps match inverted page rasters.
-			return (
-				<div
-					className={cn(
-						"relative overflow-hidden rounded-sm shadow-sm ring-1",
-						pdfDark ? "bg-zinc-900 ring-white/10" : "bg-white ring-black/5",
-					)}
-					style={{ width, height }}
-					{...{ [EMBED_PAGE_ATTR]: pageIndex }}
-				>
-					{/*
-					 * EmbedPDF has no page color-scheme API yet (UI chrome theme only).
-					 * Invert + hue-rotate only the raster layers so selection / search /
-					 * annotation / pin overlays keep their intended colors. Agent crops
-					 * use engine.renderPageRect and are unaffected.
-					 */}
-					<RenderLayer
-						documentId={docId}
-						pageIndex={pageIndex}
-						scale={Math.min(zoomRef.current, PDF_BASE_LAYER_SCALE_CAP)}
-						dpr={pdfRasterDpr()}
-						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
-						style={PAGE_LAYER_STYLE}
-					/>
-					<TilingLayer
-						documentId={docId}
-						pageIndex={pageIndex}
-						dpr={pdfRasterDpr()}
-						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
-						style={PAGE_LAYER_STYLE}
-					/>
-					<SearchLayer
-						documentId={docId}
-						pageIndex={pageIndex}
-						style={PAGE_LAYER_STYLE}
-					/>
-					{/*
-					 * EmbedPDF raw bbox layer — kept mounted for plugin state, but
-					 * visibility is forced off (see effect). Store-backed boxes below.
-					 */}
-					<LayoutAnalysisLayer
-						documentId={docId}
-						pageIndex={pageIndex}
-						style={PAGE_LAYER_STYLE}
-					/>
-					<PagePointerProvider
-						documentId={docId}
-						pageIndex={pageIndex}
-						style={PAGE_LAYER_STYLE}
-					>
-						{/* Unmount text selection while framing a visual region. */}
-						{regionSelecting ? null : (
-							<SelectionLayer documentId={docId} pageIndex={pageIndex} />
-						)}
-						<AnnotationLayer documentId={docId} pageIndex={pageIndex} />
-						<CitationLinkLayer
-							links={citationLinks.get(pageIndex) ?? EMPTY_CITATION_LINKS}
-							pageWidthPt={width / zoomRef.current}
-							pageHeightPt={height / zoomRef.current}
-							label={t("pdf.linkAria")}
-							onActivate={handleCitationLinkActivate}
-							onHover={handleCitationLinkHover}
-						/>
-						<PdfRegionSelectLayer
-							active={regionSelecting && !visualCropPending}
-							label={t("pdfExplain.regionSelectionLabel", {
-								page: pageNumber,
-							})}
-							onSelect={(region) =>
-								handleVisualRegionSelect(pageNumber, region)
-							}
-						/>
-						{/*
-						 * Debug Eye overlay: pre-merge detections (all kinds, no NMS),
-						 * score ≥ LAYOUT_SIDEBAR_MIN_SCORE (30%). Label = kind + conf.
-						 */}
-						{layoutOverlayVisible
-							? rawRegionsByPage.get(pageIndex)?.map((region) => {
-									const pct = Math.round(region.score * 100);
-									const kindLabel = t(layoutKindI18nKey(region.kind));
-									const label = t("figures.overlayLabel", {
-										kind: kindLabel,
-										pct,
-									});
-									return (
-										<div
-											key={`layout-box-${region.id}`}
-											className="pointer-events-none absolute z-[1] rounded-sm border-[1.5px]"
-											style={{
-												left: `${region.bbox.x * 100}%`,
-												top: `${region.bbox.y * 100}%`,
-												width: `${region.bbox.w * 100}%`,
-												height: `${region.bbox.h * 100}%`,
-												borderColor: layoutKindBorder(region.kind),
-												backgroundColor: layoutKindFill(region.kind),
-											}}
-											aria-hidden="true"
-										>
-											<span
-												className="absolute top-0 left-0 max-w-full truncate rounded-br-sm px-1 py-px font-medium text-[10px] text-white leading-4"
-												style={{
-													backgroundColor: layoutKindHex(region.kind),
-												}}
-											>
-												{label}
-											</span>
-										</div>
-									);
-								})
-							: null}
-						{/* Bulk layout translate: progressive text overlays over body blocks. */}
-						{layoutTranslateJob.items.length > 0 ? (
-							<LayoutTranslateOverlay
-								items={layoutTranslateJob.items}
-								pageIndex={pageIndex}
-								pageWidthPx={width}
-								pageHeightPx={height}
-								pdfDark={pdfDark}
-							/>
-						) : null}
-						{/*
-						 * Hover hit targets for post-merge figure/table/algorithm/formula.
-						 * Largest first so smaller boxes stack on top and win pointer hits.
-						 * Hidden when framing or a visual draft is open (not during crop:
-						 * unmount leave must not cancel an in-flight hover open).
-						 * Formula legend keeps hits mounted so leave/enter can switch
-						 * equations and drive hide without a second hover surface.
-						 */}
-						{!regionSelecting && !visualDraftEditor
-							? hoverableRegionsByPage.get(pageIndex)?.map((region) => {
-									const formulaLegend =
-										isFormulaLayoutKind(region.kind) &&
-										equationSymbols.length > 0;
-									return (
-										<button
-											key={`layout-hit-${region.id}`}
-											type="button"
-											data-layout-hit={region.id}
-											aria-label={
-												formulaLegend
-													? t("equationAnnotation.hoverAria")
-													: t("figures.hoverAskAria")
-											}
-											className="absolute z-[2] cursor-pointer rounded-sm border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
-											style={{
-												left: `${region.bbox.x * 100}%`,
-												top: `${region.bbox.y * 100}%`,
-												width: `${region.bbox.w * 100}%`,
-												height: `${region.bbox.h * 100}%`,
-											}}
-											onPointerEnter={() => scheduleLayoutHoverOpen(region)}
-											onPointerLeave={() => handleLayoutHoverLeave(region.id)}
-										/>
-									);
-								})
-							: null}
-						{/* Open ask conversation card: highlight the anchored selection. */}
-						{activeAskOnPage
-							? activeAskOnPage.anchor.rects.map((rect) => (
-									<div
-										key={`${activeAskOnPage.id}-source-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-										className="pointer-events-auto absolute z-[1] rounded-[2px] bg-amber-300/45 dark:bg-amber-400/35"
-										style={{
-											left: `${rect.x * 100}%`,
-											top: `${rect.y * 100}%`,
-											width: `${rect.w * 100}%`,
-											height: `${rect.h * 100}%`,
-										}}
-										aria-hidden="true"
-										onMouseEnter={markCardHoverEnter}
-										onMouseLeave={scheduleHoverHide}
-									/>
-								))
-							: null}
-						{activeTranslateOnPage
-							? activeTranslateOnPage.rects.map((rect) => (
-									<div
-										key={`${activeTranslateOnPage.id}-source-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-										className="pointer-events-auto absolute z-[1] rounded-[2px] bg-yellow-300/40 dark:bg-yellow-400/35"
-										style={{
-											left: `${rect.x * 100}%`,
-											top: `${rect.y * 100}%`,
-											width: `${rect.w * 100}%`,
-											height: `${rect.h * 100}%`,
-										}}
-										aria-hidden="true"
-										onMouseEnter={markCardHoverEnter}
-										onMouseLeave={scheduleHoverHide}
-									/>
-								))
-							: null}
-						{/* Open visual draft / mark: show the framed source region on-page. */}
-						{visualDraftRegionOnPage ? (
-							<div
-								className={cn(
-									"absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
-									// Ephemeral layout-hover drafts need a hover surface so
-									// leaving the region can schedule auto-hide.
-									visualDraftEditor?.ephemeral
-										? "pointer-events-auto"
-										: "pointer-events-none",
-								)}
-								style={{
-									left: `${visualDraftRegionOnPage.x * 100}%`,
-									top: `${visualDraftRegionOnPage.y * 100}%`,
-									width: `${visualDraftRegionOnPage.w * 100}%`,
-									height: `${visualDraftRegionOnPage.h * 100}%`,
-								}}
-								aria-hidden="true"
-								onMouseEnter={
-									visualDraftEditor?.ephemeral
-										? markLayoutDraftHoverEnter
-										: undefined
-								}
-								onMouseLeave={
-									visualDraftEditor?.ephemeral
-										? scheduleLayoutDraftHide
-										: undefined
-								}
-							/>
-						) : null}
-						{/*
-						 * Formula legend: keep the same primary visual frame as visual-ask
-						 * so the hovered equation is clearly boxed on the page.
-						 * Hits own enter/leave; frame is visual-only.
-						 */}
-						{formulaAnnotationRegionOnPage ? (
-							<div
-								className="pointer-events-none absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
-								style={{
-									left: `${formulaAnnotationRegionOnPage.x * 100}%`,
-									top: `${formulaAnnotationRegionOnPage.y * 100}%`,
-									width: `${formulaAnnotationRegionOnPage.w * 100}%`,
-									height: `${formulaAnnotationRegionOnPage.h * 100}%`,
-								}}
-								aria-hidden="true"
-							/>
-						) : null}
-						{/* Figures sidebar selection: EmbedPDF layout hue for kind. */}
-						{focusedLayoutOnPage && !formulaAnnotationRegionOnPage ? (
-							<div
-								className="pointer-events-none absolute z-[2] rounded-sm border-2 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
-								style={{
-									left: `${focusedLayoutOnPage.bbox.x * 100}%`,
-									top: `${focusedLayoutOnPage.bbox.y * 100}%`,
-									width: `${focusedLayoutOnPage.bbox.w * 100}%`,
-									height: `${focusedLayoutOnPage.bbox.h * 100}%`,
-									borderColor: layoutKindHex(focusedLayoutOnPage.kind),
-									backgroundColor: layoutKindFill(focusedLayoutOnPage.kind),
-									// Keep a slightly stronger edge for visibility.
-									outline: `1px solid ${layoutKindBorder(focusedLayoutOnPage.kind)}`,
-								}}
-								aria-hidden="true"
-							/>
-						) : null}
-						{/* Active visual mark: theme outline of the crop region. */}
-						{activeVisualOnPage
-							? activeVisualOnPage.rects.map((rect) => (
-									<div
-										key={`${activeVisualOnPage.id}-region-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-										className="pointer-events-none absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
-										style={{
-											left: `${rect.x * 100}%`,
-											top: `${rect.y * 100}%`,
-											width: `${rect.w * 100}%`,
-											height: `${rect.h * 100}%`,
-										}}
-										aria-hidden="true"
-									/>
-								))
-							: null}
-						<SelectionGutter
-							items={pins}
-							activeId={activeCard?.id ?? null}
-							onOpen={handleOpenPin}
-							onEnter={markCardHoverEnter}
-							onLeave={scheduleHoverHide}
-						/>
-					</PagePointerProvider>
-				</div>
-			);
-		},
-		[
-			docId,
-			pinsByPage,
-			activeThread,
-			activeTranslate,
-			activeVisualTrace,
-			visualDraftRegion,
-			formulaAnnotationRegion,
-			focusedLayoutRegion,
-			activeCard?.id,
-			handleOpenPin,
-			markCardHoverEnter,
-			scheduleHoverHide,
-			citationLinks,
-			handleCitationLinkActivate,
-			handleCitationLinkHover,
-			regionSelecting,
-			visualCropPending,
-			visualDraftEditor,
-			equationSymbols.length,
-			hoverableRegionsByPage,
-			rawRegionsByPage,
-			layoutOverlayVisible,
-			layoutTranslateJob.items,
-			handleVisualRegionSelect,
-			scheduleLayoutHoverOpen,
-			handleLayoutHoverLeave,
-			markLayoutDraftHoverEnter,
-			scheduleLayoutDraftHide,
-			pdfDark,
-			t,
-		],
+		}) => (
+			<PdfPageLayers
+				docId={docId}
+				pageIndex={pageIndex}
+				width={width}
+				height={height}
+				pdfDark={pdfDark}
+				zoomRef={zoomRef}
+				marks={pageMarks}
+				layout={pageLayout}
+				mode={pageMode}
+				handlers={pageHandlers}
+			/>
+		),
+		[docId, pdfDark, pageMarks, pageLayout, pageMode, pageHandlers],
 	);
 
 	const layoutTranslateRunning = layoutTranslateJob.status === "running";
