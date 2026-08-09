@@ -17,13 +17,18 @@ const markerWidthByDepth = {
 	6: "w-2",
 } as const;
 
-const minimumHeadingCount = 3;
+/**
+ * Mounting this component costs two full-document walks per edit (both
+ * `useTocSideBarState` and its observer call `getHeadingList`), so the caller
+ * gates on this threshold instead of letting the component render null.
+ */
+export const MINIMUM_TOC_HEADINGS = 3;
 
 export function TocSidebar(props: TocSideBarProps) {
 	const state = useTocSideBarState(props);
 	const { navProps, onContentClick } = useTocSideBar(state);
 
-	if (state.headingList.length < minimumHeadingCount) return null;
+	if (state.headingList.length < MINIMUM_TOC_HEADINGS) return null;
 
 	return (
 		<nav

@@ -26,7 +26,10 @@ import { FindReplaceBar } from "@/components/editor/overlays/find-replace-bar";
 import { FrontmatterPanel } from "@/components/editor/overlays/frontmatter-panel";
 import { HeadingRenameDialog } from "@/components/editor/overlays/heading-rename-dialog";
 import { SlashCommandMenu } from "@/components/editor/overlays/slash-command-menu";
-import { TocSidebar } from "@/components/editor/overlays/toc-sidebar";
+import {
+	MINIMUM_TOC_HEADINGS,
+	TocSidebar,
+} from "@/components/editor/overlays/toc-sidebar";
 import { WikiLinkSuggestion } from "@/components/editor/overlays/wiki-link-suggestion";
 import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
@@ -97,6 +100,21 @@ const EmbeddedMarkdownProjection = lazy(async () => {
 	);
 	return { default: module.EmbeddedMarkdownProjection };
 });
+
+/**
+ * Headings are top-level blocks, so this counts them without touching leaves —
+ * far cheaper than the full walks TocSidebar performs once mounted.
+ */
+function hasEnoughHeadings(children: readonly unknown[]): boolean {
+	let count = 0;
+	for (const node of children) {
+		const type = (node as { type?: unknown }).type;
+		if (typeof type !== "string" || !/^h[1-6]$/.test(type)) continue;
+		count += 1;
+		if (count >= MINIMUM_TOC_HEADINGS) return true;
+	}
+	return false;
+}
 
 export function MarkdownEditor({
 	initialMarkdown,
@@ -231,11 +249,23 @@ export function MarkdownEditor({
 		closeMenus,
 	} = useCompletionDrafts({ editor, editorContainerRef });
 
+	const [tocMounted, setTocMounted] = useState(false);
+	const refreshTocMounted = useCallback(() => {
+		setTocMounted(hasEnoughHeadings(editor.children));
+	}, [editor]);
+	useEffect(refreshTocMounted, [refreshTocMounted]);
+
 	const handleChange = useCallback(() => {
 		window.requestAnimationFrame(updateWikiCompletionDraft);
 		window.requestAnimationFrame(updateSlashCommandDraft);
 		noteDocumentChanged();
-	}, [noteDocumentChanged, updateSlashCommandDraft, updateWikiCompletionDraft]);
+		refreshTocMounted();
+	}, [
+		noteDocumentChanged,
+		refreshTocMounted,
+		updateSlashCommandDraft,
+		updateWikiCompletionDraft,
+	]);
 
 	const {
 		syncWikiLinkPresentation,
@@ -608,7 +638,9 @@ export function MarkdownEditor({
 										}}
 									/>
 								) : null}
-								<TocSidebar rootMargin="-8px 0px -80% 0px" topOffset={16} />
+								{tocMounted ? (
+									<TocSidebar rootMargin="-8px 0px -80% 0px" topOffset={16} />
+								) : null}
 							</div>
 						</div>
 						<HeadingRenameDialog
