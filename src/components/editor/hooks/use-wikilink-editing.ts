@@ -244,16 +244,19 @@ export function useWikilinkEditing({
 			) {
 				return;
 			}
-			const draftRefs = [...editor.api.nodes({ at: [] })]
-				.filter(([node]) => isWikiLinkDraftText(node))
-				.filter(([node, path]) => {
-					if (!isWikiLinkDraftText(node)) return false;
-					return (
-						parseWikiLinkMarkdown(node.text) !== null &&
-						!isSelectionEditingWikiLinkDraft(path, node.text, selection)
-					);
-				})
-				.map(([, path]) => editor.api.pathRef(path, { affinity: "forward" }));
+			// Push the predicate into the traversal: materialising every node (text
+			// leaves included) three times over ran on each caret move.
+			const draftRefs: ReturnType<typeof editor.api.pathRef>[] = [];
+			for (const [node, path] of editor.api.nodes({
+				at: [],
+				match: isWikiLinkDraftText,
+			})) {
+				if (!isWikiLinkDraftText(node)) continue;
+				if (parseWikiLinkMarkdown(node.text) === null) continue;
+				if (isSelectionEditingWikiLinkDraft(path, node.text, selection))
+					continue;
+				draftRefs.push(editor.api.pathRef(path, { affinity: "forward" }));
+			}
 			const selectedPath = selectedWikiLinkPath(selection);
 			const activeRef = activeWikiLinkPathRef.current;
 			const activePath = activeRef?.current;
@@ -624,9 +627,13 @@ export function useWikilinkEditing({
 	 * editor semantics.
 	 */
 	const finalizeWikiLinkDrafts = useCallback(() => {
-		const draftRefs = [...editor.api.nodes({ at: [] })]
-			.filter(([node]) => isWikiLinkDraftText(node))
-			.map(([, path]) => editor.api.pathRef(path, { affinity: "forward" }));
+		const draftRefs: ReturnType<typeof editor.api.pathRef>[] = [];
+		for (const [, path] of editor.api.nodes({
+			at: [],
+			match: isWikiLinkDraftText,
+		})) {
+			draftRefs.push(editor.api.pathRef(path, { affinity: "forward" }));
+		}
 		if (!draftRefs.length) return;
 		syncingWikiLinkPresentationRef.current = true;
 		try {
