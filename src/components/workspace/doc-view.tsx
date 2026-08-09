@@ -1,9 +1,8 @@
 import { lazy, memo, Suspense } from "react";
 import { PapersLibrary } from "@/components/library/papers-library";
 import { Skeleton } from "@/components/ui/skeleton";
-import { HtmlViewer } from "@/components/viewer/html-viewer";
-import { ImageViewer } from "@/components/viewer/image-viewer";
-import type { PdfViewerHandle } from "@/components/viewer/pdf/pdf-viewer";
+import type { PdfViewerHandle } from "@/components/viewer";
+import { HtmlViewer, ImageViewer } from "@/components/viewer";
 import { RecycleBinView } from "@/components/workspace/recycle-bin-view";
 import type { PaperMetadata } from "@/lib/paper";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { EmbedStatus } from "@/components/editor/embeds/embed-status";
-import { PdfViewer } from "@/components/viewer/pdf/pdf-viewer";
+import { PdfViewer } from "@/components/viewer";
 import { createKeyedCache } from "@/lib/core/keyed-cache";
 import { localFileToArrayBuffer } from "@/lib/paper/media";
 import { imageMimeFromPath } from "@/lib/workspace/viewer";
