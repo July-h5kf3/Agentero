@@ -839,13 +839,18 @@ function DockviewViewport({
 			ownerWindow?.addEventListener("blur", finishResize);
 		};
 
+		let scrollFrame: number | null = null;
 		const handleScroll = () => {
-			viewportPlugin.setViewportScrollMetrics(documentId, {
-				scrollTop: viewport.scrollTop,
-				scrollLeft: viewport.scrollLeft,
+			if (scrollFrame != null) return;
+			scrollFrame = requestFrame(() => {
+				scrollFrame = null;
+				viewportPlugin.setViewportScrollMetrics(documentId, {
+					scrollTop: viewport.scrollTop,
+					scrollLeft: viewport.scrollLeft,
+				});
 			});
 		};
-		viewport.addEventListener("scroll", handleScroll);
+		viewport.addEventListener("scroll", handleScroll, { passive: true });
 
 		const ResizeObserverCtor = ownerWindow?.ResizeObserver ?? ResizeObserver;
 		const resizeObserver = new ResizeObserverCtor(() => {
@@ -869,6 +874,7 @@ function DockviewViewport({
 			dockResizeActive = false;
 			resizeGate.dispose();
 			resizeObserver.disconnect();
+			if (scrollFrame != null) cancelFrame(scrollFrame);
 			viewport.removeEventListener("scroll", handleScroll);
 			unsubscribeScrollRequest();
 			viewportPlugin.unregisterViewport(documentId);
