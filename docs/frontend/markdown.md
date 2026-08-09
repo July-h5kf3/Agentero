@@ -111,7 +111,9 @@ B --> C[End]
 
 | 路径 | 职责 |
 |---|---|
-| `src/components/editor/` | Plate 编辑器；`index.ts` 是唯一对外出口，内部分 `nodes/` `plugins/` `embeds/` `toolbar/` `overlays/` |
+| `src/components/editor/` | Plate 编辑器；`index.ts` 是唯一对外出口，内部分 `nodes/` `plugins/` `hooks/` `embeds/` `toolbar/` `overlays/` |
+| `src/components/editor/markdown-editor.tsx` | 编排容器：组合各 hook、keydown 派发与整体布局 |
+| `src/components/editor/hooks/` | 有状态逻辑：自动保存、双链编辑语义、补全菜单、右键菜单、选区发布 |
 | `src/components/editor/overlays/frontmatter-panel.tsx` | 可折叠 Properties / YAML frontmatter 编辑 |
 | `src/lib/markdown/frontmatter.ts` | frontmatter 围栏拆装与属性计数 |
 | `src/components/editor/overlays/toc-sidebar.tsx` | 基于 Plate TOC hooks 的悬浮目录、当前标题跟踪与跳转 |
