@@ -38,6 +38,8 @@ export async function syncZotero(opts: {
 	pullNotes: boolean;
 	pullAnnotations: boolean;
 	pushNotes: boolean;
+	/** Ignore watermarks and re-push every linked paper (damage recovery). */
+	forcePush?: boolean;
 	onProgress?: (current: number, total: number, phase: ZoteroSyncPhase) => void;
 }): Promise<ZoteroSyncResult> {
 	if (!isTauri()) {
@@ -62,6 +64,7 @@ export async function syncZotero(opts: {
 				pullNotes: opts.pullNotes,
 				pullAnnotations: opts.pullAnnotations,
 				pushNotes: opts.pushNotes,
+				forcePush: opts.forcePush ?? false,
 			},
 			onProgress,
 		},

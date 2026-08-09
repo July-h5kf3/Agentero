@@ -35,6 +35,10 @@ pub struct ZoteroSyncArgs {
     pub pull_annotations: bool,
     #[serde(default = "default_true")]
     pub push_notes: bool,
+    /// Ignore watermarks and re-push every linked paper's NOTES.md (used to
+    /// converge libraries damaged by earlier versions).
+    #[serde(default)]
+    pub force_push: bool,
 }
 
 fn default_true() -> bool {
@@ -94,7 +98,10 @@ pub fn sync_zotero(
                 continue;
             }
             let never_synced = row.zotero_last_synced.is_none();
-            if never_synced || file_newer_than(&notes, row.zotero_last_synced.as_deref()) {
+            if args.force_push
+                || never_synced
+                || file_newer_than(&notes, row.zotero_last_synced.as_deref())
+            {
                 push_candidates.push(PushCandidate {
                     zotero_item_id: zid,
                     paper_id: row.id.clone(),

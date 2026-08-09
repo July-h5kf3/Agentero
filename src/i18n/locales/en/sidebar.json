@@ -173,6 +173,7 @@
 		"pullNotes": "Pull Zotero notes",
 		"pullAnnotations": "Pull PDF annotations",
 		"pushNotes": "Push NOTES.md back to Zotero",
+		"forcePush": "Force re-push all papers (ignore change timestamps)",
 		"pushWarning": "Pushing writes directly to zotero.sqlite. Close Zotero first; a timestamped backup is created in agentero-backups/. Pushed notes appear in local Zotero, but Zotero cloud sync only picks them up after you edit them inside Zotero.",
 		"phase": {
 			"read": "Reading Zotero library…",

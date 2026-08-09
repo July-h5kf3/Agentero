@@ -69,6 +69,9 @@ export function ZoteroSyncDialog({
 	const [pullNotes, setPullNotes] = useState(saved.pullNotes);
 	const [pullAnnotations, setPullAnnotations] = useState(saved.pullAnnotations);
 	const [pushNotes, setPushNotes] = useState(saved.pushNotes);
+	// One-shot recovery option: re-push every linked paper regardless of the
+	// change watermark. Deliberately NOT persisted across runs.
+	const [forcePush, setForcePush] = useState(false);
 	const [progress, setProgress] = useState<{
 		current: number;
 		total: number;
@@ -146,9 +149,11 @@ export function ZoteroSyncDialog({
 				pullNotes,
 				pullAnnotations,
 				pushNotes,
+				forcePush,
 				onProgress: (current, total, phase) =>
 					setProgress({ current, total, phase }),
 			});
+			setForcePush(false);
 			setResult(res);
 			onDone();
 		} catch (e) {
@@ -313,6 +318,15 @@ export function ZoteroSyncDialog({
 									disabled={busy}
 									label={t("sidebar:zoteroSync.pushNotes")}
 								/>
+								{pushNotes ? (
+									<Toggle
+										id="zsync-force-push"
+										checked={forcePush}
+										onChange={setForcePush}
+										disabled={busy}
+										label={t("sidebar:zoteroSync.forcePush")}
+									/>
+								) : null}
 							</div>
 
 							{pushNotes ? (
