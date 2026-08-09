@@ -147,9 +147,9 @@
 		"previewLabel": "{{marker}} 的引用预览",
 		"previewUnresolved": "打开参考文献侧栏查看这条引用。",
 		"importToFolder": "导入到文件夹",
-		"newFolder": "新文件夹",
-		"newFolderHint": "如 papers/nlp",
-		"invalidFolderPath": "路径必须位于 papers/ 之下"
+		"newFolder": "新建文件夹",
+		"newFolderHint": "papers/子文件夹",
+		"invalidFolderPath": "路径必须在 papers/ 下"
 	},
 	"figures": {
 		"title": "解析",

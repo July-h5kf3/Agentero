@@ -146,10 +146,10 @@
 		"inspect": "Inspect reference",
 		"previewLabel": "Reference preview for {{marker}}",
 		"previewUnresolved": "Open References to inspect this citation.",
-		"importToFolder": "Import into folder",
+		"importToFolder": "Import to folder",
 		"newFolder": "New folder",
-		"newFolderHint": "e.g. papers/nlp",
-		"invalidFolderPath": "Path must stay under papers/"
+		"newFolderHint": "papers/subfolder",
+		"invalidFolderPath": "Path must be under papers/"
 	},
 	"figures": {
 		"title": "Analysis",

@@ -24,6 +24,7 @@ import {
 	importLocalPdfs,
 	installDiscoveredSkills,
 	type LocalPdfImportEntry,
+	type LookupBatchAddResult,
 } from "@/lib/paper/lookup";
 import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import { getSettings } from "@/lib/settings/react-store";
@@ -56,16 +57,18 @@ export function openMagicWand(): void {
 	bumpLookupOpenSignal();
 }
 
+export type LookupSubmitOptions = {
+	/** Open the first newly imported paper after the import finishes. */
+	openImported?: boolean;
+	/** Vault-relative destination, e.g. `papers` or `papers/nlp`. Defaults to the current tree selection. */
+	parentDir?: string;
+	/** Run after one input has finished importing and stores have refreshed. */
+	onComplete?: (result: LookupBatchAddResult) => void | Promise<void>;
+};
+
 export async function lookupSubmit(
 	texts: string[],
-	opts?: {
-		/** Open the first imported paper in the workspace (default true). */
-		openImported?: boolean;
-		/** Destination folder override (defaults to the current lookup parent). */
-		parentDir?: string;
-		/** Runs after import + refresh finished (per text). */
-		onComplete?: () => Promise<void> | void;
-	},
+	opts: LookupSubmitOptions = {},
 ): Promise<void> {
 	const vaultPath = getVaultPath();
 	if (!vaultPath) {
@@ -73,6 +76,7 @@ export async function lookupSubmit(
 	}
 	if (texts.length === 0) return;
 	const settings = getSettings();
+	const openImported = opts.openImported ?? true;
 
 	for (const text of texts) {
 		const input = text.trim();
@@ -87,7 +91,7 @@ export async function lookupSubmit(
 				setDetail(i18n.t("app:tasks.lookupFetching", { id: input }));
 				const result = await addPapersByIdentifiers({
 					vaultRoot: vaultPath,
-					parentDir: opts?.parentDir ?? currentLookupParentDir(),
+					parentDir: opts.parentDir ?? currentLookupParentDir(),
 					texts: [input],
 					settings,
 					progressTaskId: id,
@@ -121,7 +125,7 @@ export async function lookupSubmit(
 									.replace(/\\/g, "/")
 									.replace(/^\/+|\/+$/g, ""),
 							);
-					if (opts?.openImported !== false) openPaper(paperAbs);
+					if (openImported) openPaper(paperAbs);
 					setDetail(
 						i18n.t("app:tasks.lookupRefreshing", { title: first.title }),
 					);
@@ -148,6 +152,7 @@ export async function lookupSubmit(
 				if (result.errors.length > 0) {
 					notifyError(`${input}: ${result.errors.join("; ")}`);
 				}
+				await opts.onComplete?.(result);
 
 				// Enqueue any newly imported paper that still lacks assets.
 				const newPaths = result.imported.map((r) => r.path);
@@ -194,8 +199,6 @@ export async function lookupSubmit(
 						});
 					}
 				}
-
-				if (opts?.onComplete) await opts.onComplete();
 			},
 			{ concurrency: settings.batchImportConcurrency },
 		).catch((e) => {

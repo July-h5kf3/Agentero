@@ -9,7 +9,14 @@
 - 目标：`papers/` 或当前选中的 Papers 子文件夹。
 - 弹层内 **FileUp**：多选本地 PDF。
 - 成功后：刷新树、展开并滚到新论文、`openPaper`；批量**不**自动连跑精读。
+- 同一条 identifier lookup 管线可由其它入口复用；调用侧可通过 `lookupSubmit(texts, { openImported: false })` 关闭导入后自动打开。
 - Host：`lookup_import_batch` 等。
+
+## References 侧栏导入
+
+- 入口：打开论文后的右侧 **References** 面板，未入库引用卡片上的 Import 按钮。
+- 复用魔棒 identifier lookup 管线，但显式关闭导入后 `openPaper`。
+- 成功后：刷新 Vault 树、Wiki 索引、Library，并重解析当前论文 references 以更新 `localMatch`；当前阅读的论文保持打开。
 
 ### Skill 导入
 
