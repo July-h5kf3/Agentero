@@ -3,7 +3,7 @@ import { FileText, FunctionSquare, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
-import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
+import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
 import { cn } from "@/lib/core/utils";
 import type { EquationSymbol } from "@/lib/pdf/equation-annotation";
 import { symbolTexSource } from "@/lib/pdf/equation-annotation";

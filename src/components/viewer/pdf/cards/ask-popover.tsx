@@ -17,7 +17,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
-import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
+import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { cn } from "@/lib/core/utils";
 import { threadTitle } from "@/lib/pdf/ask/schema";

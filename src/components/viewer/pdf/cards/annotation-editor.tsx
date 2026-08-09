@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
+import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 
 type AnnotationEditorProps = {

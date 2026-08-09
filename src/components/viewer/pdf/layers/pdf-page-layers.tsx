@@ -25,6 +25,7 @@ import { EMBED_PAGE_ATTR } from "@/components/viewer/pdf/geometry";
 import { CitationLinkLayer } from "@/components/viewer/pdf/layers/citation-links";
 import { LayoutTranslateOverlay } from "@/components/viewer/pdf/layers/layout-translate-overlay";
 import { PdfRegionSelectLayer } from "@/components/viewer/pdf/layers/pdf-region-select-layer";
+import { SelectionGutter } from "@/components/viewer/pdf/layers/selection-gutter";
 import {
 	EMPTY_CITATION_LINKS,
 	EMPTY_PINS,
@@ -32,7 +33,6 @@ import {
 	PDF_BASE_LAYER_SCALE_CAP,
 	pdfRasterDpr,
 } from "@/components/viewer/pdf/pdf-page-constants";
-import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
 import { cn } from "@/lib/core/utils";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import type { PdfAskNormalizedRect, PdfAskThread } from "@/lib/pdf/ask/types";

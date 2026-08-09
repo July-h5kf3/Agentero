@@ -1,4 +1,12 @@
 import { createPortal } from "react-dom";
+import { AnnotationEditor } from "@/components/viewer/pdf/cards/annotation-editor";
+import { AskPopover } from "@/components/viewer/pdf/cards/ask-popover";
+import { FormulaAnnotationCard } from "@/components/viewer/pdf/cards/formula-annotation-card";
+import { PdfCitationPreview } from "@/components/viewer/pdf/cards/pdf-citation-preview";
+import { SelectionMenu } from "@/components/viewer/pdf/cards/selection-menu";
+import { TranslateCard } from "@/components/viewer/pdf/cards/translate-card";
+import { VisualAnnotationEditor } from "@/components/viewer/pdf/cards/visual-annotation-editor";
+import { VisualTraceCard } from "@/components/viewer/pdf/cards/visual-trace-card";
 import type {
 	CardScreenPoint,
 	CitationPreviewState,
@@ -7,14 +15,6 @@ import type {
 	SelectionMenuState,
 	VisualDraftEditorState,
 } from "@/components/viewer/pdf/pdf-viewer-types";
-import { AnnotationEditor } from "@/components/viewer/pdf-ask/annotation-editor";
-import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
-import { FormulaAnnotationCard } from "@/components/viewer/pdf-ask/formula-annotation-card";
-import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
-import { TranslateCard } from "@/components/viewer/pdf-ask/translate-card";
-import { VisualAnnotationEditor } from "@/components/viewer/pdf-ask/visual-annotation-editor";
-import { VisualTraceCard } from "@/components/viewer/pdf-ask/visual-trace-card";
-import { PdfCitationPreview } from "@/components/viewer/pdf-citation-preview";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import type { PdfAskThread } from "@/lib/pdf/ask";
 import type { HighlightColor } from "@/lib/pdf/highlight/palette";

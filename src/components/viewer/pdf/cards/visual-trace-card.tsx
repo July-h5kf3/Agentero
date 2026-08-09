@@ -26,7 +26,7 @@ import {
 } from "@/components/ai-elements/message";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
-import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
+import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { useAgentSessionStore } from "@/lib/agent/agent-session-store";
 import { agentTextFromParts, type ChatLine } from "@/lib/agent/chat-state";

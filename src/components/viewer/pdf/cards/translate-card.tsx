@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
-import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
+import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
 
 type TranslateCardProps = {
 	screen: { x: number; y: number };
