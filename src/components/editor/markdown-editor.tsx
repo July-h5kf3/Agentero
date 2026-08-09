@@ -3,7 +3,7 @@
 import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
 import { TocPlugin } from "@platejs/toc/react";
-import { KEYS, RangeApi, type RangeRef } from "platejs";
+import { KEYS, RangeApi } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import {
 	type FormEvent,
@@ -18,6 +18,7 @@ import {
 import { MarkdownDocProvider } from "@/components/editor/context/markdown-doc-context";
 import { Editor, EditorContainer } from "@/components/editor/editor-surface";
 import { WikiEmbedProjectionProvider } from "@/components/editor/embeds/projection-context";
+import { useEditorContextMenu } from "@/components/editor/hooks/use-editor-context-menu";
 import { useMarkdownPersistence } from "@/components/editor/hooks/use-markdown-persistence";
 import { useSelectionContextPublish } from "@/components/editor/hooks/use-selection-context-publish";
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
@@ -47,26 +48,12 @@ import {
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import i18n from "@/i18n";
-import {
-	copyTextToClipboard,
-	readTextFromClipboard,
-} from "@/lib/core/clipboard";
-import { errorMessage, notifyError, notifyWarning } from "@/lib/core/notify";
+import { errorMessage, notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import { editorCompletionHasFocus } from "@/lib/markdown/completion-focus";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import { splitFrontmatter } from "@/lib/markdown/doc";
-import {
-	type EditorLinkTemplateKind,
-	editorContextMenuCapabilities,
-	insertEditorLinkTemplate,
-} from "@/lib/markdown/editor-context-menu";
-import {
-	captureMarkdownSelectionBookmark,
-	prepareMarkdownFormat,
-	replaceMarkdownEditorValue,
-} from "@/lib/markdown/editor-format";
-import { formatMarkdownSource } from "@/lib/markdown/format";
+import { editorContextMenuCapabilities } from "@/lib/markdown/editor-context-menu";
 import { saveImageToMarkdownAssets } from "@/lib/markdown/image";
 import { findSlashCommandTrigger } from "@/lib/markdown/slash-command";
 import { formatModShortcut } from "@/lib/shell/shortcuts";
@@ -86,12 +73,6 @@ import {
 	findWikiCompletionTrigger,
 	wikiLinkArrowDirection,
 } from "@/lib/wiki-completion";
-import {
-	canRenameWikiHeading,
-	currentWikiHeadingOrdinal,
-	savedWikiHeadingAt,
-	type WikiHeadingAnchor,
-} from "@/lib/wiki-heading-rename";
 import {
 	findWikiHeadingIndex,
 	hasWikiBlockAnchor,
@@ -168,7 +149,6 @@ export function MarkdownEditor({
 	const onAssetsChangedRef = useRef(onAssetsChanged);
 	onAssetsChangedRef.current = onAssetsChanged;
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
-	const contextMenuSelectionRef = useRef<RangeRef | null>(null);
 	const completionControllerRef = useRef<WikiCompletionController | null>(null);
 	const slashCommandControllerRef = useRef<SlashCommandController | null>(null);
 	/** Swallow the `beforeinput` insertParagraph that follows slash Enter confirm. */
@@ -189,23 +169,8 @@ export function MarkdownEditor({
 	wikiCompletionDraftRef.current = wikiCompletionDraft;
 	const slashCommandDraftRef = useRef(slashCommandDraft);
 	slashCommandDraftRef.current = slashCommandDraft;
-	const [headingContext, setHeadingContext] =
-		useState<WikiHeadingAnchor | null>(null);
-	const [contextMenuSelectionExpanded, setContextMenuSelectionExpanded] =
-		useState(false);
-	const [headingRenameOpen, setHeadingRenameOpen] = useState(false);
-	const [headingRenameBusy, setHeadingRenameBusy] = useState(false);
-	const [formattingMarkdown, setFormattingMarkdown] = useState(false);
 	const [findOpen, setFindOpen] = useState(false);
 	const [findFocusTick, setFindFocusTick] = useState(0);
-
-	useEffect(
-		() => () => {
-			contextMenuSelectionRef.current?.unref();
-			contextMenuSelectionRef.current = null;
-		},
-		[],
-	);
 
 	useEffect(() => {
 		if (!navigationIntent) return;
@@ -1148,234 +1113,32 @@ export function MarkdownEditor({
 		scheduleWikiLinkPresentationSync();
 	}, [scheduleWikiLinkPresentationSync]);
 
-	const currentHeadingAnchor = useCallback((): WikiHeadingAnchor | null => {
-		const selection = editor.selection;
-		if (!selection) return null;
-		const headings: Array<{ level: number; path: number[] }> = [];
-		for (const [node, path] of editor.api.nodes({ at: [] })) {
-			const type = (node as { type?: unknown }).type;
-			if (typeof type !== "string" || !/^h[1-6]$/.test(type)) continue;
-			headings.push({ path, level: Number(type.slice(1)) });
-		}
-		const ordinal = currentWikiHeadingOrdinal(
-			headings.map((heading) => heading.path),
-			selection.focus.path,
-		);
-		if (ordinal === null) return null;
-		const heading = headings[ordinal];
-		return heading
-			? savedWikiHeadingAt(savedRef.current, ordinal, heading.level)
-			: null;
-	}, [editor, savedRef.current]);
-
-	const handleEditorContextMenu = useCallback(() => {
-		contextMenuSelectionRef.current?.unref();
-		const selection = editor.selection;
-		contextMenuSelectionRef.current = selection
-			? editor.api.rangeRef(selection, { affinity: "forward" })
-			: null;
-		setContextMenuSelectionExpanded(
-			Boolean(selection && !RangeApi.isCollapsed(selection)),
-		);
-		const heading = currentHeadingAnchor();
-		setHeadingContext(
-			canRenameWikiHeading({
-				dirty: dirtyRef.current,
-				filePath: filePathRef.current,
-				hasHandler: Boolean(onRenameHeading),
-				heading,
-				readOnly,
-			})
-				? heading
-				: null,
-		);
-	}, [
-		currentHeadingAnchor,
+	const {
+		selectionExpanded: contextMenuSelectionExpanded,
+		onContextMenu: handleEditorContextMenu,
+		onOpenChange: handleContextMenuOpenChange,
+		copy: handleContextMenuCopy,
+		cut: handleContextMenuCut,
+		paste: handleContextMenuPaste,
+		insertLink: insertContextMenuLink,
+		formatMarkdown: handleContextMenuFormatMarkdown,
+		formatting: formattingMarkdown,
+		headingContext,
+		renameOpen: headingRenameOpen,
+		setRenameOpen: setHeadingRenameOpen,
+		renameBusy: headingRenameBusy,
+		confirmRename: confirmHeadingRename,
+	} = useEditorContextMenu({
 		editor,
-		onRenameHeading,
-		readOnly,
-		dirtyRef.current,
-	]);
-
-	const handleContextMenuOpenChange = useCallback((open: boolean) => {
-		if (open) return;
-		const selectionRef = contextMenuSelectionRef.current;
-		window.setTimeout(() => {
-			if (contextMenuSelectionRef.current !== selectionRef) return;
-			selectionRef?.unref();
-			contextMenuSelectionRef.current = null;
-		}, 0);
-	}, []);
-
-	const takeContextMenuSelection = useCallback(() => {
-		const selectionRef = contextMenuSelectionRef.current;
-		contextMenuSelectionRef.current = null;
-		return selectionRef?.unref() ?? editor.selection;
-	}, [editor]);
-
-	const focusEditorAt = useCallback(
-		(selection: NonNullable<typeof editor.selection>) => {
-			if (!editorContainerRef.current?.isConnected) return;
-			editor.tf.focus({ at: selection });
-		},
-		[editor],
-	);
-
-	const handleContextMenuCopy = useCallback(async () => {
-		const selection = takeContextMenuSelection();
-		if (!selection || RangeApi.isCollapsed(selection)) return;
-		const text = editor.api.string(selection);
-		await copyTextToClipboard(text, {
-			errorMessage: i18n.t("editor:contextMenu.copyFailed"),
-		});
-		focusEditorAt(selection);
-	}, [editor, focusEditorAt, takeContextMenuSelection]);
-
-	const handleContextMenuCut = useCallback(async () => {
-		if (readOnly) return;
-		const selection = takeContextMenuSelection();
-		if (!selection || RangeApi.isCollapsed(selection)) return;
-		const text = editor.api.string(selection);
-		const copied = await copyTextToClipboard(text, {
-			errorMessage: i18n.t("editor:contextMenu.copyFailed"),
-		});
-		if (!copied || !editorContainerRef.current?.isConnected) return;
-		editor.tf.focus({ at: selection });
-		editor.tf.deleteFragment();
-	}, [editor, readOnly, takeContextMenuSelection]);
-
-	const handleContextMenuPaste = useCallback(async () => {
-		if (readOnly) return;
-		const selection = takeContextMenuSelection();
-		if (!selection) return;
-		const text = await readTextFromClipboard({
-			errorMessage: i18n.t("editor:contextMenu.pasteFailed"),
-		});
-		if (text === null || !editorContainerRef.current?.isConnected) return;
-		editor.tf.focus({ at: selection });
-		if (typeof DataTransfer === "function") {
-			const data = new DataTransfer();
-			data.setData("text/plain", text);
-			editor.tf.insertData(data);
-		} else {
-			editor.tf.insertText(text);
-		}
-		editor.tf.focus({ at: editor.selection ?? selection });
-	}, [editor, readOnly, takeContextMenuSelection]);
-
-	const insertContextMenuLink = useCallback(
-		(kind: EditorLinkTemplateKind) => {
-			if (readOnly) return;
-			const selection = takeContextMenuSelection();
-			if (!selection || !editorContainerRef.current?.isConnected) return;
-			const template = insertEditorLinkTemplate(editor, kind, selection);
-			// External link opens the edit popover; focusing the editor would
-			// immediately dismiss it (same race as slash confirm).
-			if (kind !== "external") {
-				editor.tf.focus({ at: editor.selection ?? selection });
-			}
-			if (template.wikiLinkDraft) {
-				window.requestAnimationFrame(updateWikiCompletionDraft);
-			}
-		},
-		[editor, readOnly, takeContextMenuSelection, updateWikiCompletionDraft],
-	);
-
-	const handleContextMenuFormatMarkdown = useCallback(async () => {
-		if (readOnly || formattingMarkdown) return;
-		const selection = takeContextMenuSelection();
-		const bookmark = captureMarkdownSelectionBookmark(
-			editor.children,
-			selection ?? editor.selection,
-		);
-		const snapshot = serialize();
-		setFormattingMarkdown(true);
-		try {
-			const prepared = await prepareMarkdownFormat({
-				currentSource: serialize,
-				deserialize: (body) =>
-					editor
-						.getApi(MarkdownPlugin)
-						.markdown.deserialize(prepareMarkdownForDeserialize(body)),
-				formatSource: formatMarkdownSource,
-				snapshot,
-			});
-			if (prepared.status === "stale") {
-				notifyWarning(i18n.t("editor:contextMenu.formatStale"));
-				return;
-			}
-			if (prepared.status === "unchanged") {
-				if (selection) focusEditorAt(selection);
-				else editor.tf.focus();
-				return;
-			}
-			const nextSelection = replaceMarkdownEditorValue(
-				editor,
-				prepared.value,
-				bookmark,
-			);
-			window.requestAnimationFrame(() => {
-				if (!editorContainerRef.current?.isConnected) return;
-				if (nextSelection) editor.tf.focus({ at: nextSelection });
-				else editor.tf.focus({ edge: "end" });
-			});
-		} catch (error) {
-			notifyError(i18n.t("editor:contextMenu.formatFailed"), {
-				description: errorMessage(error),
-			});
-			if (selection && editorContainerRef.current?.isConnected) {
-				focusEditorAt(selection);
-			}
-		} finally {
-			setFormattingMarkdown(false);
-		}
-	}, [
-		editor,
-		focusEditorAt,
-		formattingMarkdown,
+		editorContainerRef,
 		readOnly,
 		serialize,
-		takeContextMenuSelection,
-	]);
-
-	const confirmHeadingRename = useCallback(
-		async (newText: string) => {
-			const path = filePathRef.current;
-			const heading = headingContext;
-			if (
-				!path ||
-				!heading ||
-				!onRenameHeading ||
-				readOnly ||
-				dirtyRef.current
-			) {
-				return;
-			}
-			setHeadingRenameBusy(true);
-			try {
-				await onRenameHeading(path, {
-					headingPath: heading.path,
-					headingLine: heading.line,
-					expectedContent: savedRef.current,
-					newText,
-				});
-				setHeadingRenameOpen(false);
-				setHeadingContext(null);
-			} catch {
-				// App owns the translated error toast. Keep the dialog open so the
-				// user can retry after resolving dirty/stale source state.
-			} finally {
-				setHeadingRenameBusy(false);
-			}
-		},
-		[
-			headingContext,
-			onRenameHeading,
-			readOnly,
-			savedRef.current,
-			dirtyRef.current,
-		],
-	);
+		savedRef,
+		dirtyRef,
+		filePathRef,
+		onRenameHeading,
+		updateWikiCompletionDraft,
+	});
 
 	const docCtx = useMemo(
 		() => ({
