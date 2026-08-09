@@ -92,6 +92,7 @@ export function enqueuePaperLayoutAnalysis(opts: {
 						if (signal.aborted) throw new Error("cancelled");
 						const result = await analyzePaperLayoutHeadless({
 							paperAbsPath,
+							paperLabel: label,
 							signal,
 						});
 						setProgress(100);

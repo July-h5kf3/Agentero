@@ -95,6 +95,16 @@ function TaskRow({ task }: { task: BackgroundTask }) {
 		task.status === "queued" ||
 		task.progress !== null;
 
+	// Keep trailing counters (e.g. "26 / 41 页") visible while truncating the
+	// preceding label so progress never wraps to a second line.
+	const [detailMain, detailTail] = useMemo(() => {
+		if (!task.detail) return ["", null];
+		const sep = " · ";
+		const idx = task.detail.lastIndexOf(sep);
+		if (idx <= 0) return [task.detail, null];
+		return [task.detail.slice(0, idx), task.detail.slice(idx + sep.length)];
+	}, [task.detail]);
+
 	return (
 		<div className="flex flex-col gap-1 border-b border-border/60 px-2.5 py-2 last:border-b-0">
 			<div className="flex min-w-0 items-start gap-2">
@@ -117,15 +127,18 @@ function TaskRow({ task }: { task: BackgroundTask }) {
 						) : null}
 					</div>
 					{task.detail ? (
-						<p
+						<div
 							className={cn(
-								"mt-0.5 truncate text-[11px] leading-snug text-muted-foreground",
+								"mt-0.5 flex min-w-0 items-baseline gap-1 text-[11px] leading-snug text-muted-foreground",
 								task.status === "failed" && "text-destructive",
 							)}
 							title={task.detail}
 						>
-							{task.detail}
-						</p>
+							<span className="truncate">{detailMain}</span>
+							{detailTail ? (
+								<span className="shrink-0">{detailTail}</span>
+							) : null}
+						</div>
 					) : null}
 				</div>
 				{task.status === "queued" || task.status === "running" ? (

@@ -42,6 +42,8 @@ export type RunLayoutAnalysisOptions = {
 	paperAbsPath?: string | null;
 	/** PDF page count for progress bar before the first page-complete event. */
 	totalPages?: number | null;
+	/** Label shown in progress UI instead of the generic "Analyzing layout…". */
+	paperLabel?: string;
 	onProgress?: (messageStage: DocumentAnalysisProgress) => void;
 	onDone?: (summary: string, total: number) => void;
 	onError?: (message: string, aborted: boolean) => void;
@@ -258,10 +260,12 @@ export async function runDocumentLayoutAnalysis(
 		}
 	}
 
+	const analyzingMessage = options.paperLabel?.trim() || "Analyzing layout…";
+
 	setLayoutAnalysisUi(
 		{
 			stage: "running",
-			message: "Analyzing layout…",
+			message: analyzingMessage,
 			progress: null,
 		},
 		documentId,
@@ -291,7 +295,7 @@ export async function runDocumentLayoutAnalysis(
 	setLayoutAnalysisUi(
 		{
 			stage: "running",
-			message: "Analyzing layout…",
+			message: analyzingMessage,
 			progress: 0,
 			completed: 0,
 			total: knownTotal ?? undefined,
@@ -305,7 +309,7 @@ export async function runDocumentLayoutAnalysis(
 		options.onProgress?.(p);
 		// Overall document progress for Figures rail + background-tasks panel:
 		// model prep 0–5%, pages 5–98%, merge 99% (set below), done 100%.
-		const message = "Analyzing layout…";
+		const message = analyzingMessage;
 		let progress: number | null = knownTotal && knownTotal > 0 ? 0 : null;
 		let page: number | undefined;
 

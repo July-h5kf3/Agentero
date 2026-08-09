@@ -108,6 +108,8 @@ export type HeadlessLayoutResult = {
  */
 export async function analyzePaperLayoutHeadless(opts: {
 	paperAbsPath: string;
+	/** Label shown in the background-task toast instead of "Analyzing layout…". */
+	paperLabel?: string;
 	signal?: AbortSignal;
 }): Promise<HeadlessLayoutResult> {
 	const paperAbsPath = opts.paperAbsPath.replace(/[/\\]+$/, "");
@@ -192,6 +194,7 @@ export async function analyzePaperLayoutHeadless(opts: {
 			};
 			void runDocumentLayoutAnalysis(scope, documentId, {
 				paperAbsPath,
+				paperLabel: opts.paperLabel,
 				totalPages: pageCount > 0 ? pageCount : null,
 				force: false,
 				onDone: (s) => finish(() => resolve(s)),
