@@ -2,8 +2,6 @@
 
 import { createContext, type ReactNode, useContext } from "react";
 
-export const MAX_WIKI_EMBED_DEPTH = 4;
-
 const WikiEmbedAncestryContext = createContext<readonly string[]>([]);
 
 export function WikiEmbedAncestryProvider({

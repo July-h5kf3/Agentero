@@ -21,7 +21,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/context/markdown-doc-context";
 import {
-	MAX_WIKI_EMBED_DEPTH,
 	useWikiEmbedAncestry,
 	WikiEmbedAncestryProvider,
 } from "@/components/editor/embeds/ancestry-context";
@@ -31,7 +30,6 @@ import { cn } from "@/lib/core/utils";
 import type { AnnotationRefKind } from "@/lib/pdf/annotation-ref";
 import { joinVaultPath } from "@/lib/vault";
 import {
-	type ResolvedLink,
 	readWikiEmbed,
 	resolveWikiTarget,
 	splitAnnotationSugar,
@@ -39,6 +37,11 @@ import {
 } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
 import type { WikiSlateNode } from "@/lib/wiki/wikilink-model";
+import {
+	wikiEmbedBoundary,
+	wikiEmbedKey,
+	wikiEmbedResponseKind,
+} from "@/lib/wiki-embed";
 import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
 
 const WikiAttachmentEmbed = lazy(async () => {
@@ -116,34 +119,11 @@ function retainEmbedState(key: string, state: EmbedLoadState): void {
 	}
 }
 
-function fragmentKey(link: ResolvedLink): string {
-	const fragment = link.occurrence.fragment;
-	if (!fragment) return "";
-	if (fragment.kind === "block") return `#^${fragment.id}`;
-	if (fragment.kind === "annotation") return `@${fragment.id}`;
-	return `#${fragment.path.join("#")}`;
-}
-
-function embedKey(link: ResolvedLink): string {
-	return `${link.targetPath ?? link.occurrence.targetRaw}${fragmentKey(link)}`;
-}
-
 function stateFromResponse(response: WikiEmbedResponse): EmbedLoadState {
-	if (response.link.status !== "resolved") {
-		return { kind: response.link.status, response };
-	}
-	switch (response.contentKind) {
-		case "markdown":
-			return typeof response.content === "string"
-				? { kind: "ready", response, key: embedKey(response.link) }
-				: { kind: "unsupported", response };
-		case "image":
-		case "pdf":
-		case "annotation":
-			return { kind: "ready", response, key: embedKey(response.link) };
-		default:
-			return { kind: "unsupported", response };
-	}
+	const kind = wikiEmbedResponseKind(response);
+	return kind === "ready"
+		? { kind, response, key: wikiEmbedKey(response.link) }
+		: { kind, response };
 }
 
 /**
@@ -449,13 +429,8 @@ export function WikiEmbedElement({
 
 	const presentation = useMemo(() => {
 		if (state.kind !== "ready") return state;
-		if (ancestry.includes(state.key)) {
-			return { kind: "cycle" as const };
-		}
-		if (ancestry.length >= MAX_WIKI_EMBED_DEPTH) {
-			return { kind: "depth" as const };
-		}
-		return state;
+		const boundary = wikiEmbedBoundary(ancestry, state.key);
+		return boundary === "ready" ? state : { kind: boundary };
 	}, [ancestry, state]);
 
 	const imageSizeAlias =
