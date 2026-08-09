@@ -757,6 +757,16 @@ export type WikiNavTarget = {
 	fragment?: LinkFragment;
 };
 
+/** Navigation payload for an already-resolved link (link / wikilink / embed). */
+export function navFromResolvedLink(resolved: ResolvedLink): WikiNavTarget {
+	return {
+		targetRaw: resolved.occurrence.targetRaw,
+		path: resolved.targetPath ?? null,
+		status: resolved.status,
+		fragment: resolved.occurrence.fragment,
+	};
+}
+
 /**
  * Select the file-level destination for a link click.
  *

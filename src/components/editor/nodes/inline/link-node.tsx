@@ -30,6 +30,7 @@ import {
 } from "@/lib/markdown/external-link-insert";
 import {
 	isVaultLocalMarkdownLink,
+	navFromResolvedLink,
 	parseWikiHref,
 	resolveWikiReference,
 	WIKI_HREF_PREFIX,
@@ -365,12 +366,7 @@ export function LinkElement(props: PlateElementProps) {
 									`${wiki.targetRaw}${fragment}`,
 								);
 								if (resolved) {
-									wikiNav.onWikiNavigate({
-										targetRaw: resolved.occurrence.targetRaw,
-										path: resolved.targetPath ?? null,
-										status: resolved.status,
-										fragment: resolved.occurrence.fragment,
-									});
+									wikiNav.onWikiNavigate(navFromResolvedLink(resolved));
 									return;
 								}
 							} catch {
@@ -407,12 +403,7 @@ export function LinkElement(props: PlateElementProps) {
 								"markdown",
 							);
 							if (!resolved) return;
-							wikiNav.onWikiNavigate({
-								targetRaw: resolved.occurrence.targetRaw,
-								path: resolved.targetPath ?? null,
-								status: resolved.status,
-								fragment: resolved.occurrence.fragment,
-							});
+							wikiNav.onWikiNavigate(navFromResolvedLink(resolved));
 						} catch {
 							// Keep the link inert when the Host cannot establish a local target.
 						}

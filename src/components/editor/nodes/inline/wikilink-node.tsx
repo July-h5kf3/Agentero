@@ -12,6 +12,7 @@ import { WikiEmbedElement } from "@/components/editor/embeds/wiki-embed-node";
 import { cn } from "@/lib/core/utils";
 import {
 	type LinkFragment,
+	navFromResolvedLink,
 	resolveWikiReference,
 	resolveWikiTarget,
 } from "@/lib/wiki";
@@ -75,12 +76,7 @@ function WikiLinkNavigationElement({
 					withHeading,
 				);
 				if (resolved) {
-					wikiNav.onWikiNavigate({
-						targetRaw: resolved.occurrence.targetRaw,
-						path: resolved.targetPath ?? null,
-						status: resolved.status,
-						fragment: resolved.occurrence.fragment,
-					});
+					wikiNav.onWikiNavigate(navFromResolvedLink(resolved));
 					return;
 				}
 			} catch {

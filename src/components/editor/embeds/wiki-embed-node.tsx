@@ -32,6 +32,7 @@ import { cn } from "@/lib/core/utils";
 import type { AnnotationRefKind } from "@/lib/pdf/annotation-ref";
 import { joinVaultPath } from "@/lib/vault";
 import {
+	navFromResolvedLink,
 	readWikiEmbed,
 	resolveWikiTarget,
 	splitAnnotationSugar,
@@ -384,12 +385,7 @@ export function WikiEmbedElement({
 		if (resolvedLink?.status !== "resolved" || !resolvedLink.targetPath) {
 			return;
 		}
-		wikiNav?.onWikiNavigate({
-			targetRaw: resolvedLink.occurrence.targetRaw,
-			path: resolvedLink.targetPath,
-			status: resolvedLink.status,
-			fragment: resolvedLink.occurrence.fragment,
-		});
+		wikiNav?.onWikiNavigate(navFromResolvedLink(resolvedLink));
 	}, [resolvedLink, wikiNav]);
 
 	const presentation = useMemo(() => {
