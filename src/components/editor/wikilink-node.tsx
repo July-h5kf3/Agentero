@@ -8,7 +8,6 @@ import {
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
-import type { WikiSlateNode } from "@/components/editor/plugins/wikilink-model";
 import { WikiEmbedElement } from "@/components/editor/wiki-embed-node";
 import { cn } from "@/lib/core/utils";
 import {
@@ -17,6 +16,7 @@ import {
 	resolveWikiTarget,
 } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
+import type { WikiSlateNode } from "@/lib/wiki/wikilink-model";
 
 export function WikiLinkElement(props: PlateElementProps) {
 	const element = props.element as unknown as WikiSlateNode;

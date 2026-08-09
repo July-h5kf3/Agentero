@@ -7,7 +7,7 @@ import {
 	convertMarkdownLinkBeforeClosingParen,
 	isClosingParen,
 	markdownLinkInputRule,
-} from "@/components/editor/plugins/markdown-link-input-rule";
+} from "@/lib/markdown/link-input-rule";
 
 /**
  * Inline link nodes produced by MarkdownPlugin (`type: a`).

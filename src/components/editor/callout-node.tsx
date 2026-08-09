@@ -24,7 +24,6 @@ import {
 } from "platejs/react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { updateCalloutMetadata } from "@/components/editor/plugins/callout-actions";
 import {
 	Command,
 	CommandGroup,
@@ -37,6 +36,7 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/core/utils";
+import { updateCalloutMetadata } from "@/lib/markdown/callout";
 
 type CalloutTheme = {
 	Icon: LucideIcon;

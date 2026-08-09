@@ -13,5 +13,3 @@ export const WikiLinkPlugin = createPlatePlugin({
 	key: "wikiLink",
 	node: { isElement: true, isInline: true },
 }).withComponent(WikiLinkElement);
-
-export * from "@/components/editor/plugins/wikilink-model";

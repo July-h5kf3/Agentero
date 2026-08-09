@@ -85,9 +85,7 @@ import { KbdLeaf } from "@/components/editor/kbd-leaf";
 import { MentionElement } from "@/components/editor/mention-node";
 import { ParagraphElement } from "@/components/editor/paragraph-node";
 import { CalloutPlugin } from "@/components/editor/plugins/callout-plugin";
-import { handleCodeBlockDeleteBackward } from "@/components/editor/plugins/code-block-delete";
 import { FindReplaceKit } from "@/components/editor/plugins/find-replace-kit";
-import { inlineMathInputRule } from "@/components/editor/plugins/inline-math-input-rule";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import { WikiBlockIdPlugin } from "@/components/editor/plugins/wiki-block-id-plugin";
@@ -98,6 +96,8 @@ import {
 	TableElement,
 	TableRowElement,
 } from "@/components/editor/table-node";
+import { handleCodeBlockDeleteBackward } from "@/lib/markdown/code-block-delete";
+import { inlineMathInputRule } from "@/lib/markdown/inline-math-input-rule";
 
 const lowlight = createLowlight(common);
 

@@ -29,14 +29,14 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { ViewportFloating } from "@/components/ui/viewport-floating";
 import {
 	executeSlashCommand,
 	filterSlashCommands,
 	isSlashCommandSubmitKey,
 	type SlashCommand,
 	type SlashCommandId,
-} from "@/components/editor/plugins/slash-command";
-import { ViewportFloating } from "@/components/ui/viewport-floating";
+} from "@/lib/markdown/slash-command";
 
 export type SlashCommandDraft = {
 	query: string;

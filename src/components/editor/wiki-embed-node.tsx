@@ -20,7 +20,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
-import type { WikiSlateNode } from "@/components/editor/plugins/wikilink-model";
 import { WikiAnnotationEmbed } from "@/components/editor/wiki-annotation-embed";
 import {
 	MAX_WIKI_EMBED_DEPTH,
@@ -39,6 +38,7 @@ import {
 	type WikiEmbedResponse,
 } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
+import type { WikiSlateNode } from "@/lib/wiki/wikilink-model";
 import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
 
 const WikiAttachmentEmbed = lazy(async () => {

@@ -23,13 +23,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
-import {
-	isWikiLinkDraftText,
-	isWikiLinkNode,
-	parseWikiLinkMarkdown,
-	wikiLinkDraftEditableBounds,
-	wikiLinkToMarkdown,
-} from "@/components/editor/plugins/wikilink-plugin";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
 import {
 	annotationSnippet,
@@ -48,6 +41,13 @@ import {
 	type WikiSearchCandidate,
 } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
+import {
+	isWikiLinkDraftText,
+	isWikiLinkNode,
+	parseWikiLinkMarkdown,
+	wikiLinkDraftEditableBounds,
+	wikiLinkToMarkdown,
+} from "@/lib/wiki/wikilink-model";
 import {
 	addRecentWikiCandidate,
 	findWikiCompletionMatch,

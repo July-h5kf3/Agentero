@@ -23,20 +23,7 @@ import { HeadingRenameDialog } from "@/components/editor/heading-rename-dialog";
 import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
 import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
-import { editorCompletionHasFocus } from "@/components/editor/plugins/completion-focus";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
-import { findSlashCommandTrigger } from "@/components/editor/plugins/slash-command";
-import {
-	isWikiLinkDraftEditingOffset,
-	isWikiLinkDraftText,
-	isWikiLinkNode,
-	parseWikiLinkMarkdown,
-	wikiLinkDraftEditableBounds,
-	wikiLinkDraftExteriorPlacement,
-	wikiLinkNodeMatchesSource,
-	wikiLinkNodeSource,
-	wikiLinkToMarkdown,
-} from "@/components/editor/plugins/wikilink-plugin";
 import {
 	type SlashCommandController,
 	type SlashCommandDraft,
@@ -68,6 +55,7 @@ import {
 } from "@/lib/core/clipboard";
 import { errorMessage, notifyError, notifyWarning } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
+import { editorCompletionHasFocus } from "@/lib/markdown/completion-focus";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown/doc";
 import {
@@ -91,8 +79,20 @@ import {
 	saveImageToMarkdownAssets,
 } from "@/lib/markdown/image";
 import { settleMarkdownSaveAttempt } from "@/lib/markdown/save-state";
+import { findSlashCommandTrigger } from "@/lib/markdown/slash-command";
 import { formatModShortcut } from "@/lib/shell/shortcuts";
 import type { LinkFragment, WikiRenameHeadingRequest } from "@/lib/wiki";
+import {
+	isWikiLinkDraftEditingOffset,
+	isWikiLinkDraftText,
+	isWikiLinkNode,
+	parseWikiLinkMarkdown,
+	wikiLinkDraftEditableBounds,
+	wikiLinkDraftExteriorPlacement,
+	wikiLinkNodeMatchesSource,
+	wikiLinkNodeSource,
+	wikiLinkToMarkdown,
+} from "@/lib/wiki/wikilink-model";
 import {
 	findWikiCompletionTrigger,
 	wikiLinkArrowDirection,

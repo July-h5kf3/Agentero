@@ -9,7 +9,7 @@ import {
 } from "platejs";
 import { createPlatePlugin } from "platejs/react";
 import { CalloutElement } from "@/components/editor/callout-node";
-import { parseCalloutMarker } from "@/components/editor/plugins/callout-model";
+import { parseCalloutMarker } from "@/lib/markdown/callout";
 
 export const CalloutPlugin = createPlatePlugin({
 	key: KEYS.callout,
