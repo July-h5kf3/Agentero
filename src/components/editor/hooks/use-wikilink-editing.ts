@@ -479,7 +479,6 @@ export function useWikilinkEditing({
 			editor,
 			getWikiLinkExteriorBoundary,
 			prepareWikiLinkBoundaryInput,
-			suppressNextEditorBreakRef.current,
 			suppressNextEditorBreakRef,
 		],
 	);
@@ -489,11 +488,7 @@ export function useWikilinkEditing({
 			const direction = wikiLinkArrowDirection(event);
 			if (!direction) return false;
 			const selection = editor.selection;
-			if (
-				!selection ||
-				selection.anchor.offset !== selection.focus.offset ||
-				selection.anchor.path.join(",") !== selection.focus.path.join(",")
-			) {
+			if (!selection || !RangeApi.isCollapsed(selection)) {
 				return false;
 			}
 			const entry = editor.api.node(selection.anchor.path);
@@ -575,11 +570,7 @@ export function useWikilinkEditing({
 		(event: KeyboardEvent<HTMLDivElement>) => {
 			if (event.key !== "Enter") return false;
 			const selection = editor.selection;
-			if (
-				!selection ||
-				selection.anchor.offset !== selection.focus.offset ||
-				selection.anchor.path.join(",") !== selection.focus.path.join(",")
-			) {
+			if (!selection || !RangeApi.isCollapsed(selection)) {
 				return false;
 			}
 			const entry = editor.api.node(selection.anchor.path);

@@ -8,6 +8,7 @@ import {
 	ScanSearch,
 	TextQuote,
 } from "lucide-react";
+import { RangeApi } from "platejs";
 import { useEditorRef } from "platejs/react";
 import type {
 	MutableRefObject,
@@ -435,13 +436,7 @@ export function WikiLinkSuggestion({
 			if (!draft || !request || candidate.kind !== request.kind) return false;
 			if (request.kind === "alias" && !request.query) return false;
 			const selection = editor.selection;
-			if (
-				!selection ||
-				selection.anchor.path.join(",") !== selection.focus.path.join(",") ||
-				selection.anchor.offset !== selection.focus.offset
-			) {
-				return false;
-			}
+			if (!selection || !RangeApi.isCollapsed(selection)) return false;
 			const entry = editor.api.node(selection.anchor.path);
 			const leaf = entry?.[0];
 			if (!leaf || typeof (leaf as { text?: unknown }).text !== "string") {
