@@ -58,7 +58,6 @@ import { usePdfEngineContext } from "@/components/viewer/embed/engine-provider";
 import {
 	pageElByIndex,
 	rectRightScreen,
-	rectTopCenterScreen,
 } from "@/components/viewer/embed/geometry";
 import {
 	PDF_COLOR_SCHEME_EVENT,
@@ -66,11 +65,7 @@ import {
 	readPdfColorScheme,
 	writePdfColorScheme,
 } from "@/components/viewer/embed/pdf-color-scheme";
-import {
-	hasNativeSelectionOutsideHost,
-	isEditableClipboardTarget,
-	isPdfDocumentCloseRaceError,
-} from "@/components/viewer/embed/pdf-host-dom";
+import { isPdfDocumentCloseRaceError } from "@/components/viewer/embed/pdf-host-dom";
 import { EMPTY_LAYOUT_REGIONS_BY_PAGE } from "@/components/viewer/embed/pdf-page-constants";
 import {
 	type PdfPageHandlers,
@@ -86,10 +81,8 @@ import type {
 	PdfViewerHandle,
 	PdfViewerInnerProps,
 	PdfViewerProps,
-	SelectionMenuState,
 	VisualDraftEditorState,
 } from "@/components/viewer/embed/pdf-viewer-types";
-import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
 import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
 import { usePdfCitations } from "@/components/viewer/embed/use-pdf-citations";
 import { usePdfFind } from "@/components/viewer/embed/use-pdf-find";
@@ -97,6 +90,7 @@ import { usePdfHighlights } from "@/components/viewer/embed/use-pdf-highlights";
 import { usePdfMarksIo } from "@/components/viewer/embed/use-pdf-marks-io";
 import { usePdfOutline } from "@/components/viewer/embed/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
+import { usePdfTextSelection } from "@/components/viewer/embed/use-pdf-text-selection";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
 import i18n from "@/i18n";
 import {
@@ -110,7 +104,6 @@ import {
 } from "@/lib/agent";
 import { agentSessionStore } from "@/lib/agent/agent-session-store";
 import {
-	clearActiveSelection,
 	pinActiveSelection,
 	publishSelection,
 } from "@/lib/agent/selection-store";
@@ -481,9 +474,6 @@ function PdfViewerInner({
 		onHighlightsChangeRef,
 	});
 
-	const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(
-		null,
-	);
 	const [regionSelecting, setRegionSelecting] = useState(false);
 	const [visualCropPending, setVisualCropPending] = useState(false);
 	const [editor, setEditor] = useState<EditorState | null>(null);
@@ -597,8 +587,26 @@ function PdfViewerInner({
 	formulaAnnotationPreviewRef.current = formulaAnnotationPreview;
 	const equationSymbolsRef = useRef(equationSymbols);
 	equationSymbolsRef.current = equationSymbols;
-	const selectionMenuRef = useRef(selectionMenu);
-	selectionMenuRef.current = selectionMenu;
+
+	// ---- Text selection → floating action menu ----
+	// Placed after hostRef/zoomRef: the hook anchors the menu against the page
+	// element and needs both refs injected.
+	const {
+		selectionMenu,
+		selectionMenuRef,
+		setSelectionMenu,
+		closeSelectionMenu,
+	} = usePdfTextSelection({
+		selectionCap,
+		docCap,
+		docId,
+		hostRef,
+		zoomRef,
+		isActive,
+		paperRelPath,
+		paperAbsPath,
+	});
+
 	/** Pending dwell timer for layout-region hover → visual editor. */
 	const layoutHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
@@ -1250,7 +1258,7 @@ function PdfViewerInner({
 		closeVisualDraftEditor();
 		selectionCap?.clear(docId);
 		setRegionSelecting((active) => !active);
-	}, [closeVisualDraftEditor, selectionCap, docId]);
+	}, [closeVisualDraftEditor, selectionCap, docId, setSelectionMenu]);
 
 	const closeFormulaAnnotationPreview = useCallback(() => {
 		cancelFormulaHover();
@@ -1449,7 +1457,7 @@ function PdfViewerInner({
 					visualDraftEditorRef.current ||
 					selectionMenuRef.current,
 			),
-		[],
+		[selectionMenuRef],
 	);
 
 	/**
@@ -2392,11 +2400,6 @@ function PdfViewerInner({
 
 	// ---- Selection action menu ----
 
-	const closeSelectionMenu = useCallback(() => {
-		setSelectionMenu(null);
-		selectionCap?.clear(docId);
-	}, [selectionCap, docId]);
-
 	const handleHighlight = useCallback(
 		(color: HighlightColor) => {
 			if (!selectionMenu) return;
@@ -2433,46 +2436,11 @@ function PdfViewerInner({
 				});
 			}
 		}
-	}, [selectionMenu, createHighlights, selectionCap, docId]);
+	}, [selectionMenu, createHighlights, selectionCap, docId, setSelectionMenu]);
 
 	const handleCopy = useCallback(() => {
 		selectionCap?.copyToClipboard(docId);
 	}, [selectionCap, docId]);
-
-	useEffect(() => {
-		if (!isActive || !selectionMenu || !selectionCap) return;
-		const selectedText = selectionMenu.anchor.quote ?? "";
-		if (!selectedText.trim()) return;
-		const host = hostRef.current;
-
-		const shouldHandlePdfCopy = (target: EventTarget | null): boolean => {
-			if (isEditableClipboardTarget(target)) return false;
-			if (hasNativeSelectionOutsideHost(host)) return false;
-			return true;
-		};
-
-		const onCopy = (event: ClipboardEvent) => {
-			if (!shouldHandlePdfCopy(event.target)) return;
-			event.preventDefault();
-			event.clipboardData?.setData("text/plain", selectedText);
-		};
-
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (!(event.metaKey || event.ctrlKey)) return;
-			if (event.shiftKey || event.altKey || event.key.toLowerCase() !== "c")
-				return;
-			if (!shouldHandlePdfCopy(event.target)) return;
-			event.preventDefault();
-			selectionCap.copyToClipboard(docId);
-		};
-
-		document.addEventListener("copy", onCopy);
-		window.addEventListener("keydown", onKeyDown);
-		return () => {
-			document.removeEventListener("copy", onCopy);
-			window.removeEventListener("keydown", onKeyDown);
-		};
-	}, [isActive, selectionMenu, selectionCap, docId]);
 
 	const handleMenuAsk = useCallback(() => {
 		if (!selectionMenu) return;
@@ -2480,7 +2448,7 @@ function PdfViewerInner({
 		setSelectionMenu(null);
 		selectionCap?.clear(docId);
 		startFromAnchor(anchor);
-	}, [selectionMenu, startFromAnchor, selectionCap, docId]);
+	}, [selectionMenu, startFromAnchor, selectionCap, docId, setSelectionMenu]);
 
 	const handleMenuAddToChat = useCallback(() => {
 		if (!selectionMenu) return;
@@ -2501,7 +2469,14 @@ function PdfViewerInner({
 		});
 		pinActiveSelection();
 		openRightTab("agent");
-	}, [selectionMenu, selectionCap, docId, paperRelPath, paperAbsPath]);
+	}, [
+		selectionMenu,
+		selectionCap,
+		docId,
+		paperRelPath,
+		paperAbsPath,
+		setSelectionMenu,
+	]);
 
 	const handleMenuTranslate = useCallback(() => {
 		if (!selectionMenu) return;
@@ -2665,60 +2640,8 @@ function PdfViewerInner({
 		openCard,
 		cardHoverSurfaceRef,
 		translatesRef,
+		setSelectionMenu,
 	]);
-
-	// Show the selection action menu when a drag-selection ends.
-	useEffect(() => {
-		if (!selectionCap || !docCap) return;
-		const scope = selectionCap.forDocument(docId);
-		const offEnd = scope.onEndSelection(() => {
-			const pages = selectionCap.getFormattedSelection(docId);
-			if (!pages.length) {
-				setSelectionMenu(null);
-				return;
-			}
-			const first = pages[0];
-			const pageEl = pageElByIndex(hostRef.current, first.pageIndex);
-			if (!pageEl) return;
-			const screen = rectTopCenterScreen(pageEl, first.rect, zoomRef.current);
-			void (async () => {
-				let quote = "";
-				try {
-					const lines = await selectionCap.getSelectedText(docId).toPromise();
-					quote = (lines ?? []).join(" ").replace(/\s+/g, " ").trim();
-				} catch {
-					// text extraction is best-effort
-				}
-				const doc = docCap.getDocument(docId);
-				const anchor = anchorFromEmbedSelection(
-					pages,
-					quote,
-					(pageIndex) => doc?.pages[pageIndex]?.size ?? null,
-				);
-				if (!anchor) return;
-				setSelectionMenu({ screen, anchor, pages });
-				publishSelection({
-					text: quote,
-					sourcePath: paperRelPath ?? paperAbsPath ?? "PDF",
-					origin: "pdf",
-					page: anchor.page,
-					rects: anchor.rects,
-					paperAbsPath: paperAbsPath ?? undefined,
-				});
-			})();
-		});
-		const offChange = scope.onSelectionChange((sel) => {
-			if (!sel) {
-				setSelectionMenu(null);
-				clearActiveSelection("pdf");
-			}
-		});
-		return () => {
-			offEnd();
-			offChange();
-			clearActiveSelection("pdf");
-		};
-	}, [selectionCap, docCap, docId, paperRelPath, paperAbsPath]);
 
 	// Re-anchor the active pin modal on scroll + zoom. zoomLevel forces
 	// re-placement after zoom. Use scrollReady (boolean) — not `scroll` —
@@ -3237,7 +3160,7 @@ function PdfViewerInner({
 		return () => {
 			scope?.resume();
 		};
-	}, [regionSelecting, selectionCap, interactionCap, docId]);
+	}, [regionSelecting, selectionCap, interactionCap, docId, setSelectionMenu]);
 
 	const pageMarks = useMemo<PdfPageMarksSlice>(
 		() => ({
