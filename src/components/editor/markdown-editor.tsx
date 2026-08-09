@@ -19,6 +19,7 @@ import { MarkdownDocProvider } from "@/components/editor/context/markdown-doc-co
 import { Editor, EditorContainer } from "@/components/editor/editor-surface";
 import { WikiEmbedProjectionProvider } from "@/components/editor/embeds/projection-context";
 import { useMarkdownPersistence } from "@/components/editor/hooks/use-markdown-persistence";
+import { useSelectionContextPublish } from "@/components/editor/hooks/use-selection-context-publish";
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
 import { FindReplaceBar } from "@/components/editor/overlays/find-replace-bar";
 import { FrontmatterPanel } from "@/components/editor/overlays/frontmatter-panel";
@@ -46,10 +47,6 @@ import {
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import i18n from "@/i18n";
-import {
-	clearActiveSelection,
-	publishSelection,
-} from "@/lib/agent/selection-store";
 import {
 	copyTextToClipboard,
 	readTextFromClipboard,
@@ -1388,38 +1385,10 @@ export function MarkdownEditor({
 		[filePath, onAssetsChanged],
 	);
 
-	// Mirror the live text selection into the Agent composer as an ephemeral
-	// context chip (debounced; collapsed selection clears it).
-	const selectionPublishTimerRef = useRef<number | null>(null);
-	const scheduleSelectionContextPublish = useCallback(() => {
-		if (selectionPublishTimerRef.current !== null) {
-			window.clearTimeout(selectionPublishTimerRef.current);
-		}
-		selectionPublishTimerRef.current = window.setTimeout(() => {
-			selectionPublishTimerRef.current = null;
-			const selection = editor.selection;
-			if (!selection || RangeApi.isCollapsed(selection)) {
-				clearActiveSelection("markdown");
-				return;
-			}
-			const path = filePathRef.current;
-			if (!path) return;
-			publishSelection({
-				text: editor.api.string(selection),
-				sourcePath: path,
-				origin: "markdown",
-			});
-		}, 300);
-	}, [editor]);
-
-	useEffect(() => {
-		return () => {
-			if (selectionPublishTimerRef.current !== null) {
-				window.clearTimeout(selectionPublishTimerRef.current);
-			}
-			clearActiveSelection("markdown");
-		};
-	}, []);
+	const scheduleSelectionContextPublish = useSelectionContextPublish({
+		editor,
+		filePathRef,
+	});
 
 	const handleEditorValueChange = useCallback(() => {
 		const presentationMarkdown = wikiLinkPresentationMarkdownRef.current;
