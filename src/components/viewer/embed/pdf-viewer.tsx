@@ -66,35 +66,15 @@ import {
 	ZoomPluginPackage,
 } from "@embedpdf/plugin-zoom/react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import {
-	ChevronDown,
-	ChevronUp,
-	Languages,
-	List,
-	Loader2,
-	MessageSquareText,
-	Minus,
-	Moon,
-	MoveVertical,
-	Plus,
-	RotateCcw,
-	ScanSearch,
-	Search,
-	Sun,
-	X,
-} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
-import { Button } from "@/components/ui/button";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ActiveCardScrollSync } from "@/components/viewer/embed/active-card-scroll-sync";
+import { PdfBottomBar } from "@/components/viewer/embed/chrome/pdf-bottom-bar";
+import { PdfCardStack } from "@/components/viewer/embed/chrome/pdf-card-stack";
+import { PdfFindBar } from "@/components/viewer/embed/chrome/pdf-find-bar";
+import { PdfOutlinePanel } from "@/components/viewer/embed/chrome/pdf-outline-panel";
+import { PdfToolbar } from "@/components/viewer/embed/chrome/pdf-toolbar";
 import {
 	CitationLinkLayer,
 	isLinkObject,
@@ -109,7 +89,6 @@ import {
 	rectTopCenterScreen,
 } from "@/components/viewer/embed/geometry";
 import { LayoutTranslateOverlay } from "@/components/viewer/embed/layout-translate-overlay";
-import { OutlineTree } from "@/components/viewer/embed/outline-tree";
 import {
 	PDF_COLOR_SCHEME_EVENT,
 	type PdfColorScheme,
@@ -143,15 +122,7 @@ import type {
 } from "@/components/viewer/embed/pdf-viewer-types";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
-import { AnnotationEditor } from "@/components/viewer/pdf-ask/annotation-editor";
-import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
-import { FormulaAnnotationCard } from "@/components/viewer/pdf-ask/formula-annotation-card";
 import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
-import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
-import { TranslateCard } from "@/components/viewer/pdf-ask/translate-card";
-import { VisualAnnotationEditor } from "@/components/viewer/pdf-ask/visual-annotation-editor";
-import { VisualTraceCard } from "@/components/viewer/pdf-ask/visual-trace-card";
-import { PdfCitationPreview } from "@/components/viewer/pdf-citation-preview";
 import i18n from "@/i18n";
 import {
 	cancelAgentRun,
@@ -282,7 +253,6 @@ import {
 	parsePdfZoomPercentage,
 } from "@/lib/pdf/zoom";
 import { loadSettings } from "@/lib/settings";
-import { formatShortcutById } from "@/lib/shell/shortcuts";
 import {
 	openRightTab,
 	requestOpenAgentSession,
@@ -4210,10 +4180,6 @@ function PdfViewerInner({
 		],
 	);
 
-	const pdfColorSchemeLabel = pdfDark
-		? t("pdf.useLightMode")
-		: t("pdf.useDarkMode");
-
 	const layoutTranslateRunning = layoutTranslateJob.status === "running";
 	const layoutTranslateActive =
 		layoutTranslateRunning ||
@@ -4226,269 +4192,42 @@ function PdfViewerInner({
 
 	return (
 		<div ref={hostRef} className="relative flex h-full min-h-0 w-full flex-col">
-			{outline.length > 0 ? (
-				<div className="pointer-events-none absolute top-2 left-3 z-30">
-					<TooltipProvider delayDuration={200}>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant="ghost"
-									className="pointer-events-auto rounded-lg border border-border/80 bg-background/95 shadow-sm backdrop-blur-sm"
-									aria-label={t("pdf.outline")}
-									aria-pressed={showOutline}
-									onClick={() => setShowOutline((v) => !v)}
-								>
-									<List className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">{t("pdf.outline")}</TooltipContent>
-						</Tooltip>
-					</TooltipProvider>
-				</div>
-			) : null}
-			{showOutline && outline.length > 0 ? (
-				<aside className="agentero-scroll absolute inset-y-0 left-0 z-20 w-60 border-r bg-background/95 pt-11 pb-2 backdrop-blur-sm">
-					<div className="px-2">
-						<OutlineTree nodes={outline} depth={0} onGoToPage={goToPage} />
-					</div>
-				</aside>
-			) : null}
-			{findOpen ? (
-				<TooltipProvider delayDuration={200}>
-					<div className="absolute top-12 right-3 z-30 flex items-center gap-1 rounded-lg border border-border/80 bg-background/95 p-1 shadow-md backdrop-blur-sm">
-						<Search className="ml-1 size-3.5 shrink-0 text-muted-foreground" />
-						<input
-							ref={findInputRef}
-							type="text"
-							className="w-40 bg-transparent text-xs outline-none"
-							placeholder={t("pdf.findPlaceholder")}
-							value={findQuery}
-							onChange={(e) => setFindQuery(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter") {
-									e.preventDefault();
-									scrollToResult(
-										e.shiftKey
-											? (search?.previousResult() ?? -1)
-											: (search?.nextResult() ?? -1),
-									);
-								} else if (e.key === "Escape") {
-									e.preventDefault();
-									closeFind();
-								}
-							}}
-						/>
-						<span className="min-w-11 shrink-0 px-1 text-center text-muted-foreground text-xs tabular-nums">
-							{findQuery.trim()
-								? searchState.total > 0
-									? `${searchState.activeResultIndex + 1}/${searchState.total}`
-									: t("pdf.findNoResults")
-								: ""}
-						</span>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant="ghost"
-									aria-label={t("pdf.findPrev")}
-									disabled={searchState.total === 0}
-									onClick={() => scrollToResult(search?.previousResult() ?? -1)}
-								>
-									<ChevronUp className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">{t("pdf.findPrev")}</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant="ghost"
-									aria-label={t("pdf.findNext")}
-									disabled={searchState.total === 0}
-									onClick={() => scrollToResult(search?.nextResult() ?? -1)}
-								>
-									<ChevronDown className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">{t("pdf.findNext")}</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant="ghost"
-									aria-label={t("pdf.findClose")}
-									onClick={closeFind}
-								>
-									<X className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">
-								{t("pdf.findClose")}
-							</TooltipContent>
-						</Tooltip>
-					</div>
-				</TooltipProvider>
-			) : null}
-			<div className="pointer-events-none absolute top-2 right-3 z-20 flex items-center gap-1">
-				<TooltipProvider delayDuration={200}>
-					<div className="pointer-events-auto flex h-7 items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant="ghost"
-									className="shrink-0 self-center"
-									aria-label={t("pdf.zoomOut")}
-									disabled={zoomLevel <= PDF_ZOOM_MIN}
-									onClick={() => zoom?.zoomOut()}
-								>
-									<Minus className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">{t("pdf.zoomOut")}</TooltipContent>
-						</Tooltip>
-						<div className="flex h-6 shrink-0 items-center self-center">
-							<input
-								type="text"
-								inputMode="decimal"
-								maxLength={6}
-								value={zoomField}
-								aria-label={t("pdf.zoomPercentage")}
-								title={t("pdf.zoomPercentage")}
-								size={Math.max(zoomField.length, 1)}
-								style={{ width: `${Math.max(zoomField.length, 1)}ch` }}
-								className="h-6 min-w-[1ch] rounded border border-transparent bg-transparent p-0 text-center font-medium text-muted-foreground text-xs leading-6 tabular-nums outline-none hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-								onChange={(event) => setZoomField(event.target.value)}
-								onFocus={(event) => {
-									zoomFieldFocusedRef.current = true;
-									event.currentTarget.select();
-								}}
-								onBlur={(event) => {
-									zoomFieldFocusedRef.current = false;
-									if (zoomFieldCancelRef.current) {
-										zoomFieldCancelRef.current = false;
-										setZoomField(formatPdfZoomPercentage(zoomLevel));
-										return;
-									}
-									commitZoomField(event.currentTarget.value);
-								}}
-								onKeyDown={(event) => {
-									if (event.key === "Enter") {
-										event.preventDefault();
-										event.currentTarget.blur();
-									} else if (event.key === "Escape") {
-										event.preventDefault();
-										zoomFieldCancelRef.current = true;
-										event.currentTarget.blur();
-									}
-								}}
-							/>
-							<span
-								aria-hidden="true"
-								className="select-none text-muted-foreground text-xs leading-none"
-							>
-								%
-							</span>
-						</div>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant="ghost"
-									className="shrink-0 self-center"
-									aria-label={t("pdf.zoomIn")}
-									disabled={zoomLevel >= PDF_ZOOM_MAX}
-									onClick={() => zoom?.zoomIn()}
-								>
-									<Plus className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">{t("pdf.zoomIn")}</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant={regionSelecting ? "secondary" : "ghost"}
-									className="shrink-0 self-center"
-									aria-label={t("pdfExplain.selectRegion")}
-									aria-pressed={regionSelecting}
-									disabled={visualCropPending || !engine}
-									onClick={toggleRegionSelect}
-								>
-									<ScanSearch
-										className={cn(
-											"size-3.5",
-											visualCropPending && "animate-pulse",
-										)}
-									/>
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">
-								{regionSelecting
-									? t("pdfExplain.cancelRegion")
-									: t("pdfExplain.selectRegion")}
-								{/* Inverted tooltip: mute via text-background, not muted-foreground. */}
-								<span className="ml-2 text-background/70">
-									{formatShortcutById("visualAnnotation")}
-								</span>
-							</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant={layoutTranslateActive ? "secondary" : "ghost"}
-									className="shrink-0 self-center"
-									aria-label={layoutTranslateLabel}
-									aria-pressed={layoutTranslateActive}
-									disabled={!engine}
-									onClick={toggleLayoutTranslate}
-								>
-									{layoutTranslateRunning ? (
-										<Loader2 className="size-3.5 animate-spin" aria-hidden />
-									) : (
-										<Languages className="size-3.5" aria-hidden />
-									)}
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">
-								{layoutTranslateLabel}
-							</TooltipContent>
-						</Tooltip>
-						{onOpenAnnotations ? (
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										size="icon-xs"
-										variant="ghost"
-										className="shrink-0 self-center"
-										aria-label={t("annotations.title")}
-										onClick={onOpenAnnotations}
-									>
-										<MessageSquareText className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="bottom">
-									{t("annotations.title")}
-								</TooltipContent>
-							</Tooltip>
-						) : null}
-					</div>
-				</TooltipProvider>
-			</div>
+			<PdfOutlinePanel
+				outline={outline}
+				showOutline={showOutline}
+				onToggleOutline={() => setShowOutline((v) => !v)}
+				onGoToPage={goToPage}
+			/>
+			<PdfFindBar
+				open={findOpen}
+				inputRef={findInputRef}
+				query={findQuery}
+				onQueryChange={setFindQuery}
+				total={searchState.total}
+				activeResultIndex={searchState.activeResultIndex}
+				onFindNext={() => scrollToResult(search?.nextResult() ?? -1)}
+				onFindPrev={() => scrollToResult(search?.previousResult() ?? -1)}
+				onClose={closeFind}
+			/>
+			<PdfToolbar
+				zoomLevel={zoomLevel}
+				onZoomIn={() => zoom?.zoomIn()}
+				onZoomOut={() => zoom?.zoomOut()}
+				zoomField={zoomField}
+				onZoomFieldChange={setZoomField}
+				zoomFieldFocusedRef={zoomFieldFocusedRef}
+				zoomFieldCancelRef={zoomFieldCancelRef}
+				onCommitZoomField={commitZoomField}
+				regionSelecting={regionSelecting}
+				visualCropPending={visualCropPending}
+				engine={engine}
+				onToggleRegionSelect={toggleRegionSelect}
+				layoutTranslateRunning={layoutTranslateRunning}
+				layoutTranslateActive={layoutTranslateActive}
+				layoutTranslateLabel={layoutTranslateLabel}
+				onToggleLayoutTranslate={toggleLayoutTranslate}
+				onOpenAnnotations={onOpenAnnotations}
+			/>
 
 			<DockviewViewport
 				documentId={docId}
@@ -4512,235 +4251,102 @@ function PdfViewerInner({
 				</ZoomGestureWrapper>
 			</DockviewViewport>
 
-			{typeof document !== "undefined"
-				? createPortal(
-						<>
-							{selectionMenu ? (
-								<SelectionMenu
-									screen={selectionMenu.screen}
-									onHighlight={handleHighlight}
-									onCopy={handleCopy}
-									onNote={handleNote}
-									onAsk={handleMenuAsk}
-									onAddToChat={handleMenuAddToChat}
-									onTranslate={handleMenuTranslate}
-									onClose={closeSelectionMenu}
-								/>
-							) : null}
+			<PdfCardStack
+				selectionMenu={{
+					state: selectionMenu,
+					onHighlight: handleHighlight,
+					onCopy: handleCopy,
+					onNote: handleNote,
+					onAsk: handleMenuAsk,
+					onAddToChat: handleMenuAddToChat,
+					onTranslate: handleMenuTranslate,
+					onClose: closeSelectionMenu,
+				}}
+				visualDraft={{
+					state: visualDraftEditor,
+					onSave: handleVisualDraftSave,
+					onAddToChat: handleVisualAddToChat,
+					onSendNow: handleVisualSendNow,
+					onDelete: closeVisualDraftEditor,
+					onClose: closeVisualDraftEditor,
+					onHoverEnter: markLayoutDraftHoverEnter,
+					onHoverLeave: scheduleLayoutDraftHide,
+				}}
+				formulaAnnotation={{
+					state: formulaAnnotationPreview,
+					onOpenFile: paperAbsPath
+						? () => {
+								closeFormulaAnnotationPreview();
+								openPath(equationAnnotationPath(paperAbsPath));
+							}
+						: undefined,
+					onClose: closeFormulaAnnotationPreview,
+					onHoverEnter: markFormulaHoverEnter,
+					onHoverLeave: scheduleFormulaHide,
+				}}
+				citationPreview={{
+					state: citationPreview,
+					onHoverEnter: cancelCitationHide,
+					onHoverLeave: scheduleCitationHide,
+				}}
+				cardScreen={cardScreen}
+				onCardHoverEnter={markCardHoverEnter}
+				onCardHoverLeave={scheduleHoverHide}
+				ask={{
+					thread: activeThread,
+					streaming,
+					error: askError,
+					onSend: handleSend,
+					onResend: handleResend,
+					onHide: handleHide,
+					onDelete: handleDelete,
+					onStop: () => {
+						const sid = activeSessionRef.current;
+						if (!sid) return;
+						void cancelAgentRun(sid).catch(() => undefined);
+						activeSessionRef.current = null;
+						setStreaming(false);
+					},
+				}}
+				visualTrace={{
+					trace: activeVisualTrace,
+					error: visualError,
+					initialExpanded: visualCardExpanded,
+					onOpenSession: handleOpenActiveVisualSession,
+					onAddToChat: handleVisualAddToChatFromMark,
+					onSaveComment: handleVisualSaveComment,
+					onSend: handleVisualContinue,
+					onDelete: handleDeleteVisualTrace,
+					onHide: hideActiveCard,
+					onStop: handleStopVisualSession,
+				}}
+				translate={{
+					record: activeTranslate,
+					streaming: translateStreaming,
+					error: translateError,
+					onOpenSettings: () => onOpenSettings?.(),
+					onHide: hideActiveCard,
+					onDelete: deleteTranslateCard,
+				}}
+				editor={{
+					state: editor,
+					onSave: saveEditor,
+					onClose: () => setEditor(null),
+					onDelete: deleteEditorAnnotation,
+				}}
+			/>
 
-							{visualDraftEditor ? (
-								<VisualAnnotationEditor
-									screen={visualDraftEditor.screen}
-									onSave={handleVisualDraftSave}
-									onAddToChat={handleVisualAddToChat}
-									onSendNow={handleVisualSendNow}
-									onDelete={closeVisualDraftEditor}
-									onClose={closeVisualDraftEditor}
-									onPointerEnter={
-										visualDraftEditor.ephemeral
-											? markLayoutDraftHoverEnter
-											: undefined
-									}
-									onPointerLeave={
-										visualDraftEditor.ephemeral
-											? scheduleLayoutDraftHide
-											: undefined
-									}
-								/>
-							) : null}
-
-							{formulaAnnotationPreview ? (
-								<FormulaAnnotationCard
-									screen={formulaAnnotationPreview.screen}
-									symbols={formulaAnnotationPreview.symbols}
-									onOpenFile={
-										paperAbsPath
-											? () => {
-													closeFormulaAnnotationPreview();
-													openPath(equationAnnotationPath(paperAbsPath));
-												}
-											: undefined
-									}
-									onClose={closeFormulaAnnotationPreview}
-									onPointerEnter={markFormulaHoverEnter}
-									onPointerLeave={scheduleFormulaHide}
-								/>
-							) : null}
-
-							{citationPreview ? (
-								<PdfCitationPreview
-									screen={citationPreview.screen}
-									previewText={citationPreview.previewText}
-									onPointerEnter={cancelCitationHide}
-									onPointerLeave={scheduleCitationHide}
-								/>
-							) : null}
-
-							{activeThread && cardScreen ? (
-								<AskPopover
-									thread={activeThread}
-									screen={cardScreen}
-									preferRight={cardScreen.preferRight ?? true}
-									streaming={streaming}
-									error={askError}
-									onSend={handleSend}
-									onResend={handleResend}
-									onHide={handleHide}
-									onDelete={handleDelete}
-									onPointerEnter={markCardHoverEnter}
-									onPointerLeave={scheduleHoverHide}
-									onStop={() => {
-										const sid = activeSessionRef.current;
-										if (!sid) return;
-										void cancelAgentRun(sid).catch(() => undefined);
-										activeSessionRef.current = null;
-										setStreaming(false);
-									}}
-								/>
-							) : null}
-
-							{activeVisualTrace && cardScreen ? (
-								<VisualTraceCard
-									trace={activeVisualTrace}
-									screen={cardScreen}
-									preferRight={cardScreen.preferRight ?? true}
-									error={visualError}
-									initialExpanded={visualCardExpanded}
-									onOpenSession={handleOpenActiveVisualSession}
-									onAddToChat={handleVisualAddToChatFromMark}
-									onSaveComment={handleVisualSaveComment}
-									onSend={handleVisualContinue}
-									onDelete={handleDeleteVisualTrace}
-									onHide={hideActiveCard}
-									onPointerEnter={markCardHoverEnter}
-									onPointerLeave={scheduleHoverHide}
-									onStop={handleStopVisualSession}
-								/>
-							) : null}
-
-							{activeTranslate && cardScreen ? (
-								<TranslateCard
-									screen={cardScreen}
-									preferRight={cardScreen.preferRight ?? true}
-									result={activeTranslate.result ?? ""}
-									streaming={translateStreaming}
-									error={translateError ?? activeTranslate.error ?? null}
-									onOpenSettings={() => onOpenSettings?.()}
-									onHide={hideActiveCard}
-									onDelete={deleteTranslateCard}
-									onPointerEnter={markCardHoverEnter}
-									onPointerLeave={scheduleHoverHide}
-								/>
-							) : null}
-
-							{editor ? (
-								<AnnotationEditor
-									screen={editor.screen}
-									initialComment={editor.comment}
-									onSave={saveEditor}
-									onClose={() => setEditor(null)}
-									onDelete={deleteEditorAnnotation}
-									onPointerEnter={markCardHoverEnter}
-									onPointerLeave={scheduleHoverHide}
-								/>
-							) : null}
-						</>,
-						document.body,
-					)
-				: null}
-
-			{/* Bottom bar: page nav + PDF color scheme. */}
-			{totalPages > 0 ? (
-				<div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
-					<TooltipProvider delayDuration={200}>
-						<div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
-							<input
-								type="text"
-								inputMode="numeric"
-								className="w-6 rounded bg-transparent text-center font-medium text-foreground text-xs tabular-nums outline-none focus:bg-muted"
-								aria-label={t("pdf.goToPage")}
-								value={pageField}
-								onFocus={(e) => {
-									pageFocusedRef.current = true;
-									e.currentTarget.select();
-								}}
-								onChange={(e) =>
-									setPageField(e.target.value.replace(/[^0-9]/g, ""))
-								}
-								onKeyDown={(e) => {
-									if (e.key === "Enter") {
-										e.preventDefault();
-										commitPageField();
-										e.currentTarget.blur();
-									}
-								}}
-								onBlur={() => {
-									pageFocusedRef.current = false;
-									commitPageField();
-								}}
-							/>
-							<span className="px-0.5 text-muted-foreground text-xs tabular-nums">
-								/ {totalPages}
-							</span>
-							<span
-								aria-hidden
-								className="mx-0.5 h-3.5 w-px shrink-0 bg-border"
-							/>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										size="icon-xs"
-										variant="ghost"
-										aria-label={pdfColorSchemeLabel}
-										aria-pressed={pdfDark}
-										onClick={togglePdfColorScheme}
-									>
-										{pdfDark ? (
-											<Sun className="size-3.5" />
-										) : (
-											<Moon className="size-3.5" />
-										)}
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="top">
-									{pdfColorSchemeLabel}
-								</TooltipContent>
-							</Tooltip>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										size="icon-xs"
-										variant="ghost"
-										aria-label={t("pdf.zoomFit")}
-										onClick={() => zoom?.requestZoom(ZoomMode.FitWidth)}
-									>
-										<RotateCcw className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="top">{t("pdf.zoomFit")}</TooltipContent>
-							</Tooltip>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										size="icon-xs"
-										variant="ghost"
-										aria-label={t("pdf.zoomFitPage")}
-										onClick={() => zoom?.requestZoom(ZoomMode.FitPage)}
-									>
-										<MoveVertical className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="top">
-									{t("pdf.zoomFitPage")}
-								</TooltipContent>
-							</Tooltip>
-						</div>
-					</TooltipProvider>
-				</div>
-			) : null}
+			<PdfBottomBar
+				totalPages={totalPages}
+				pageField={pageField}
+				onPageFieldChange={setPageField}
+				pageFocusedRef={pageFocusedRef}
+				onCommitPageField={commitPageField}
+				pdfDark={pdfDark}
+				onTogglePdfColorScheme={togglePdfColorScheme}
+				onFitWidth={() => zoom?.requestZoom(ZoomMode.FitWidth)}
+				onFitPage={() => zoom?.requestZoom(ZoomMode.FitPage)}
+			/>
 		</div>
 	);
 }
