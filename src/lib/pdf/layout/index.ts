@@ -29,9 +29,11 @@ export {
 export {
 	bboxArea,
 	hoverableLayoutRegions,
+	hoverableLayoutRegionsByPage,
 	hoverableLayoutRegionsOnPage,
 	pickLayoutRegionAtPoint,
 	pointInBbox,
+	rawLayoutRegionsByPage,
 	rawLayoutRegionsOnPage,
 } from "@/lib/pdf/layout/hit-test";
 export {

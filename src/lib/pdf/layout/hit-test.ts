@@ -19,39 +19,75 @@ export function hoverableLayoutRegions(
 	return dedupeLayoutRegions(sidebarOnly, { minScore });
 }
 
-/** Regions for one page, largest first (paint order: smaller boxes later so they win hits). */
+function groupByPage(
+	regions: readonly PdfLayoutRegion[],
+): Map<number, PdfLayoutRegion[]> {
+	const byPage = new Map<number, PdfLayoutRegion[]>();
+	for (const region of regions) {
+		const page = byPage.get(region.pageIndex);
+		if (page) page.push(region);
+		else byPage.set(region.pageIndex, [region]);
+	}
+	return byPage;
+}
+
+function sortLargestFirst(regions: PdfLayoutRegion[]): PdfLayoutRegion[] {
+	return regions.sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox));
+}
+
+/**
+ * Hoverable regions bucketed by page, largest first (paint order: smaller boxes
+ * later so they win hits). NMS runs once for the whole document — callers that
+ * render many pages must reuse one map instead of deduping per page.
+ */
+export function hoverableLayoutRegionsByPage(
+	regions: readonly PdfLayoutRegion[],
+	minScore: number = LAYOUT_SIDEBAR_MIN_SCORE,
+): Map<number, PdfLayoutRegion[]> {
+	const byPage = groupByPage(hoverableLayoutRegions(regions, minScore));
+	for (const page of byPage.values()) sortLargestFirst(page);
+	return byPage;
+}
+
+/** Regions for one page, largest first. */
 export function hoverableLayoutRegionsOnPage(
 	regions: readonly PdfLayoutRegion[],
 	pageIndex: number,
 	minScore: number = LAYOUT_SIDEBAR_MIN_SCORE,
 ): PdfLayoutRegion[] {
-	return hoverableLayoutRegions(regions, minScore)
-		.filter((r) => r.pageIndex === pageIndex)
-		.sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox));
+	return hoverableLayoutRegionsByPage(regions, minScore).get(pageIndex) ?? [];
 }
 
 /**
- * Debug overlay: pre-merge detections on a page (all kinds, no NMS).
+ * Debug overlay: pre-merge detections bucketed by page (all kinds, no NMS).
  * Drops boxes below minScore (default 0.3). Largest first so smaller paint on top.
  * Also drops image/chart that are really text/header dual-labels.
  */
+export function rawLayoutRegionsByPage(
+	regions: readonly PdfLayoutRegion[],
+	minScore: number = LAYOUT_SIDEBAR_MIN_SCORE,
+): Map<number, PdfLayoutRegion[]> {
+	const byPage = groupByPage(
+		regions.filter((r) => r.bbox.w > 0 && r.bbox.h > 0 && r.score >= minScore),
+	);
+	// Suppress needs full-page body blocks at minScore; pass page slice only
+	// (body blocks below minScore already excluded — matches Eye gate).
+	for (const [pageIndex, page] of byPage) {
+		byPage.set(
+			pageIndex,
+			sortLargestFirst(suppressSpuriousFigureDetections(page)),
+		);
+	}
+	return byPage;
+}
+
+/** Pre-merge detections for one page, largest first. */
 export function rawLayoutRegionsOnPage(
 	regions: readonly PdfLayoutRegion[],
 	pageIndex: number,
 	minScore: number = LAYOUT_SIDEBAR_MIN_SCORE,
 ): PdfLayoutRegion[] {
-	const page = regions.filter(
-		(r) =>
-			r.pageIndex === pageIndex &&
-			r.bbox.w > 0 &&
-			r.bbox.h > 0 &&
-			r.score >= minScore,
-	);
-	// Suppress needs full-page body blocks at minScore; pass page slice only
-	// (body blocks below minScore already excluded — matches Eye gate).
-	return suppressSpuriousFigureDetections(page).sort(
-		(a, b) => bboxArea(b.bbox) - bboxArea(a.bbox),
-	);
+	return rawLayoutRegionsByPage(regions, minScore).get(pageIndex) ?? [];
 }
 
 export function pointInBbox(

@@ -220,7 +220,7 @@ import {
 	enqueuePaperLayoutAnalysis,
 	getLayoutDocumentResult,
 	getPdfAiRuntime,
-	hoverableLayoutRegionsOnPage,
+	hoverableLayoutRegionsByPage,
 	isFormulaLayoutKind,
 	LAYOUT_FORMULA_HOVER_DWELL_MS,
 	LAYOUT_FORMULA_HOVER_HIDE_MS,
@@ -235,7 +235,7 @@ import {
 	layoutKindI18nKey,
 	listTranslatableLayoutRegions,
 	type PdfLayoutRegion,
-	rawLayoutRegionsOnPage,
+	rawLayoutRegionsByPage,
 	readLayoutSidecar,
 	runDocumentLayoutAnalysis,
 	runLayoutRegionTranslate,
@@ -641,6 +641,10 @@ function pdfRasterDpr(): number {
  * zoom plus their blob transfers dominate). Tiles keep the viewport sharp.
  */
 const PDF_BASE_LAYER_SCALE_CAP = 1.5;
+
+/** Stable identity for "no layout regions" so page renders can bail out. */
+const EMPTY_LAYOUT_REGIONS_BY_PAGE: ReadonlyMap<number, PdfLayoutRegion[]> =
+	new Map();
 
 /**
  * Native viewport scroll → re-place floating selection cards.
@@ -1053,6 +1057,25 @@ function PdfViewerInner({
 		layoutAnalysisStore,
 		(s) =>
 			s.byDocument[docId]?.rawRegions ?? s.byDocument[docId]?.regions ?? null,
+	);
+	/**
+	 * Hover hit targets and debug boxes, bucketed by page. Both passes are
+	 * whole-document (NMS / spurious-detection suppression), so they must not run
+	 * inside per-page render — scrolling re-renders every mounted page.
+	 */
+	const hoverableRegionsByPage = useMemo(
+		() =>
+			layoutDocRegions
+				? hoverableLayoutRegionsByPage(layoutDocRegions)
+				: EMPTY_LAYOUT_REGIONS_BY_PAGE,
+		[layoutDocRegions],
+	);
+	const rawRegionsByPage = useMemo(
+		() =>
+			layoutOverlayVisible && layoutRawRegions
+				? rawLayoutRegionsByPage(layoutRawRegions)
+				: EMPTY_LAYOUT_REGIONS_BY_PAGE,
+		[layoutOverlayVisible, layoutRawRegions],
 	);
 	/** Progressive layout bulk-translate overlays (body text / abstract / header). */
 	const [layoutTranslateJob, setLayoutTranslateJob] = useState<{
@@ -4411,41 +4434,39 @@ function PdfViewerInner({
 						 * Debug Eye overlay: pre-merge detections (all kinds, no NMS),
 						 * score ≥ LAYOUT_SIDEBAR_MIN_SCORE (30%). Label = kind + conf.
 						 */}
-						{layoutOverlayVisible && layoutRawRegions
-							? rawLayoutRegionsOnPage(layoutRawRegions, pageIndex).map(
-									(region) => {
-										const pct = Math.round(region.score * 100);
-										const kindLabel = t(layoutKindI18nKey(region.kind));
-										const label = t("figures.overlayLabel", {
-											kind: kindLabel,
-											pct,
-										});
-										return (
-											<div
-												key={`layout-box-${region.id}`}
-												className="pointer-events-none absolute z-[1] rounded-sm border-[1.5px]"
+						{layoutOverlayVisible
+							? rawRegionsByPage.get(pageIndex)?.map((region) => {
+									const pct = Math.round(region.score * 100);
+									const kindLabel = t(layoutKindI18nKey(region.kind));
+									const label = t("figures.overlayLabel", {
+										kind: kindLabel,
+										pct,
+									});
+									return (
+										<div
+											key={`layout-box-${region.id}`}
+											className="pointer-events-none absolute z-[1] rounded-sm border-[1.5px]"
+											style={{
+												left: `${region.bbox.x * 100}%`,
+												top: `${region.bbox.y * 100}%`,
+												width: `${region.bbox.w * 100}%`,
+												height: `${region.bbox.h * 100}%`,
+												borderColor: layoutKindBorder(region.kind),
+												backgroundColor: layoutKindFill(region.kind),
+											}}
+											aria-hidden="true"
+										>
+											<span
+												className="absolute top-0 left-0 max-w-full truncate rounded-br-sm px-1 py-px font-medium text-[10px] text-white leading-4"
 												style={{
-													left: `${region.bbox.x * 100}%`,
-													top: `${region.bbox.y * 100}%`,
-													width: `${region.bbox.w * 100}%`,
-													height: `${region.bbox.h * 100}%`,
-													borderColor: layoutKindBorder(region.kind),
-													backgroundColor: layoutKindFill(region.kind),
+													backgroundColor: layoutKindHex(region.kind),
 												}}
-												aria-hidden="true"
 											>
-												<span
-													className="absolute top-0 left-0 max-w-full truncate rounded-br-sm px-1 py-px font-medium text-[10px] text-white leading-4"
-													style={{
-														backgroundColor: layoutKindHex(region.kind),
-													}}
-												>
-													{label}
-												</span>
-											</div>
-										);
-									},
-								)
+												{label}
+											</span>
+										</div>
+									);
+								})
 							: null}
 						{/* Bulk layout translate: progressive text overlays over body blocks. */}
 						{layoutTranslateJob.items.length > 0 ? (
@@ -4465,35 +4486,33 @@ function PdfViewerInner({
 						 * Formula legend keeps hits mounted so leave/enter can switch
 						 * equations and drive hide without a second hover surface.
 						 */}
-						{!regionSelecting && !visualDraftEditor && layoutDocRegions
-							? hoverableLayoutRegionsOnPage(layoutDocRegions, pageIndex).map(
-									(region) => {
-										const formulaLegend =
-											isFormulaLayoutKind(region.kind) &&
-											equationSymbols.length > 0;
-										return (
-											<button
-												key={`layout-hit-${region.id}`}
-												type="button"
-												data-layout-hit={region.id}
-												aria-label={
-													formulaLegend
-														? t("equationAnnotation.hoverAria")
-														: t("figures.hoverAskAria")
-												}
-												className="absolute z-[2] cursor-pointer rounded-sm border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
-												style={{
-													left: `${region.bbox.x * 100}%`,
-													top: `${region.bbox.y * 100}%`,
-													width: `${region.bbox.w * 100}%`,
-													height: `${region.bbox.h * 100}%`,
-												}}
-												onPointerEnter={() => scheduleLayoutHoverOpen(region)}
-												onPointerLeave={() => handleLayoutHoverLeave(region.id)}
-											/>
-										);
-									},
-								)
+						{!regionSelecting && !visualDraftEditor
+							? hoverableRegionsByPage.get(pageIndex)?.map((region) => {
+									const formulaLegend =
+										isFormulaLayoutKind(region.kind) &&
+										equationSymbols.length > 0;
+									return (
+										<button
+											key={`layout-hit-${region.id}`}
+											type="button"
+											data-layout-hit={region.id}
+											aria-label={
+												formulaLegend
+													? t("equationAnnotation.hoverAria")
+													: t("figures.hoverAskAria")
+											}
+											className="absolute z-[2] cursor-pointer rounded-sm border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
+											style={{
+												left: `${region.bbox.x * 100}%`,
+												top: `${region.bbox.y * 100}%`,
+												width: `${region.bbox.w * 100}%`,
+												height: `${region.bbox.h * 100}%`,
+											}}
+											onPointerEnter={() => scheduleLayoutHoverOpen(region)}
+											onPointerLeave={() => handleLayoutHoverLeave(region.id)}
+										/>
+									);
+								})
 							: null}
 						{/* Open ask conversation card: highlight the anchored selection. */}
 						{activeAskOnPage
@@ -4647,8 +4666,8 @@ function PdfViewerInner({
 			visualCropPending,
 			visualDraftEditor,
 			equationSymbols.length,
-			layoutDocRegions,
-			layoutRawRegions,
+			hoverableRegionsByPage,
+			rawRegionsByPage,
 			layoutOverlayVisible,
 			layoutTranslateJob.items,
 			handleVisualRegionSelect,

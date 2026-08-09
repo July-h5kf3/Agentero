@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	bboxArea,
 	hoverableLayoutRegions,
+	hoverableLayoutRegionsByPage,
 	hoverableLayoutRegionsOnPage,
 	pickLayoutRegionAtPoint,
 	pointInBbox,
@@ -128,5 +129,43 @@ describe("layout hit-test", () => {
 		];
 		const hit = pickLayoutRegionAtPoint(regions, 0, 0.2, 0.2);
 		expect(hit?.id).toBe("b");
+	});
+
+	it("buckets hoverable regions per page, largest first", () => {
+		const regions = [
+			region({
+				id: "p1-small",
+				pageIndex: 1,
+				kind: "formula",
+				score: 0.7,
+				bbox: { x: 0.2, y: 0.2, w: 0.1, h: 0.1 },
+			}),
+			region({
+				id: "p1-big",
+				pageIndex: 1,
+				kind: "image",
+				score: 0.9,
+				bbox: { x: 0.1, y: 0.1, w: 0.5, h: 0.5 },
+			}),
+			region({
+				id: "p0-table",
+				pageIndex: 0,
+				kind: "table",
+				score: 0.8,
+				bbox: { x: 0.1, y: 0.1, w: 0.4, h: 0.4 },
+			}),
+			region({
+				id: "p2-body",
+				pageIndex: 2,
+				kind: "text",
+				score: 0.99,
+				bbox: { x: 0.1, y: 0.1, w: 0.8, h: 0.2 },
+			}),
+		];
+		const byPage = hoverableLayoutRegionsByPage(regions);
+		expect(byPage.get(0)?.map((r) => r.id)).toEqual(["p0-table"]);
+		expect(byPage.get(1)?.map((r) => r.id)).toEqual(["p1-big", "p1-small"]);
+		// Body text is not hoverable, so page 2 has no bucket at all.
+		expect(byPage.has(2)).toBe(false);
 	});
 });
