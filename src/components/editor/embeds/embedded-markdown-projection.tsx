@@ -10,7 +10,7 @@ import { WikiEmbedProjectionProvider } from "@/components/editor/embeds/projecti
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
-import { splitFrontmatter } from "@/lib/markdown/doc";
+import { splitFrontmatter } from "@/lib/markdown/frontmatter";
 
 export const EmbeddedMarkdownProjection = memo(
 	function EmbeddedMarkdownProjection({

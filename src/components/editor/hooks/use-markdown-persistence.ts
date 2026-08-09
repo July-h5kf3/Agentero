@@ -9,9 +9,10 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown/doc";
 import {
 	frontmatterInterior,
+	joinFrontmatter,
+	splitFrontmatter,
 	wrapFrontmatter,
 } from "@/lib/markdown/frontmatter";
 import {
