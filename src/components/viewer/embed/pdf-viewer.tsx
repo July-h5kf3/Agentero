@@ -43,7 +43,6 @@ import {
 	ZoomMode,
 	ZoomPluginPackage,
 } from "@embedpdf/plugin-zoom/react";
-import type { UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
@@ -83,6 +82,7 @@ import type {
 	PdfViewerProps,
 	VisualDraftEditorState,
 } from "@/components/viewer/embed/pdf-viewer-types";
+import { usePdfAskThreads } from "@/components/viewer/embed/use-pdf-ask-threads";
 import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
 import { usePdfCitations } from "@/components/viewer/embed/use-pdf-citations";
 import { usePdfFind } from "@/components/viewer/embed/use-pdf-find";
@@ -94,15 +94,7 @@ import { usePdfSelectionTranslate } from "@/components/viewer/embed/use-pdf-sele
 import { usePdfTextSelection } from "@/components/viewer/embed/use-pdf-text-selection";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
 import i18n from "@/i18n";
-import {
-	cancelAgentRun,
-	listAgents,
-	listenAgentCompleted,
-	listenAgentFailed,
-	listenAgentStream,
-	type PromptImage,
-	runOnce,
-} from "@/lib/agent";
+import { cancelAgentRun } from "@/lib/agent";
 import { agentSessionStore } from "@/lib/agent/agent-session-store";
 import {
 	pinActiveSelection,
@@ -130,20 +122,9 @@ import {
 	writePdfVisualTrace,
 } from "@/lib/pdf/agent-trace";
 import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
-import {
-	createEmptyThread,
-	deletePdfAskThread,
-	newMessageId,
-	toSummaries,
-	writePdfAskThread,
-} from "@/lib/pdf/ask";
-import { buildPdfAskPrompt } from "@/lib/pdf/ask/prompt";
+import { deletePdfAskThread, toSummaries } from "@/lib/pdf/ask";
 import { threadHasUserQuestion } from "@/lib/pdf/ask/schema";
-import type {
-	PdfAskAnchor,
-	PdfAskNormalizedRect,
-	PdfAskThread,
-} from "@/lib/pdf/ask/types";
+import type { PdfAskNormalizedRect, PdfAskThread } from "@/lib/pdf/ask/types";
 import {
 	type EquationSymbol,
 	equationAnnotationPath,
@@ -191,13 +172,11 @@ import {
 	PDF_ZOOM_MIN,
 	parsePdfZoomPercentage,
 } from "@/lib/pdf/zoom";
-import { loadSettings } from "@/lib/settings";
 import {
 	openRightTab,
 	requestOpenAgentSession,
 	setAgentPanelMounted,
 } from "@/lib/shell/ui-store";
-import { resolveTranslateAgent } from "@/lib/translate";
 import {
 	VAULT_FILE_CHANGED_EVENT,
 	type VaultFileChangedPayload,
@@ -548,8 +527,6 @@ function PdfViewerInner({
 		highlights,
 		visualTraces,
 	});
-	const [streaming, setStreaming] = useState(false);
-	const [askError, setAskError] = useState<string | null>(null);
 	const [visualError, setVisualError] = useState<string | null>(null);
 	/** Keep the just-created Cmd+Enter card expanded until the user dismisses it. */
 	const [visualCardExpanded, setVisualCardExpanded] = useState(false);
@@ -633,42 +610,30 @@ function PdfViewerInner({
 
 	const pdfDark = pdfColorScheme === "dark";
 
-	const discardIfEmptyDraft = useCallback(
-		(threadId: string | null) => {
-			if (!threadId) return;
-			const th = threadsRef.current.find((t) => t.id === threadId);
-			if (!th || threadHasUserQuestion(th)) return;
-			setThreads((prev) => prev.filter((t) => t.id !== threadId));
-		},
-		[setThreads, threadsRef],
-	);
-
 	/**
-	 * `usePdfCards` must be declared before {@link usePdfSelectionTranslate} (the
-	 * translate cluster opens and hides cards), but cards also cancel a running
-	 * translate and clear its error chrome. Both directions go through refs
-	 * assigned right after the translate hook, so `openCard` / `hideActiveCard`
-	 * keep their identity.
+	 * `usePdfCards` must be declared before the ask and translate clusters (both
+	 * open and hide cards), but cards also reset per-kind card chrome and cancel a
+	 * running translate. Those edges go through refs assigned right after each
+	 * hook, so `openCard` / `hideActiveCard` keep their identity.
 	 */
 	const stopTranslateSessionRef = useRef<() => void>(() => undefined);
 	const clearTranslateErrorRef = useRef<() => void>(() => undefined);
+	const clearAskErrorRef = useRef<() => void>(() => undefined);
+	const closeAskChromeRef = useRef<(threadId: string) => void>(() => undefined);
 	const stopTranslateSession = useCallback(() => {
 		stopTranslateSessionRef.current();
 	}, []);
 
 	/** Per-kind chrome reset when a card is opened. */
 	const resetChromeForOpenedCard = useCallback((card: ActiveSelectionCard) => {
-		if (card.kind === "ask") setAskError(null);
+		if (card.kind === "ask") clearAskErrorRef.current();
 		if (card.kind === "translate") clearTranslateErrorRef.current();
 	}, []);
 
 	/** Per-kind chrome reset when the open card is dismissed. */
 	const resetChromeForClosedCard = useCallback(
 		(card: ActiveSelectionCard | null) => {
-			if (card?.kind === "ask") {
-				discardIfEmptyDraft(card.id);
-				setAskError(null);
-			}
+			if (card?.kind === "ask") closeAskChromeRef.current(card.id);
 			if (card?.kind === "translate") clearTranslateErrorRef.current();
 			if (isVisualMarkKind(card?.kind)) {
 				setVisualError(null);
@@ -676,7 +641,7 @@ function PdfViewerInner({
 			}
 			setEditor(null);
 		},
-		[discardIfEmptyDraft],
+		[],
 	);
 
 	const {
@@ -735,6 +700,37 @@ function PdfViewerInner({
 	});
 	stopTranslateSessionRef.current = stopTranslateSessionImpl;
 	clearTranslateErrorRef.current = clearTranslateError;
+
+	// ---- Ask threads (AI Q&A on a selection, marks/<id>.json) ----
+
+	const {
+		streaming,
+		askError,
+		openThread,
+		startFromAnchor,
+		resolvePdfAskAgent,
+		sendAskQuestion,
+		resendAskQuestion,
+		hideAskThread,
+		deleteAskThread,
+		stopAskStreaming,
+		clearAskError,
+		closeAskChrome,
+	} = usePdfAskThreads({
+		paperAbsPath,
+		paperRelPath,
+		vaultPath,
+		threadsRef,
+		setThreads,
+		upsertThread,
+		openCard,
+		activeCardRef,
+		setActiveCard,
+		setCardScreen,
+		activeSessionRef,
+	});
+	clearAskErrorRef.current = clearAskError;
+	closeAskChromeRef.current = closeAskChrome;
 
 	const {
 		findOpen,
@@ -936,20 +932,6 @@ function PdfViewerInner({
 		[formulaAnnotationPreview],
 	);
 
-	// ---- Ask persistence + streaming ----
-
-	const persist = useCallback(
-		async (thread: PdfAskThread) => {
-			if (!paperAbsPath) return;
-			try {
-				await writePdfAskThread(paperAbsPath, thread);
-			} catch {
-				// keep UI responsive
-			}
-		},
-		[paperAbsPath],
-	);
-
 	// Load `{paper}/Annotation.md` symbol glossary for formula hover cards.
 	useEffect(() => {
 		let cancelled = false;
@@ -1005,177 +987,6 @@ function PdfViewerInner({
 			unsub?.();
 		};
 	}, [paperAbsPath]);
-
-	const openThread = useCallback(
-		(thread: PdfAskThread) => openCard({ kind: "ask", id: thread.id }),
-		[openCard],
-	);
-
-	const createThreadFromAnchor = useCallback(
-		(anchor: PdfAskAnchor) => {
-			const paperPath = paperRelPath || paperAbsPath || "paper";
-			const thread = createEmptyThread({ paperPath, anchor });
-			setThreads((prev) => [thread, ...prev.filter(threadHasUserQuestion)]);
-			return thread;
-		},
-		[paperAbsPath, paperRelPath, setThreads],
-	);
-
-	const startFromAnchor = useCallback(
-		(anchor: PdfAskAnchor) => {
-			const thread = createThreadFromAnchor(anchor);
-			openThread(thread);
-		},
-		[createThreadFromAnchor, openThread],
-	);
-
-	const sendToThread = useCallback(
-		async (
-			thread: PdfAskThread,
-			question: string,
-			agentOpts?: { agentId?: string; modelId?: string },
-			/** When set (edit/resend), replace the transcript from this base instead of appending to full history. */
-			baseMessages?: PdfAskThread["messages"],
-			/** Visual PDF crops attached to this turn. */
-			images?: PromptImage[],
-		) => {
-			const threadId = thread.id;
-			if (!question.trim()) return;
-			const userMsg = {
-				id: newMessageId(),
-				role: "user" as const,
-				content: question,
-				createdAt: new Date().toISOString(),
-			};
-			const prior = baseMessages ?? thread.messages;
-			const withUser: PdfAskThread = {
-				...thread,
-				status: "open",
-				messages: [...prior, userMsg],
-				updatedAt: new Date().toISOString(),
-			};
-			upsertThread(withUser);
-			void persist(withUser);
-			setAskError(null);
-			setStreaming(true);
-
-			const assistantId = newMessageId();
-			const prompt = buildPdfAskPrompt(withUser, question);
-			try {
-				const accepted = await runOnce({
-					prompt,
-					agentId: agentOpts?.agentId,
-					modelId: agentOpts?.modelId,
-					images,
-					vaultPath: vaultPath ?? undefined,
-					workflow: "free",
-					autoApprove: true,
-					hideFromChatHistory: true,
-				});
-				activeSessionRef.current = accepted.sessionId;
-				const withAssistant: PdfAskThread = {
-					...withUser,
-					messages: [
-						...withUser.messages,
-						{
-							id: assistantId,
-							role: "assistant",
-							content: "",
-							createdAt: new Date().toISOString(),
-							agentSessionId: accepted.sessionId,
-						},
-					],
-				};
-				upsertThread(withAssistant);
-				const sessionId = accepted.sessionId;
-				const unsubs: UnlistenFn[] = [];
-				const cleanup = () => {
-					for (const u of unsubs) u();
-					if (activeSessionRef.current === sessionId)
-						activeSessionRef.current = null;
-					setStreaming(false);
-				};
-				unsubs.push(
-					await listenAgentStream((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						if ((ev.kind ?? "message") === "thought") return;
-						setThreads((prev) =>
-							prev.map((th) => {
-								if (th.id !== threadId) return th;
-								const msgs = [...th.messages];
-								const last = msgs[msgs.length - 1];
-								if (last?.id !== assistantId) return th;
-								msgs[msgs.length - 1] = {
-									...last,
-									content: last.content + ev.chunk,
-								};
-								return { ...th, messages: msgs };
-							}),
-						);
-					}),
-				);
-				unsubs.push(
-					await listenAgentCompleted((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						setThreads((prev) =>
-							prev.map((th) => {
-								if (th.id !== threadId) return th;
-								const msgs = [...th.messages];
-								const last = msgs[msgs.length - 1];
-								if (last?.id === assistantId) {
-									msgs[msgs.length - 1] = {
-										...last,
-										content: ev.content || last.content,
-										sources: (ev.sources ?? []).map((uri) => ({ uri })),
-									};
-								}
-								const done: PdfAskThread = {
-									...th,
-									messages: msgs,
-									updatedAt: new Date().toISOString(),
-								};
-								void persist(done);
-								return done;
-							}),
-						);
-						cleanup();
-					}),
-				);
-				unsubs.push(
-					await listenAgentFailed((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						setAskError(ev.error || t("pdfAsk.agentFailed"));
-						setThreads((prev) =>
-							prev.map((th) => {
-								if (th.id !== threadId) return th;
-								const msgs = th.messages.filter((m) => m.id !== assistantId);
-								const done = { ...th, messages: msgs };
-								void persist(done);
-								return done;
-							}),
-						);
-						cleanup();
-					}),
-				);
-			} catch (e) {
-				setStreaming(false);
-				setAskError(e instanceof Error ? e.message : t("pdfAsk.agentFailed"));
-			}
-		},
-		[upsertThread, persist, vaultPath, t, setThreads],
-	);
-
-	const resolvePdfAskAgent = useCallback(async () => {
-		const registry = await listAgents().catch(() => null);
-		const resolved = resolveTranslateAgent(loadSettings().pdfAsk, registry);
-		if (!resolved.agentId) {
-			const msg = t("pdfAsk.noAgent");
-			notifyError(msg);
-			setAskError(msg);
-			return null;
-		}
-		return resolved;
-	}, [t]);
 
 	const cancelLayoutHover = useCallback((regionId?: string) => {
 		if (
@@ -2074,119 +1885,6 @@ function PdfViewerInner({
 			visualTracesRef,
 		],
 	);
-
-	const handleSend = useCallback(
-		(question: string) => {
-			const card = activeCardRef.current;
-			const threadId = card?.kind === "ask" ? card.id : null;
-			if (!threadId) return;
-			const thread = threadsRef.current.find((th) => th.id === threadId);
-			if (!thread) return;
-			void (async () => {
-				try {
-					const resolved = await resolvePdfAskAgent();
-					if (!resolved) return;
-					void sendToThread(thread, question, {
-						agentId: resolved.agentId,
-						modelId: resolved.modelId,
-					});
-				} catch (e) {
-					const message = e instanceof Error ? e.message : String(e);
-					notifyError(message);
-					setAskError(message);
-				}
-			})();
-		},
-		[sendToThread, resolvePdfAskAgent, activeCardRef, threadsRef],
-	);
-
-	/** Edit last (or any) user turn: drop that message and everything after, then re-send. */
-	const handleResend = useCallback(
-		(messageId: string, question: string) => {
-			const card = activeCardRef.current;
-			const threadId = card?.kind === "ask" ? card.id : null;
-			if (!threadId) return;
-			const thread = threadsRef.current.find((th) => th.id === threadId);
-			if (!thread) return;
-			const index = thread.messages.findIndex(
-				(m) => m.id === messageId && m.role === "user",
-			);
-			if (index < 0) return;
-			const baseMessages = thread.messages.slice(0, index);
-			void (async () => {
-				try {
-					const resolved = await resolvePdfAskAgent();
-					if (!resolved) return;
-					void sendToThread(
-						thread,
-						question,
-						{
-							agentId: resolved.agentId,
-							modelId: resolved.modelId,
-						},
-						baseMessages,
-					);
-				} catch (e) {
-					const message = e instanceof Error ? e.message : String(e);
-					notifyError(message);
-					setAskError(message);
-				}
-			})();
-		},
-		[sendToThread, resolvePdfAskAgent, activeCardRef, threadsRef],
-	);
-
-	const dismissAskChrome = useCallback(() => {
-		if (activeSessionRef.current) {
-			void cancelAgentRun(activeSessionRef.current).catch(() => undefined);
-			activeSessionRef.current = null;
-		}
-		setStreaming(false);
-		setAskError(null);
-		if (activeCardRef.current?.kind === "ask") {
-			setActiveCard(null);
-			setCardScreen(null);
-		}
-	}, [activeCardRef, setActiveCard, setCardScreen]);
-
-	const handleHide = useCallback(() => {
-		const id =
-			activeCardRef.current?.kind === "ask" ? activeCardRef.current.id : null;
-		if (id) {
-			const thread = threadsRef.current.find((th) => th.id === id);
-			if (thread) {
-				if (!threadHasUserQuestion(thread)) {
-					setThreads((prev) => prev.filter((t) => t.id !== thread.id));
-				} else if (thread.status !== "ended") {
-					const ended: PdfAskThread = {
-						...thread,
-						status: "ended",
-						updatedAt: new Date().toISOString(),
-					};
-					upsertThread(ended);
-					void persist(ended);
-				}
-			}
-		}
-		dismissAskChrome();
-	}, [
-		upsertThread,
-		persist,
-		dismissAskChrome,
-		activeCardRef,
-		setThreads,
-		threadsRef,
-	]);
-
-	const handleDelete = useCallback(() => {
-		const id =
-			activeCardRef.current?.kind === "ask" ? activeCardRef.current.id : null;
-		if (id) {
-			setThreads((prev) => prev.filter((th) => th.id !== id));
-			if (paperAbsPath) void deletePdfAskThread(paperAbsPath, id);
-		}
-		dismissAskChrome();
-	}, [paperAbsPath, dismissAskChrome, activeCardRef, setThreads]);
 
 	const deleteVisualTraceById = useCallback(
 		(id: string) => {
@@ -3203,17 +2901,11 @@ function PdfViewerInner({
 					thread: activeThread,
 					streaming,
 					error: askError,
-					onSend: handleSend,
-					onResend: handleResend,
-					onHide: handleHide,
-					onDelete: handleDelete,
-					onStop: () => {
-						const sid = activeSessionRef.current;
-						if (!sid) return;
-						void cancelAgentRun(sid).catch(() => undefined);
-						activeSessionRef.current = null;
-						setStreaming(false);
-					},
+					onSend: sendAskQuestion,
+					onResend: resendAskQuestion,
+					onHide: hideAskThread,
+					onDelete: deleteAskThread,
+					onStop: stopAskStreaming,
 				}}
 				visualTrace={{
 					trace: activeVisualTrace,
