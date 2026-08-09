@@ -13,6 +13,11 @@ import { imageMimeFromPath } from "@/lib/workspace/viewer";
 /** Relative link prefix written into Markdown (Obsidian-friendly). */
 const MARKDOWN_ASSETS_DIR = "assets";
 const MARKDOWN_ASSETS_REL = `./${MARKDOWN_ASSETS_DIR}`;
+/** Derived from the constant above so renaming the folder cannot miss a spot. */
+const MANAGED_ASSET_URL_RE = new RegExp(
+	`^(?:\\./)?${MARKDOWN_ASSETS_DIR}/`,
+	"i",
+);
 
 const DATA_URL_RE = /^data:([^;,]+)?(?:;charset=[^;,]+)?;base64,(.+)$/i;
 
@@ -39,8 +44,7 @@ export function isRemoteOrInlineImageUrl(url: string): boolean {
  * (not remote URLs or arbitrary relative paths outside `assets/`).
  */
 export function isManagedMarkdownAssetUrl(url: string): boolean {
-	const n = url.trim().replace(/\\/g, "/");
-	return /^(?:\.\/)?assets\//i.test(n);
+	return MANAGED_ASSET_URL_RE.test(url.trim().replace(/\\/g, "/"));
 }
 
 /** Serialize an image node as portable Markdown syntax. */
