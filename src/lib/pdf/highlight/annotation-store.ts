@@ -25,6 +25,24 @@ export const ANNOTATIONS_FILE = ANNOTATIONS_JSON;
 /** In-memory fallback when not running under Tauri (browser dev). */
 const memoryStore = new Map<string, AnnotationTransferItem[]>();
 
+function dedupeAnnotationItems(
+	items: AnnotationTransferItem[],
+): AnnotationTransferItem[] {
+	const seen = new Set<string>();
+	const out: AnnotationTransferItem[] = [];
+	for (const item of items) {
+		const id = item.annotation?.id;
+		if (!id) {
+			out.push(item);
+			continue;
+		}
+		if (seen.has(id)) continue;
+		seen.add(id);
+		out.push(item);
+	}
+	return out;
+}
+
 /** Canonical path: `papers/<id>/marks/annotations.json`. */
 function annotationsPath(paperAbsPath: string): string {
 	return joinVaultPath(
@@ -51,13 +69,17 @@ export async function loadAnnotationItems(
 	paperAbsPath: string,
 ): Promise<AnnotationTransferItem[]> {
 	if (!paperAbsPath) return [];
-	if (!isTauri()) return memoryStore.get(paperAbsPath) ?? [];
+	if (!isTauri()) {
+		return dedupeAnnotationItems(memoryStore.get(paperAbsPath) ?? []);
+	}
 
 	// Prefer marks/; fall back to paper-root and migrate once.
 	try {
 		const raw = await readVaultFile(annotationsPath(paperAbsPath));
 		const parsed = JSON.parse(raw) as unknown;
-		return Array.isArray(parsed) ? (parsed as AnnotationTransferItem[]) : [];
+		return Array.isArray(parsed)
+			? dedupeAnnotationItems(parsed as AnnotationTransferItem[])
+			: [];
 	} catch {
 		// continue to legacy
 	}
@@ -66,7 +88,7 @@ export async function loadAnnotationItems(
 		const raw = await readVaultFile(legacyAnnotationsPath(paperAbsPath));
 		const parsed = JSON.parse(raw) as unknown;
 		if (!Array.isArray(parsed)) return [];
-		const items = parsed as AnnotationTransferItem[];
+		const items = dedupeAnnotationItems(parsed as AnnotationTransferItem[]);
 		if (items.length) {
 			await saveAnnotationItems(paperAbsPath, items);
 		} else {
@@ -88,13 +110,14 @@ export async function saveAnnotationItems(
 	items: AnnotationTransferItem[],
 ): Promise<void> {
 	if (!paperAbsPath) return;
+	const next = dedupeAnnotationItems(items);
 	if (!isTauri()) {
-		memoryStore.set(paperAbsPath, items);
+		memoryStore.set(paperAbsPath, next);
 		return;
 	}
 	await writeVaultFile(
 		annotationsPath(paperAbsPath),
-		`${JSON.stringify(items, null, 2)}\n`,
+		`${JSON.stringify(next, null, 2)}\n`,
 	);
 	// Drop legacy root copy if present so marks/ is the only location.
 	await removeFileIfExists(legacyAnnotationsPath(paperAbsPath));
