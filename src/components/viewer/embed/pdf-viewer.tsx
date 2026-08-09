@@ -64,7 +64,6 @@ import {
 	readPdfColorScheme,
 	writePdfColorScheme,
 } from "@/components/viewer/embed/pdf-color-scheme";
-import { EMPTY_LAYOUT_REGIONS_BY_PAGE } from "@/components/viewer/embed/pdf-page-constants";
 import {
 	type PdfPageHandlers,
 	PdfPageLayers,
@@ -75,17 +74,16 @@ import {
 import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
 import type {
 	EditorState,
-	FormulaAnnotationPreviewState,
 	PdfViewerHandle,
 	PdfViewerInnerProps,
 	PdfViewerProps,
-	VisualDraftEditorState,
 } from "@/components/viewer/embed/pdf-viewer-types";
 import { usePdfAskThreads } from "@/components/viewer/embed/use-pdf-ask-threads";
 import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
 import { usePdfCitations } from "@/components/viewer/embed/use-pdf-citations";
 import { usePdfFind } from "@/components/viewer/embed/use-pdf-find";
 import { usePdfHighlights } from "@/components/viewer/embed/use-pdf-highlights";
+import { usePdfLayoutAnalysis } from "@/components/viewer/embed/use-pdf-layout-analysis";
 import { usePdfMarksIo } from "@/components/viewer/embed/use-pdf-marks-io";
 import { usePdfOutline } from "@/components/viewer/embed/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
@@ -93,29 +91,17 @@ import { usePdfSelectionTranslate } from "@/components/viewer/embed/use-pdf-sele
 import { usePdfTextSelection } from "@/components/viewer/embed/use-pdf-text-selection";
 import { usePdfVisualMarks } from "@/components/viewer/embed/use-pdf-visual-marks";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
-import i18n from "@/i18n";
 import {
 	pinActiveSelection,
 	publishSelection,
 } from "@/lib/agent/selection-store";
-import {
-	BackgroundTaskCancelledError,
-	enqueueBackgroundTask,
-	isBackgroundTaskCancelledError,
-} from "@/lib/core/background-tasks";
-import { notifyError } from "@/lib/core/notify";
-import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import { isVisualMarkKind, tracePreview } from "@/lib/pdf/agent-trace";
 import { deletePdfAskThread, toSummaries } from "@/lib/pdf/ask";
 import { threadHasUserQuestion } from "@/lib/pdf/ask/schema";
 import type { PdfAskNormalizedRect, PdfAskThread } from "@/lib/pdf/ask/types";
-import {
-	type EquationSymbol,
-	equationAnnotationPath,
-	loadEquationAnnotation,
-} from "@/lib/pdf/equation-annotation";
+import { equationAnnotationPath } from "@/lib/pdf/equation-annotation";
 import { isHighlightObject } from "@/lib/pdf/highlight/annotation-store";
 import {
 	DEFAULT_HIGHLIGHT_COLOR,
@@ -123,27 +109,9 @@ import {
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
 import {
-	enqueuePaperLayoutAnalysis,
-	getLayoutDocumentResult,
 	getPdfAiRuntime,
-	hoverableLayoutRegionsByPage,
-	isFormulaLayoutKind,
-	LAYOUT_FORMULA_HOVER_DWELL_MS,
-	LAYOUT_FORMULA_HOVER_HIDE_MS,
-	LAYOUT_HOVER_DWELL_MS,
-	LAYOUT_HOVER_HIDE_MS,
-	type LayoutTranslateItem,
-	type LayoutTranslateJobStatus,
 	layoutAnalysisStore,
-	listTranslatableLayoutRegions,
-	type PdfLayoutRegion,
-	rawLayoutRegionsByPage,
-	readLayoutSidecar,
-	runDocumentLayoutAnalysis,
-	runLayoutRegionTranslate,
 	setFocusedLayoutRegion,
-	setLayoutOverlayVisible,
-	toLayoutTranslateItems,
 } from "@/lib/pdf/layout";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
@@ -159,11 +127,6 @@ import {
 	parsePdfZoomPercentage,
 } from "@/lib/pdf/zoom";
 import { openRightTab } from "@/lib/shell/ui-store";
-import {
-	VAULT_FILE_CHANGED_EVENT,
-	type VaultFileChangedPayload,
-} from "@/lib/vault/fs-watch";
-import { normalizePathKey } from "@/lib/vault/path";
 import { openPath } from "@/lib/workspace/actions";
 
 export type {
@@ -334,7 +297,6 @@ function PdfViewerInner({
 	onAsksChange,
 	onVisualTracesChange,
 }: PdfViewerInnerProps) {
-	const { t } = useTranslation("viewer");
 	// Parent often passes inline lambdas; keep latest in refs so data effects
 	// do not re-fire every parent render (was Maximum update depth exceeded).
 	const onAsksChangeRef = useRef(onAsksChange);
@@ -355,11 +317,6 @@ function PdfViewerInner({
 	const { provides: bookmarkCap } = useBookmarkCapability();
 	const { provides: layoutCap } = useLayoutAnalysisCapability();
 	const { provides: layoutAnalysisProvides } = useLayoutAnalysis(docId);
-	/** Figures rail header toggles this; mirror into EmbedPDF plugin. */
-	const layoutOverlayVisible = useStore(
-		layoutAnalysisStore,
-		(s) => s.overlayVisible[docId] ?? false,
-	);
 
 	// EmbedPDF's useScroll calls forDocument() every render and returns a fresh
 	// scope object (createScrollScope). Never put `scroll` in useEffect deps —
@@ -380,14 +337,9 @@ function PdfViewerInner({
 	engineRef.current = engine;
 	const docCapRef = useRef(docCap);
 	docCapRef.current = docCap;
-	const layoutTaskRef = useRef<Awaited<
-		ReturnType<typeof runDocumentLayoutAnalysis>
-	> | null>(null);
 
 	const currentPage = scrollState.currentPage || 1;
 	const totalPages = scrollState.totalPages || 0;
-	const totalPagesRef = useRef(totalPages);
-	totalPagesRef.current = totalPages;
 
 	/** Sidebar-selected layout region → PDF focus outline. */
 	const focusedLayoutRegion = useStore(layoutAnalysisStore, (s) => {
@@ -426,50 +378,6 @@ function PdfViewerInner({
 	});
 
 	const [editor, setEditor] = useState<EditorState | null>(null);
-	const [visualDraftEditor, setVisualDraftEditor] =
-		useState<VisualDraftEditorState | null>(null);
-	/** Formula hover → Annotation.md symbol glossary (when present). */
-	const [formulaAnnotationPreview, setFormulaAnnotationPreview] =
-		useState<FormulaAnnotationPreviewState | null>(null);
-	/** Parsed rows from `{paper}/Annotation.md` (empty when missing). */
-	const [equationSymbols, setEquationSymbols] = useState<EquationSymbol[]>([]);
-
-	/** Post-merge layout regions for hover hit targets (figures rail source). */
-	const layoutDocRegions = useStore(
-		layoutAnalysisStore,
-		(s) => s.byDocument[docId]?.regions ?? null,
-	);
-	/** Pre-merge detections for the debug Eye overlay (all model boxes). */
-	const layoutRawRegions = useStore(
-		layoutAnalysisStore,
-		(s) =>
-			s.byDocument[docId]?.rawRegions ?? s.byDocument[docId]?.regions ?? null,
-	);
-	/**
-	 * Hover hit targets and debug boxes, bucketed by page. Both passes are
-	 * whole-document (NMS / spurious-detection suppression), so they must not run
-	 * inside per-page render — scrolling re-renders every mounted page.
-	 */
-	const hoverableRegionsByPage = useMemo(
-		() =>
-			layoutDocRegions
-				? hoverableLayoutRegionsByPage(layoutDocRegions)
-				: EMPTY_LAYOUT_REGIONS_BY_PAGE,
-		[layoutDocRegions],
-	);
-	const rawRegionsByPage = useMemo(
-		() =>
-			layoutOverlayVisible && layoutRawRegions
-				? rawLayoutRegionsByPage(layoutRawRegions)
-				: EMPTY_LAYOUT_REGIONS_BY_PAGE,
-		[layoutOverlayVisible, layoutRawRegions],
-	);
-	/** Progressive layout bulk-translate overlays (body text / abstract / header). */
-	const [layoutTranslateJob, setLayoutTranslateJob] = useState<{
-		status: LayoutTranslateJobStatus;
-		items: LayoutTranslateItem[];
-	}>({ status: "idle", items: [] });
-	const layoutTranslateAbortRef = useRef<AbortController | null>(null);
 
 	// ---- Persisted marks (ask threads / translates / visual traces) ----
 
@@ -531,12 +439,6 @@ function PdfViewerInner({
 	 */
 	const regionSelectingRef = useRef(false);
 	const visualCropPendingRef = useRef(false);
-	const visualDraftEditorRef = useRef(visualDraftEditor);
-	visualDraftEditorRef.current = visualDraftEditor;
-	const formulaAnnotationPreviewRef = useRef(formulaAnnotationPreview);
-	formulaAnnotationPreviewRef.current = formulaAnnotationPreview;
-	const equationSymbolsRef = useRef(equationSymbols);
-	equationSymbolsRef.current = equationSymbols;
 
 	// ---- Text selection → floating action menu ----
 	// Placed after hostRef/zoomRef: the hook anchors the menu against the page
@@ -557,35 +459,11 @@ function PdfViewerInner({
 		paperAbsPath,
 	});
 
-	/** Pending dwell timer for layout-region hover → visual editor. */
-	const layoutHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
-	);
-	const layoutHoverRegionIdRef = useRef<string | null>(null);
-	/** Bumped to drop late crops after leave / supersede. */
-	const layoutHoverSeqRef = useRef(0);
-	/** Auto-hide timer for ephemeral layout-hover draft editors. */
-	const layoutDraftHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
-	);
-	/** True while pointer is over the ephemeral source region or draft card. */
-	const layoutDraftHoverSurfaceRef = useRef(false);
-	/** Formula legend dwell (separate from visual-ask dwell). */
-	const formulaHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
-	);
-	const formulaHoverRegionIdRef = useRef<string | null>(null);
-	/** Formula legend auto-hide after leave region / card. */
-	const formulaHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
-	);
-	/** True while pointer is over the formula hit region or legend card. */
-	const formulaHoverSurfaceRef = useRef(false);
 	/**
 	 * Latest `beginVisualAnnotation`. The layout-hover dwell timer opens a crop,
-	 * but the visual-mark cluster is declared after the layout hover machinery
-	 * (it consumes the draft-card owner), so this edge goes through a ref assigned
-	 * right after that hook — the dwell callback keeps its identity.
+	 * but the visual-mark cluster is declared after the layout cluster (it consumes
+	 * the draft-card owner), so this edge goes through a ref assigned right after
+	 * that hook — the dwell callback keeps its identity.
 	 */
 	const beginVisualAnnotationRef = useRef<
 		(
@@ -895,6 +773,52 @@ function PdfViewerInner({
 		if (!isVisualMarkKind(activeCard?.kind)) return null;
 		return visualTraces.find((tr) => tr.id === activeCard.id) ?? null;
 	}, [visualTraces, activeCard]);
+	// ---- Layout analysis (figures / formula hover + bulk translate) ----
+	// Owns both hover cards: a region-crop draft and the formula glossary are
+	// mutually exclusive, so their states and every guard live in one file.
+
+	const {
+		layoutOverlayVisible,
+		hoverableRegionsByPage,
+		rawRegionsByPage,
+		equationSymbols,
+		visualDraftEditor,
+		formulaAnnotationPreview,
+		openVisualDraftEditor,
+		closeVisualDraftEditor,
+		closeFormulaAnnotationPreview,
+		screenPointForRegion,
+		layoutHoverSeqRef,
+		scheduleLayoutHoverOpen,
+		handleLayoutHoverLeave,
+		markLayoutDraftHoverEnter,
+		scheduleLayoutDraftHide,
+		markFormulaHoverEnter,
+		scheduleFormulaHide,
+		rePlaceFormulaAnnotationOnScroll,
+		startLayoutAnalysisRef,
+		layoutTaskRef,
+		layoutTranslateJob,
+		layoutTranslateRunning,
+		layoutTranslateActive,
+		layoutTranslateLabel,
+		toggleLayoutTranslate,
+	} = usePdfLayoutAnalysis({
+		docId,
+		paperAbsPath,
+		paperRelPath,
+		isActive,
+		totalPages,
+		hostRef,
+		zoomLevel,
+		layoutCap,
+		layoutCapRef,
+		selectionMenuRef,
+		regionSelectingRef,
+		visualCropPendingRef,
+		beginVisualAnnotationRef,
+	});
+
 	const visualDraftRegion = useMemo(
 		() =>
 			visualDraftEditor
@@ -916,518 +840,6 @@ function PdfViewerInner({
 				: null,
 		[formulaAnnotationPreview],
 	);
-
-	// Load `{paper}/Annotation.md` symbol glossary for formula hover cards.
-	useEffect(() => {
-		let cancelled = false;
-		if (!paperAbsPath) {
-			setEquationSymbols([]);
-			setFormulaAnnotationPreview(null);
-			return;
-		}
-		void loadEquationAnnotation(paperAbsPath).then((symbols) => {
-			if (cancelled) return;
-			setEquationSymbols(symbols);
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, [paperAbsPath]);
-
-	// Reload Annotation.md when the Agent / editor rewrites it on disk.
-	useEffect(() => {
-		if (!paperAbsPath || !isTauri()) return;
-		const annotationPath = equationAnnotationPath(paperAbsPath);
-		const annotationKey = normalizePathKey(annotationPath);
-		let cancelled = false;
-		let unsub: (() => void) | undefined;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen<VaultFileChangedPayload>(
-				VAULT_FILE_CHANGED_EVENT,
-				({ payload }) => {
-					const paths = [...payload.paths];
-					if (payload.rename) {
-						paths.push(payload.rename.from, payload.rename.to);
-					}
-					const hit = paths.some((p) => normalizePathKey(p) === annotationKey);
-					if (!hit) return;
-					void loadEquationAnnotation(paperAbsPath).then((symbols) => {
-						setEquationSymbols(symbols);
-						// Drop open card if the glossary disappeared.
-						if (symbols.length === 0) {
-							setFormulaAnnotationPreview(null);
-						} else {
-							setFormulaAnnotationPreview((prev) =>
-								prev ? { ...prev, symbols } : prev,
-							);
-						}
-					});
-				},
-			);
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
-	}, [paperAbsPath]);
-
-	const cancelLayoutHover = useCallback((regionId?: string) => {
-		if (
-			regionId != null &&
-			layoutHoverRegionIdRef.current != null &&
-			layoutHoverRegionIdRef.current !== regionId
-		) {
-			return;
-		}
-		if (layoutHoverTimerRef.current) {
-			clearTimeout(layoutHoverTimerRef.current);
-			layoutHoverTimerRef.current = null;
-		}
-		if (regionId == null || layoutHoverRegionIdRef.current === regionId) {
-			layoutHoverRegionIdRef.current = null;
-		}
-	}, []);
-
-	const cancelLayoutDraftHide = useCallback(() => {
-		if (!layoutDraftHideTimerRef.current) return;
-		clearTimeout(layoutDraftHideTimerRef.current);
-		layoutDraftHideTimerRef.current = null;
-	}, []);
-
-	const cancelFormulaHover = useCallback((regionId?: string) => {
-		if (
-			regionId != null &&
-			formulaHoverRegionIdRef.current != null &&
-			formulaHoverRegionIdRef.current !== regionId
-		) {
-			return;
-		}
-		if (formulaHoverTimerRef.current) {
-			clearTimeout(formulaHoverTimerRef.current);
-			formulaHoverTimerRef.current = null;
-		}
-		if (regionId == null || formulaHoverRegionIdRef.current === regionId) {
-			formulaHoverRegionIdRef.current = null;
-		}
-	}, []);
-
-	const cancelFormulaHide = useCallback(() => {
-		if (!formulaHideTimerRef.current) return;
-		clearTimeout(formulaHideTimerRef.current);
-		formulaHideTimerRef.current = null;
-	}, []);
-
-	const closeVisualDraftEditor = useCallback(() => {
-		cancelLayoutDraftHide();
-		layoutDraftHoverSurfaceRef.current = false;
-		// Layout-hover also sets figures-rail focus for the bbox frame; clear it
-		// with the draft so the image selection outline does not linger.
-		const wasEphemeral = visualDraftEditorRef.current?.ephemeral === true;
-		setVisualDraftEditor(null);
-		if (wasEphemeral && !formulaAnnotationPreviewRef.current) {
-			setFocusedLayoutRegion(docId, null);
-		}
-	}, [cancelLayoutDraftHide, docId]);
-
-	const closeFormulaAnnotationPreview = useCallback(() => {
-		cancelFormulaHover();
-		cancelFormulaHide();
-		formulaHoverSurfaceRef.current = false;
-		const had = formulaAnnotationPreviewRef.current != null;
-		setFormulaAnnotationPreview(null);
-		if (had && !visualDraftEditorRef.current?.ephemeral) {
-			setFocusedLayoutRegion(docId, null);
-		}
-	}, [cancelFormulaHide, cancelFormulaHover, docId]);
-
-	const markLayoutDraftHoverEnter = useCallback(() => {
-		layoutDraftHoverSurfaceRef.current = true;
-		cancelLayoutDraftHide();
-	}, [cancelLayoutDraftHide]);
-
-	/**
-	 * Leave ephemeral layout-hover source region or draft card.
-	 * Manual region-select drafts ignore this (no auto-hide).
-	 */
-	const scheduleLayoutDraftHide = useCallback(() => {
-		if (visualDraftEditorRef.current?.ephemeral !== true) return;
-		layoutDraftHoverSurfaceRef.current = false;
-		cancelLayoutDraftHide();
-		layoutDraftHideTimerRef.current = setTimeout(() => {
-			layoutDraftHideTimerRef.current = null;
-			if (layoutDraftHoverSurfaceRef.current) return;
-			if (!visualDraftEditorRef.current?.ephemeral) return;
-			// Clears draft + focused layout bbox (see closeVisualDraftEditor).
-			closeVisualDraftEditor();
-		}, LAYOUT_HOVER_HIDE_MS);
-	}, [cancelLayoutDraftHide, closeVisualDraftEditor]);
-
-	/** Keep formula legend open while pointer is on the hit region or card. */
-	const markFormulaHoverEnter = useCallback(() => {
-		formulaHoverSurfaceRef.current = true;
-		cancelFormulaHide();
-	}, [cancelFormulaHide]);
-
-	/**
-	 * Leave formula hit / legend card → close after a short grace so the
-	 * pointer can cross the gap into the floating card.
-	 */
-	const scheduleFormulaHide = useCallback(() => {
-		if (!formulaAnnotationPreviewRef.current) return;
-		formulaHoverSurfaceRef.current = false;
-		cancelFormulaHide();
-		formulaHideTimerRef.current = setTimeout(() => {
-			formulaHideTimerRef.current = null;
-			if (formulaHoverSurfaceRef.current) return;
-			if (!formulaAnnotationPreviewRef.current) return;
-			closeFormulaAnnotationPreview();
-		}, LAYOUT_FORMULA_HOVER_HIDE_MS);
-	}, [cancelFormulaHide, closeFormulaAnnotationPreview]);
-
-	/** Drop in-flight hover dwell / crop so a late result does not open the editor. */
-	const invalidateLayoutHover = useCallback(() => {
-		layoutHoverSeqRef.current += 1;
-		cancelLayoutHover();
-	}, [cancelLayoutHover]);
-
-	/** Screen point near a layout bbox (right edge) for hover cards. */
-	const screenPointForRegion = useCallback(
-		(pageIndex0: number, region: PdfAskNormalizedRect) => {
-			const pageEl = pageElByIndex(hostRef.current, pageIndex0);
-			if (!pageEl) return { x: 120, y: 120 };
-			const box = pageEl.getBoundingClientRect();
-			return {
-				x: box.left + (region.x + region.w) * box.width + 8,
-				y: box.top + region.y * box.height,
-			};
-		},
-		[],
-	);
-
-	/** Open / switch the formula legend card for a layout region. */
-	const openFormulaLegend = useCallback(
-		(region: PdfLayoutRegion) => {
-			const symbols = equationSymbolsRef.current;
-			if (symbols.length === 0) return;
-			// Pointer is still on the formula hit when we open; keep surface live
-			// so unmount/remount of overlays does not immediately hide.
-			formulaHoverSurfaceRef.current = true;
-			cancelFormulaHide();
-			cancelFormulaHover();
-			setFocusedLayoutRegion(docId, region.id);
-			setFormulaAnnotationPreview({
-				screen: screenPointForRegion(region.pageIndex, region.bbox),
-				regionId: region.id,
-				page: region.pageIndex + 1,
-				region: region.bbox,
-				symbols,
-			});
-		},
-		[cancelFormulaHide, cancelFormulaHover, docId, screenPointForRegion],
-	);
-
-	/** Re-anchor the open formula legend after scroll / zoom. */
-	const rePlaceFormulaAnnotationOnScroll = useCallback(() => {
-		const prev = formulaAnnotationPreviewRef.current;
-		if (!prev) return;
-		const screen = screenPointForRegion(prev.page - 1, prev.region);
-		setFormulaAnnotationPreview((current) => {
-			if (!current || current.regionId !== prev.regionId) return current;
-			if (current.screen.x === screen.x && current.screen.y === screen.y) {
-				return current;
-			}
-			return { ...current, screen };
-		});
-	}, [screenPointForRegion]);
-
-	/**
-	 * Open the region-crop draft card. Sole entry point for `visualDraftEditor`,
-	 * so the「draft ⇄ formula legend are mutually exclusive」invariant lives with
-	 * both states instead of in every caller.
-	 */
-	const openVisualDraftEditor = useCallback(
-		(draft: VisualDraftEditorState) => {
-			// Visual draft and formula legend are mutually exclusive.
-			closeFormulaAnnotationPreview();
-			// Pointer is still over the region when hover-open completes; keep
-			// the surface active so unmounting hit targets does not auto-hide.
-			if (draft.ephemeral) {
-				layoutDraftHoverSurfaceRef.current = true;
-				cancelLayoutDraftHide();
-			}
-			setVisualDraftEditor(draft);
-			layoutHoverRegionIdRef.current = null;
-		},
-		[cancelLayoutDraftHide, closeFormulaAnnotationPreview],
-	);
-
-	/**
-	 * True while another interaction owns the page: region framing, an in-flight
-	 * crop, an open visual draft, or the selection menu. Layout hover must not
-	 * open on top of any of them.
-	 */
-	const layoutHoverBlocked = useCallback(
-		() =>
-			Boolean(
-				regionSelectingRef.current ||
-					visualCropPendingRef.current ||
-					visualDraftEditorRef.current ||
-					selectionMenuRef.current,
-			),
-		[selectionMenuRef],
-	);
-
-	/**
-	 * After dwelling on a layout region:
-	 * - formula + Annotation.md symbols → 「公式解析」glossary card (light UX)
-	 * - otherwise → same visual editor as manual region-select (crop only)
-	 */
-	const scheduleLayoutHoverOpen = useCallback(
-		(region: PdfLayoutRegion) => {
-			if (layoutHoverBlocked()) return;
-
-			const symbols = equationSymbolsRef.current;
-			const formulaLegend =
-				isFormulaLayoutKind(region.kind) && symbols.length > 0;
-
-			// ---- Formula legend path (tooltip-like; independent timers) ----
-			if (formulaLegend) {
-				// Already showing this formula: cancel pending hide, stay open.
-				if (formulaAnnotationPreviewRef.current?.regionId === region.id) {
-					markFormulaHoverEnter();
-					return;
-				}
-				// Switching formulas: open the new one after a short dwell (or
-				// immediately if a legend is already open — seamless switch).
-				if (
-					formulaHoverRegionIdRef.current === region.id &&
-					formulaHoverTimerRef.current
-				) {
-					return;
-				}
-				cancelFormulaHover();
-				// Leave visual-ask dwell alone when entering a formula hit.
-				cancelLayoutHover();
-				// Switching while another legend is open: no extra dwell.
-				if (formulaAnnotationPreviewRef.current) {
-					openFormulaLegend(region);
-					return;
-				}
-				formulaHoverRegionIdRef.current = region.id;
-				formulaHoverTimerRef.current = setTimeout(() => {
-					formulaHoverTimerRef.current = null;
-					if (formulaHoverRegionIdRef.current !== region.id) return;
-					if (layoutHoverBlocked()) return;
-					openFormulaLegend(region);
-				}, LAYOUT_FORMULA_HOVER_DWELL_MS);
-				return;
-			}
-
-			// ---- Visual-ask path (figures / tables / algorithms / bare formula) ----
-			// Don't stack a visual draft while a formula legend is open.
-			if (formulaAnnotationPreviewRef.current) return;
-
-			if (
-				layoutHoverRegionIdRef.current === region.id &&
-				layoutHoverTimerRef.current
-			) {
-				return;
-			}
-			cancelLayoutHover();
-			cancelFormulaHover();
-			layoutHoverRegionIdRef.current = region.id;
-			layoutHoverTimerRef.current = setTimeout(() => {
-				layoutHoverTimerRef.current = null;
-				if (layoutHoverRegionIdRef.current !== region.id) return;
-				if (layoutHoverBlocked() || formulaAnnotationPreviewRef.current) return;
-				setFocusedLayoutRegion(docId, region.id);
-				const seq = ++layoutHoverSeqRef.current;
-				beginVisualAnnotationRef.current(region.pageIndex + 1, region.bbox, {
-					seq,
-					ephemeral: true,
-				});
-			}, LAYOUT_HOVER_DWELL_MS);
-		},
-		[
-			cancelFormulaHover,
-			cancelLayoutHover,
-			docId,
-			layoutHoverBlocked,
-			markFormulaHoverEnter,
-			openFormulaLegend,
-		],
-	);
-
-	const handleLayoutHoverLeave = useCallback(
-		(regionId: string) => {
-			// Formula dwell / open legend for this region.
-			if (formulaHoverRegionIdRef.current === regionId) {
-				cancelFormulaHover(regionId);
-			}
-			if (formulaAnnotationPreviewRef.current?.regionId === regionId) {
-				scheduleFormulaHide();
-			}
-
-			if (layoutHoverRegionIdRef.current === regionId) {
-				// Timer still running → just cancel. Timer already fired / crop
-				// in flight → invalidate so a late crop does not open the editor.
-				if (
-					layoutHoverTimerRef.current == null ||
-					visualCropPendingRef.current
-				) {
-					layoutHoverSeqRef.current += 1;
-				}
-			}
-			cancelLayoutHover(regionId);
-		},
-		[cancelFormulaHover, cancelLayoutHover, scheduleFormulaHide],
-	);
-
-	useEffect(() => {
-		// Drop in-flight hover when switching PDF documents or unmounting.
-		if (!docId) {
-			invalidateLayoutHover();
-			cancelLayoutDraftHide();
-			closeFormulaAnnotationPreview();
-			return;
-		}
-		invalidateLayoutHover();
-		cancelLayoutDraftHide();
-		closeFormulaAnnotationPreview();
-		return () => {
-			invalidateLayoutHover();
-			cancelLayoutDraftHide();
-			closeFormulaAnnotationPreview();
-		};
-	}, [
-		docId,
-		invalidateLayoutHover,
-		cancelLayoutDraftHide,
-		closeFormulaAnnotationPreview,
-	]);
-
-	// Escape closes the formula legend (same expectation as other floaters).
-	useEffect(() => {
-		if (!formulaAnnotationPreview) return;
-		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key !== "Escape") return;
-			e.preventDefault();
-			closeFormulaAnnotationPreview();
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [formulaAnnotationPreview, closeFormulaAnnotationPreview]);
-
-	// Keep formula legend glued to its bbox across zoom (scroll uses ActiveCardScrollSync).
-	// biome-ignore lint/correctness/useExhaustiveDependencies: zoomLevel re-places intentionally
-	useEffect(() => {
-		if (!formulaAnnotationPreview) return;
-		rePlaceFormulaAnnotationOnScroll();
-	}, [
-		formulaAnnotationPreview?.regionId,
-		zoomLevel,
-		rePlaceFormulaAnnotationOnScroll,
-	]);
-
-	const stopLayoutTranslate = useCallback(() => {
-		layoutTranslateAbortRef.current?.abort();
-		layoutTranslateAbortRef.current = null;
-		setLayoutTranslateJob((prev) =>
-			prev.status === "running" ? { ...prev, status: "cancelled" } : prev,
-		);
-	}, []);
-
-	const clearLayoutTranslate = useCallback(() => {
-		layoutTranslateAbortRef.current?.abort();
-		layoutTranslateAbortRef.current = null;
-		setLayoutTranslateJob({ status: "idle", items: [] });
-	}, []);
-
-	const startLayoutTranslate = useCallback(() => {
-		const raw = layoutRawRegions;
-		if (!raw?.length) {
-			notifyError(t("pdf.layoutTranslate.needLayout"));
-			return;
-		}
-		const regions = listTranslatableLayoutRegions(raw);
-		if (regions.length === 0) {
-			notifyError(t("pdf.layoutTranslate.noText"));
-			return;
-		}
-		layoutTranslateAbortRef.current?.abort();
-		const ac = new AbortController();
-		layoutTranslateAbortRef.current = ac;
-		const items = toLayoutTranslateItems(regions);
-		setLayoutTranslateJob({ status: "running", items });
-		void runLayoutRegionTranslate({
-			items,
-			signal: ac.signal,
-			onUpdate: (next) => {
-				if (ac.signal.aborted) return;
-				setLayoutTranslateJob((prev) => ({
-					status: prev.status === "cancelled" ? "cancelled" : "running",
-					items: next,
-				}));
-			},
-		})
-			.then((finalItems) => {
-				if (ac.signal.aborted) {
-					setLayoutTranslateJob({ status: "cancelled", items: finalItems });
-					return;
-				}
-				setLayoutTranslateJob({ status: "done", items: finalItems });
-			})
-			.catch((e) => {
-				if (ac.signal.aborted) return;
-				const message = e instanceof Error ? e.message : String(e);
-				notifyError(t("pdf.layoutTranslate.failed"), { description: message });
-				setLayoutTranslateJob((prev) => ({
-					status: "done",
-					items: prev.items,
-				}));
-			})
-			.finally(() => {
-				if (layoutTranslateAbortRef.current === ac) {
-					layoutTranslateAbortRef.current = null;
-				}
-			});
-	}, [layoutRawRegions, t]);
-
-	const toggleLayoutTranslate = useCallback(() => {
-		if (layoutTranslateJob.status === "running") {
-			stopLayoutTranslate();
-			return;
-		}
-		if (
-			layoutTranslateJob.status === "done" ||
-			layoutTranslateJob.status === "cancelled"
-		) {
-			// Second click clears overlays; third starts again from the button.
-			if (layoutTranslateJob.items.some((it) => it.translated)) {
-				clearLayoutTranslate();
-				return;
-			}
-		}
-		startLayoutTranslate();
-	}, [
-		layoutTranslateJob,
-		startLayoutTranslate,
-		stopLayoutTranslate,
-		clearLayoutTranslate,
-	]);
-
-	// Abort bulk translate when switching documents.
-	useEffect(() => {
-		if (!docId) return;
-		layoutTranslateAbortRef.current?.abort();
-		layoutTranslateAbortRef.current = null;
-		setLayoutTranslateJob({ status: "idle", items: [] });
-		return () => {
-			layoutTranslateAbortRef.current?.abort();
-		};
-	}, [docId]);
 
 	// ---- Region-crop visual marks (⌘. framing / layout hover) ----
 
@@ -1676,289 +1088,11 @@ function PdfViewerInner({
 		setEditor(null);
 	}, [editor, deleteHighlightAnnotation]);
 
-	/**
-	 * Run layout analysis for this document.
-	 * - force: re-run PP-DocLayoutV3 (PDF→JSON) even when source/layout.json exists
-	 * - without force: prefer layout.json → merge → sidebar when paper has a sidecar
-	 * - openFigures / showOverlay: UI side-effects for the manual Figures button
-	 * - asBackgroundTask: surface progress in the IDE background-tasks panel
-	 */
-	const startLayoutAnalysis = useCallback(
-		(opts?: {
-			force?: boolean;
-			openFigures?: boolean;
-			showOverlay?: boolean;
-			asBackgroundTask?: boolean;
-			/** When false, skip notifyError (auto-run uses the tasks panel). */
-			notifyOnError?: boolean;
-		}) => {
-			const la = layoutCapRef.current?.forDocument(docId);
-			if (!la) {
-				if (opts?.notifyOnError !== false) {
-					notifyError(t("pdf.layout.unavailable"));
-				}
-				return;
-			}
-			layoutTaskRef.current?.abort({
-				type: "no-document",
-				message: "superseded",
-			});
-			const pages = totalPagesRef.current;
-			const paperLabel =
-				paperRelPath || paperAbsPath?.split(/[/\\]/).pop() || docId;
-
-			const runCore = (hooks?: { signal?: AbortSignal }) =>
-				new Promise<void>((resolve, reject) => {
-					let settled = false;
-					const finish = (fn: () => void) => {
-						if (settled) return;
-						settled = true;
-						hooks?.signal?.removeEventListener("abort", onAbort);
-						fn();
-					};
-					const onAbort = () => {
-						layoutTaskRef.current?.abort({
-							type: "no-document",
-							message: "cancelled",
-						});
-						layoutTaskRef.current = null;
-						finish(() => reject(new BackgroundTaskCancelledError()));
-					};
-					if (hooks?.signal?.aborted) {
-						onAbort();
-						return;
-					}
-					hooks?.signal?.addEventListener("abort", onAbort);
-
-					void runDocumentLayoutAnalysis(la, docId, {
-						paperAbsPath,
-						totalPages: pages > 0 ? pages : null,
-						force: opts?.force === true,
-						onDone: () => {
-							layoutTaskRef.current = null;
-							if (opts?.showOverlay) {
-								setLayoutOverlayVisible(docId, true);
-							}
-							if (opts?.openFigures) {
-								void import("@/lib/shell/ui-store").then(({ openRightTab }) =>
-									openRightTab("figures"),
-								);
-							}
-							finish(() => resolve());
-						},
-						onError: (message, aborted) => {
-							layoutTaskRef.current = null;
-							finish(() => {
-								if (aborted) {
-									reject(new BackgroundTaskCancelledError());
-									return;
-								}
-								reject(new Error(message));
-							});
-						},
-					})
-						.then((task) => {
-							layoutTaskRef.current = task;
-							// Cache hit resolves via onDone before returning null.
-							if (task == null && !settled) {
-								// onDone should have run; if not, resolve to avoid hang.
-								finish(() => resolve());
-							}
-						})
-						.catch((e) => {
-							layoutTaskRef.current = null;
-							finish(() =>
-								reject(e instanceof Error ? e : new Error(String(e))),
-							);
-						});
-				});
-
-			if (opts?.asBackgroundTask) {
-				void enqueueBackgroundTask(
-					{
-						kind: "parse",
-						title: i18n.t("app:tasks.layoutAnalysis"),
-						detail: paperLabel,
-					},
-					async ({ setProgress, setDetail, signal }) => {
-						/**
-						 * Mirror layoutAnalysisStore.ui — same overall % and copy as the
-						 * Figures sidebar (message + page/total or pct), not per-page stages.
-						 */
-						const syncFromLayoutUi = () => {
-							const { ui, activeDocumentId } = layoutAnalysisStore.getState();
-							if (activeDocumentId != null && activeDocumentId !== docId) {
-								return;
-							}
-							if (ui.stage !== "running") return;
-
-							if (typeof ui.progress === "number") {
-								setProgress(ui.progress);
-							}
-
-							const page =
-								typeof ui.page === "number" && ui.page > 0
-									? ui.page
-									: typeof ui.completed === "number"
-										? ui.completed
-										: null;
-							const total =
-								typeof ui.total === "number" && ui.total > 0 ? ui.total : null;
-							const message = ui.message?.trim() || t("figures.analyzing");
-							const pageLine =
-								total != null && page != null
-									? t("figures.progressPages", { page, total })
-									: typeof ui.progress === "number"
-										? t("figures.progressPct", {
-												pct: Math.round(ui.progress),
-											})
-										: null;
-							setDetail(pageLine ? `${message} · ${pageLine}` : message);
-						};
-
-						setProgress(0);
-						setDetail(t("pdf.layout.preparingModel"));
-						const unsub = layoutAnalysisStore.subscribe(syncFromLayoutUi);
-						syncFromLayoutUi();
-						try {
-							await runCore({ signal });
-						} finally {
-							unsub();
-						}
-					},
-				).catch((e) => {
-					if (isBackgroundTaskCancelledError(e)) return;
-					if (opts?.notifyOnError !== false) {
-						const message = e instanceof Error ? e.message : String(e);
-						notifyError(t("pdf.layout.failed"), { description: message });
-					}
-				});
-				return;
-			}
-
-			void runCore().catch((e) => {
-				if (isBackgroundTaskCancelledError(e)) return;
-				if (opts?.notifyOnError === false) return;
-				const message = e instanceof Error ? e.message : String(e);
-				notifyError(t("pdf.layout.failed"), { description: message });
-			});
-		},
-		[docId, paperAbsPath, paperRelPath, t],
-	);
-
-	// Any open paper (active or not) → headless queue so multi-tab can all
-	// land in the background-tasks panel. ONNX still serial (concurrency:1).
-	useEffect(() => {
-		if (!paperAbsPath) return;
-		enqueuePaperLayoutAnalysis({ paperAbsPath });
-	}, [paperAbsPath]);
-
-	// Active viewer: pull layout into the tab store once sidecar exists.
-	// Headless may still be writing it for this paper (or a sibling tab);
-	// poll until ready. Loose PDFs (no paper folder) still analyze in-viewer.
-	const layoutAutoStartedForDocRef = useRef<string | null>(null);
-	useEffect(() => {
-		if (!isActive) return;
-		if (!layoutCap || totalPages <= 0) return;
-		if (getLayoutDocumentResult(docId)) return;
-		if (!layoutCap.forDocument(docId)) return;
-
-		let cancelled = false;
-		let pollTimer: ReturnType<typeof setTimeout> | null = null;
-		/** Stop polling after ~15 min so a permanent headless failure does not spin. */
-		const pollDeadline = Date.now() + 15 * 60 * 1000;
-
-		const clearPoll = () => {
-			if (pollTimer != null) {
-				clearTimeout(pollTimer);
-				pollTimer = null;
-			}
-		};
-
-		const loadSilent = () => {
-			if (layoutAutoStartedForDocRef.current === docId) return;
-			layoutAutoStartedForDocRef.current = docId;
-			startLayoutAnalysis({
-				force: false,
-				openFigures: false,
-				showOverlay: false,
-				asBackgroundTask: false,
-				notifyOnError: false,
-			});
-		};
-
-		const tryLoad = async () => {
-			if (cancelled) return;
-			if (getLayoutDocumentResult(docId)) return;
-
-			try {
-				if (paperAbsPath) {
-					const hasSidecar = Boolean(await readLayoutSidecar(paperAbsPath));
-					if (cancelled) return;
-					if (getLayoutDocumentResult(docId)) return;
-					if (hasSidecar) {
-						loadSilent();
-						return;
-					}
-					// Sidecar not ready yet — headless job may be queued/running.
-					if (Date.now() < pollDeadline) {
-						pollTimer = setTimeout(() => {
-							void tryLoad();
-						}, 1500);
-					} else if (layoutAutoStartedForDocRef.current === docId) {
-						layoutAutoStartedForDocRef.current = null;
-					}
-					return;
-				}
-
-				// No paper folder (loose PDF): only the active tab can run in-viewer.
-				if (layoutAutoStartedForDocRef.current === docId) return;
-				layoutAutoStartedForDocRef.current = docId;
-				startLayoutAnalysis({
-					force: false,
-					openFigures: false,
-					showOverlay: false,
-					asBackgroundTask: true,
-					notifyOnError: false,
-				});
-			} catch {
-				if (layoutAutoStartedForDocRef.current === docId) {
-					layoutAutoStartedForDocRef.current = null;
-				}
-				if (!cancelled && paperAbsPath && Date.now() < pollDeadline) {
-					pollTimer = setTimeout(() => {
-						void tryLoad();
-					}, 2500);
-				}
-			}
-		};
-
-		void tryLoad();
-
-		return () => {
-			cancelled = true;
-			clearPoll();
-			// Strict-mode remount / leave tab before result: allow retry on re-activate.
-			if (!getLayoutDocumentResult(docId)) {
-				layoutAutoStartedForDocRef.current = null;
-			}
-		};
-	}, [
-		isActive,
-		layoutCap,
-		docId,
-		totalPages,
-		paperAbsPath,
-		startLayoutAnalysis,
-	]);
-
 	// Register the imperative handle for the annotations panel.
 	// Parent often passes an inline onHandle; keep it in a ref. Read scroll via
 	// scrollRef so EmbedPDF's fresh scope object does not re-register every paint.
 	const onHandleRef = useRef(onHandle);
 	onHandleRef.current = onHandle;
-	const startLayoutAnalysisRef = useRef(startLayoutAnalysis);
-	startLayoutAnalysisRef.current = startLayoutAnalysis;
 	// biome-ignore lint/correctness/useExhaustiveDependencies: highlightsRef is an injected mirror ref — depending on it would re-register the handle on every highlight change.
 	useEffect(() => {
 		const register = onHandleRef.current;
@@ -2225,16 +1359,6 @@ function PdfViewerInner({
 		),
 		[docId, pdfDark, pageMarks, pageLayout, pageMode, pageHandlers],
 	);
-
-	const layoutTranslateRunning = layoutTranslateJob.status === "running";
-	const layoutTranslateActive =
-		layoutTranslateRunning ||
-		layoutTranslateJob.items.some((it) => it.translated);
-	const layoutTranslateLabel = layoutTranslateRunning
-		? t("pdf.layoutTranslate.stop")
-		: layoutTranslateActive
-			? t("pdf.layoutTranslate.clear")
-			: t("pdf.layoutTranslate.start");
 
 	return (
 		<div ref={hostRef} className="relative flex h-full min-h-0 w-full flex-col">
