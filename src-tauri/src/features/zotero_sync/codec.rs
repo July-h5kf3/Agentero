@@ -166,14 +166,87 @@ pub fn markdown_to_html(md: &str) -> String {
 /// blockquote and horizontal rules; YAML frontmatter, callout markers,
 /// wikilinks and htmd's zero-width spaces would stay literal.
 pub fn markdown_to_zotero_html(md: &str) -> String {
+    markdown_to_html(&clean_note_markdown(md))
+}
+
+/// Full cleaning pipeline without block dedup (see [`clean_note_markdown_dedup`]).
+pub fn clean_note_markdown(md: &str) -> String {
+    clean_note_markdown_dedup(md, &[])
+}
+
+/// Clean vault Markdown for a Zotero note and drop blocks whose text already
+/// exists among the parent item's own (non-Agentero) notes: pull copied those
+/// notes into NOTES.md, so pushing them back would show the same text twice
+/// (once as the original note, once inside the sync note).
+pub fn clean_note_markdown_dedup(md: &str, existing_note_texts: &[String]) -> String {
     let body = strip_frontmatter(md);
     let body = strip_shell(&body);
-    let body = strip_hr_separators(&body);
-    let body = strip_invisible(&body);
-    let body = convert_callouts(&body);
-    let body = convert_wikilinks(&body);
-    let body = body.trim().to_string();
-    markdown_to_html(&body)
+    let existing: Vec<String> = existing_note_texts
+        .iter()
+        .map(|t| normalize_for_compare(t))
+        .filter(|t| !t.is_empty())
+        .collect();
+    let mut kept: Vec<String> = Vec::new();
+    for seg in split_hr_segments(&body) {
+        // Compare on the raw segment (invisibles become spaces there); only
+        // afterwards strip them for the output.
+        let norm = normalize_for_compare(&seg);
+        let seg = strip_invisible(&seg);
+        let seg = convert_callouts(&seg);
+        let seg = convert_wikilinks(&seg);
+        let seg = seg.trim().to_string();
+        if seg.is_empty() {
+            continue;
+        }
+        if !norm.trim().is_empty() && existing.contains(&norm) {
+            continue;
+        }
+        kept.push(seg);
+    }
+    kept.join("\n\n")
+}
+
+/// Whitespace-collapsed, invisible-char-free text for content comparison
+/// (invisible chars become spaces so word boundaries survive).
+pub fn normalize_for_compare(s: &str) -> String {
+    let cleaned: String = s
+        .chars()
+        .map(|c| match c {
+            '\u{200b}' | '\u{feff}' | '\u{200c}' | '\u{200d}' | '\u{2060}' => ' ',
+            _ => c,
+        })
+        .collect();
+    cleaned.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Split into segments at standalone horizontal-rule lines (fence-aware).
+fn split_hr_segments(md: &str) -> Vec<String> {
+    let mut segments: Vec<String> = vec![String::new()];
+    let mut in_fence = false;
+    for line in md.split_inclusive('\n') {
+        let trimmed = line.trim();
+        let is_fence = trimmed.starts_with("```") || trimmed.starts_with("~~~");
+        if is_fence {
+            in_fence = !in_fence;
+        }
+        if !in_fence && !is_fence && is_hr_line(trimmed) {
+            segments.push(String::new());
+        } else if let Some(last) = segments.last_mut() {
+            last.push_str(line);
+        }
+    }
+    segments
+}
+
+/// True for standalone horizontal-rule lines (`---`, `***`, `___`, 3+ chars).
+/// Pulled Zotero notes render `<hr>` as `***` via htmd; pushing it back would
+/// put an `<hr />` at the top of the note and Zotero would derive an empty
+/// note title from it.
+fn is_hr_line(trimmed: &str) -> bool {
+    let Some(first) = trimmed.chars().next() else {
+        return false;
+    };
+    matches!(first, '-' | '*' | '_') && trimmed.len() >= 3 && trimmed.chars().all(|c| c == first)
 }
 
 /// Drop the paper shell — the title heading + abstract blockquote that Zotero
@@ -219,26 +292,6 @@ fn strip_shell(md: &str) -> String {
         return md[consumed..].trim_start_matches(['\r', '\n']).to_string();
     }
     md.to_string()
-}
-
-/// Remove standalone `---` horizontal-rule lines (Agentero's internal note
-/// separators) so they do not become `<hr />` clutter in the Zotero note.
-/// Lines inside code fences are preserved.
-fn strip_hr_separators(md: &str) -> String {
-    let mut out = String::with_capacity(md.len());
-    let mut in_fence = false;
-    for line in md.split_inclusive('\n') {
-        let trimmed = line.trim();
-        let is_fence = trimmed.starts_with("```") || trimmed.starts_with("~~~");
-        if !in_fence && !is_fence && trimmed == "---" {
-            continue;
-        }
-        if is_fence {
-            in_fence = !in_fence;
-        }
-        out.push_str(line);
-    }
-    out
 }
 
 /// Strip invisible characters htmd and friends leave behind (zero-width space,
@@ -635,5 +688,32 @@ mod tests {
         assert!(html.contains("figure-2.png"), "got: {html}");
         assert!(!html.contains("!figure"), "got: {html}");
         assert!(!html.contains("[["), "got: {html}");
+    }
+
+    #[test]
+    fn cleans_star_and_underscore_rules() {
+        // Pulled notes leave `***` (htmd's <hr>); a leading <hr /> would give
+        // the Zotero note an empty derived title.
+        let html =
+            markdown_to_zotero_html("# T\n\n> a\n\n---\n\nfirst\n\n***\n\nsecond\n\n___\n\nthird");
+        assert!(!html.contains("<hr"), "got: {html}");
+        assert!(html.contains("first"), "got: {html}");
+        assert!(html.contains("second"), "got: {html}");
+        assert!(html.contains("third"), "got: {html}");
+    }
+
+    #[test]
+    fn dedup_drops_blocks_matching_existing_notes() {
+        let md = "# T\n\n> a\n\n---\n\nComment: already in zotero\n\n---\n\nfresh thought";
+        let cleaned = clean_note_markdown_dedup(md, &["Comment: already in zotero".into()]);
+        assert!(!cleaned.contains("already in zotero"), "got: {cleaned}");
+        assert!(cleaned.contains("fresh thought"), "got: {cleaned}");
+    }
+
+    #[test]
+    fn dedup_normalizes_whitespace_and_invisibles() {
+        let cleaned =
+            clean_note_markdown_dedup("note   with\u{200b}spaces", &["note with spaces".into()]);
+        assert!(cleaned.trim().is_empty(), "got: {cleaned}");
     }
 }

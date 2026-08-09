@@ -82,13 +82,26 @@ pub fn push_notes(
         if notes_md.trim().is_empty() {
             continue;
         }
-        // Shell-only notes (title + abstract, no reading notes yet) clean down
-        // to nothing — never create an empty Zotero note for them.
-        let inner = codec::markdown_to_zotero_html(&notes_md);
-        if inner.trim().is_empty() {
+        // Clean + drop blocks that already exist as the parent's own Zotero
+        // notes (pull copied them into NOTES.md; mirroring them back would
+        // show the same text twice).
+        let existing = match existing_note_texts(&tx, cand.zotero_item_id) {
+            Ok(v) => v,
+            Err(e) => {
+                failures.push(format!("{}: {e}", cand.path));
+                continue;
+            }
+        };
+        let cleaned = codec::clean_note_markdown_dedup(&notes_md, &existing);
+        if cleaned.trim().is_empty() {
+            // Nothing left to mirror (shell-only note, or every block already
+            // lives in its own Zotero note): reclaim a stale marked note.
+            if let Err(e) = trash_marked_note(&tx, cand.zotero_item_id, &cand.paper_id) {
+                failures.push(format!("{}: {e}", cand.path));
+            }
             continue;
         }
-        let html = codec::wrap_sync_html(&cand.paper_id, &inner);
+        let html = codec::wrap_sync_html(&cand.paper_id, &codec::markdown_to_html(&cleaned));
         match upsert_marked_note(&tx, cand.zotero_item_id, &cand.paper_id, &html) {
             Ok(()) => pushed += 1,
             Err(e) => failures.push(format!("{}: {e}", cand.path)),
@@ -235,6 +248,48 @@ fn like_escape(s: &str) -> String {
         out.push(c);
     }
     out
+}
+
+/// Normalized plain-text of this parent's non-Agentero child notes. Blocks
+/// matching one of these are skipped by the push (they already show as their
+/// own note under the item).
+fn existing_note_texts(tx: &Connection, parent_item_id: i64) -> Result<Vec<String>, AppError> {
+    let mut stmt = tx
+        .prepare(
+            "SELECT n.note FROM itemNotes n
+             WHERE n.parentItemID = ?1
+               AND n.itemID NOT IN (SELECT itemID FROM deletedItems)
+               AND n.note NOT LIKE '%agentero:sync paper=%'",
+        )
+        .map_err(|e| AppError::message(format!("prepare sibling-note lookup: {e}")))?;
+    let notes: Vec<String> = stmt
+        .query_map(params![parent_item_id], |r| r.get::<_, String>(0))
+        .map_err(|e| AppError::message(format!("lookup sibling notes: {e}")))?
+        .collect::<Result<_, _>>()
+        .map_err(|e| AppError::message(format!("read sibling notes: {e}")))?;
+    Ok(notes
+        .iter()
+        .map(|html| codec::normalize_for_compare(&codec::html_to_markdown(html)))
+        .collect())
+}
+
+/// Move this parent's Agentero-marked note (if any) into Zotero's trash —
+/// used when the vault no longer has anything worth mirroring. Recoverable.
+fn trash_marked_note(tx: &Connection, parent_item_id: i64, paper_id: &str) -> Result<(), AppError> {
+    let marker_like = format!(
+        "%{}%",
+        like_escape(&format!("agentero:sync paper={paper_id}"))
+    );
+    tx.execute(
+        "INSERT OR IGNORE INTO deletedItems (itemID)
+         SELECT n.itemID FROM itemNotes n
+         WHERE n.parentItemID = ?1
+           AND n.itemID NOT IN (SELECT itemID FROM deletedItems)
+           AND n.note LIKE ?2 ESCAPE '\\'",
+        params![parent_item_id, marker_like],
+    )
+    .map_err(|e| AppError::message(format!("trash stale marked note: {e}")))?;
+    Ok(())
 }
 
 /// Copy `zotero.sqlite` (+wal/shm) into `<zotero_dir>/agentero-backups/`,
@@ -408,6 +463,124 @@ mod tests {
             .unwrap();
         assert_eq!(total, 2, "marked note replaced, user note untouched");
 
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// Minimal Zotero-shaped schema for the push tests.
+    fn setup_db(zdir: &std::path::Path) {
+        let conn = Connection::open(zdir.join("zotero.sqlite")).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);
+             CREATE TABLE items (itemID INTEGER PRIMARY KEY, itemTypeID INT NOT NULL,
+                 libraryID INT NOT NULL, key TEXT NOT NULL,
+                 dateAdded TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                 dateModified TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                 clientDateModified TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
+             CREATE TABLE itemNotes (itemID INTEGER, parentItemID INT, note TEXT, title TEXT);
+             CREATE TABLE deletedItems (itemID INTEGER);
+             INSERT INTO itemTypes VALUES (14,'journalArticle'),(28,'note');
+             INSERT INTO items (itemID, itemTypeID, libraryID, key) VALUES (4, 14, 1, 'abcd2345')",
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn push_skips_blocks_already_in_zotero_notes() {
+        let base = std::env::temp_dir().join(format!(
+            "motif-zdedup-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let zdir = base.join("zotero");
+        fs::create_dir_all(&zdir).unwrap();
+        setup_db(&zdir);
+        // The parent already has its own (unmarked) note with this text.
+        {
+            let conn = Connection::open(zdir.join("zotero.sqlite")).unwrap();
+            conn.execute(
+                "INSERT INTO items (itemID, itemTypeID, libraryID, key) VALUES (9, 28, 1, 'user1234')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO itemNotes VALUES (9, 4, '<div class=\"zotero-note znv1\">Comment: already in zotero</div>', NULL)",
+                [],
+            )
+            .unwrap();
+        }
+        let vault = base.join("vault");
+        fs::create_dir_all(vault.join("papers/x")).unwrap();
+        fs::write(
+            vault.join("papers/x/NOTES.md"),
+            "# T\n\n> a\n\n---\n\nComment: already in zotero\n\n---\n\nfresh thought",
+        )
+        .unwrap();
+        let cand = PushCandidate {
+            zotero_item_id: 4,
+            paper_id: "x".into(),
+            path: "papers/x".into(),
+        };
+        push_notes(&vault, &zdir, std::slice::from_ref(&cand), |_, _| {}).unwrap();
+        let conn = Connection::open(zdir.join("zotero.sqlite")).unwrap();
+        let note: String = conn
+            .query_row(
+                "SELECT note FROM itemNotes WHERE itemID != 9 LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        // The duplicated block is not mirrored; the fresh one is.
+        assert!(!note.contains("already in zotero"), "got: {note}");
+        assert!(note.contains("fresh thought"), "got: {note}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn push_trashes_stale_marked_note_when_nothing_to_mirror() {
+        let base = std::env::temp_dir().join(format!(
+            "motif-zstale-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let zdir = base.join("zotero");
+        fs::create_dir_all(&zdir).unwrap();
+        setup_db(&zdir);
+        // An existing marked note whose vault content is gone (shell-only).
+        {
+            let conn = Connection::open(zdir.join("zotero.sqlite")).unwrap();
+            conn.execute(
+                "INSERT INTO items (itemID, itemTypeID, libraryID, key) VALUES (7, 28, 1, 'mark1234')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO itemNotes VALUES (7, 4, '<!-- agentero:sync paper=x -->stale<!-- /agentero:sync -->', NULL)",
+                [],
+            )
+            .unwrap();
+        }
+        let vault = base.join("vault");
+        fs::create_dir_all(vault.join("papers/x")).unwrap();
+        fs::write(
+            vault.join("papers/x/NOTES.md"),
+            "# Only shell\n\n> abstract and nothing else",
+        )
+        .unwrap();
+        let cand = PushCandidate {
+            zotero_item_id: 4,
+            paper_id: "x".into(),
+            path: "papers/x".into(),
+        };
+        push_notes(&vault, &zdir, std::slice::from_ref(&cand), |_, _| {}).unwrap();
+        let conn = Connection::open(zdir.join("zotero.sqlite")).unwrap();
+        let trashed: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM deletedItems WHERE itemID = 7",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(trashed, 1, "stale marked note reclaimed to trash");
         let _ = fs::remove_dir_all(&base);
     }
 }
