@@ -198,9 +198,14 @@ export function ReferencesPanel({
 
 	const citations = sidecar?.citations ?? [];
 	const needle = filter.trim().toLowerCase();
+	// Ordinal comes from the unfiltered list, so carry it through the filter.
+	const rows = citations.map((citation, index) => ({
+		citation,
+		ordinal: index + 1,
+	}));
 	const visible = needle
-		? citations.filter((c) => citationMatchesFilter(c, needle))
-		: citations;
+		? rows.filter((row) => citationMatchesFilter(row.citation, needle))
+		: rows;
 
 	return (
 		<section
@@ -280,11 +285,11 @@ export function ReferencesPanel({
 							</p>
 						) : (
 							<ul className="space-y-1">
-								{visible.map((citation) => (
+								{visible.map(({ citation, ordinal }) => (
 									<li key={citation.id}>
 										<CitationCard
 											citation={citation}
-											ordinal={citations.indexOf(citation) + 1}
+											ordinal={ordinal}
 											importing={importingId === citation.id}
 											folders={folders}
 											lastImportParentDir={lastImportParentDir}
