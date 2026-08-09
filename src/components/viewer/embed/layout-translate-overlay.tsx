@@ -4,6 +4,7 @@
  * body size, then re-fits so the translation fills the block without huge gaps.
  */
 
+import { memo } from "react";
 import { cn } from "@/lib/core/utils";
 import { isLayoutTranslateHeadingKind } from "@/lib/pdf/layout/labels";
 import type { LayoutTranslateItem } from "@/lib/pdf/layout/layout-translate";
@@ -134,7 +135,7 @@ export function fontSizeForLayoutTranslateBox(
 /**
  * Paint translated (or in-flight) blocks for one PDF page.
  */
-export function LayoutTranslateOverlay({
+export const LayoutTranslateOverlay = memo(function LayoutTranslateOverlay({
 	items,
 	pageIndex,
 	pageWidthPx,
@@ -206,4 +207,4 @@ export function LayoutTranslateOverlay({
 			})}
 		</>
 	);
-}
+});

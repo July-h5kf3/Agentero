@@ -19,7 +19,7 @@ import {
 	PdfZoomMode,
 } from "@embedpdf/models";
 import { useDocumentManagerCapability } from "@embedpdf/plugin-document-manager/react";
-import { useCallback, useRef } from "react";
+import { memo, useCallback, useRef } from "react";
 import { usePdfEngineContext } from "@/components/viewer/embed/engine-provider";
 
 export function isLinkObject(
@@ -98,8 +98,10 @@ export function useLinkTextResolver(
 /**
  * Transparent hit targets over each link rect. Positioned in page-percentage
  * units so they track zoom for free.
+ *
+ * Memoized: every mounted page re-renders whenever the scroller layout changes.
  */
-export function CitationLinkLayer({
+export const CitationLinkLayer = memo(function CitationLinkLayer({
 	links,
 	pageWidthPt,
 	pageHeightPt,
@@ -142,7 +144,7 @@ export function CitationLinkLayer({
 			))}
 		</>
 	);
-}
+});
 
 /** Extract the destination page + vertical position from a link target, if any. */
 function getLinkDestination(

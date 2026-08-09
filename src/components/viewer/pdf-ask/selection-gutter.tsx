@@ -4,6 +4,7 @@ import {
 	MessageSquareText,
 	ScanSearch,
 } from "lucide-react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/core/utils";
 import type { SelectionPin } from "@/lib/pdf/selection";
@@ -100,7 +101,7 @@ function pinIcon(kind: SelectionPin["kind"]) {
  * translucent at rest so body text stays readable; hover / focus / active
  * restore full opacity.
  */
-export function SelectionGutter({
+export const SelectionGutter = memo(function SelectionGutter({
 	items,
 	activeId,
 	onOpen,
@@ -190,4 +191,4 @@ export function SelectionGutter({
 			})}
 		</div>
 	);
-}
+});

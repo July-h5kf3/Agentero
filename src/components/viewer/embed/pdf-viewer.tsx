@@ -91,6 +91,7 @@ import {
 	X,
 } from "lucide-react";
 import {
+	type CSSProperties,
 	type HTMLAttributes,
 	type ReactNode,
 	type RefObject,
@@ -655,6 +656,12 @@ const EMPTY_LAYOUT_REGIONS_BY_PAGE: ReadonlyMap<number, PdfLayoutRegion[]> =
 
 /** Stable identity for pages without gutter pins. */
 const EMPTY_PINS: SelectionPin[] = [];
+
+/** Pages with no link annotations reuse one array so the layer memo holds. */
+const EMPTY_CITATION_LINKS: PdfLinkAnnoObject[] = [];
+
+/** Every page stacks these layers; a fresh literal per render defeats memo. */
+const PAGE_LAYER_STYLE: CSSProperties = { position: "absolute", inset: 0 };
 
 /**
  * Native viewport scroll → re-place floating selection cards.
@@ -4410,19 +4417,19 @@ function PdfViewerInner({
 						scale={Math.min(zoomRef.current, PDF_BASE_LAYER_SCALE_CAP)}
 						dpr={pdfRasterDpr()}
 						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
-						style={{ position: "absolute", inset: 0 }}
+						style={PAGE_LAYER_STYLE}
 					/>
 					<TilingLayer
 						documentId={docId}
 						pageIndex={pageIndex}
 						dpr={pdfRasterDpr()}
 						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
-						style={{ position: "absolute", inset: 0 }}
+						style={PAGE_LAYER_STYLE}
 					/>
 					<SearchLayer
 						documentId={docId}
 						pageIndex={pageIndex}
-						style={{ position: "absolute", inset: 0 }}
+						style={PAGE_LAYER_STYLE}
 					/>
 					{/*
 					 * EmbedPDF raw bbox layer — kept mounted for plugin state, but
@@ -4431,12 +4438,12 @@ function PdfViewerInner({
 					<LayoutAnalysisLayer
 						documentId={docId}
 						pageIndex={pageIndex}
-						style={{ position: "absolute", inset: 0 }}
+						style={PAGE_LAYER_STYLE}
 					/>
 					<PagePointerProvider
 						documentId={docId}
 						pageIndex={pageIndex}
-						style={{ position: "absolute", inset: 0 }}
+						style={PAGE_LAYER_STYLE}
 					>
 						{/* Unmount text selection while framing a visual region. */}
 						{regionSelecting ? null : (
@@ -4444,7 +4451,7 @@ function PdfViewerInner({
 						)}
 						<AnnotationLayer documentId={docId} pageIndex={pageIndex} />
 						<CitationLinkLayer
-							links={citationLinks.get(pageIndex) ?? []}
+							links={citationLinks.get(pageIndex) ?? EMPTY_CITATION_LINKS}
 							pageWidthPt={width / zoomRef.current}
 							pageHeightPt={height / zoomRef.current}
 							label={t("pdf.linkAria")}
