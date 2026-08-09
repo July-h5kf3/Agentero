@@ -3,7 +3,7 @@
 import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
 import { TocPlugin } from "@platejs/toc/react";
-import { KEYS, RangeApi } from "platejs";
+import { RangeApi } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import {
 	type FormEvent,
@@ -18,6 +18,7 @@ import {
 import { MarkdownDocProvider } from "@/components/editor/context/markdown-doc-context";
 import { Editor, EditorContainer } from "@/components/editor/editor-surface";
 import { WikiEmbedProjectionProvider } from "@/components/editor/embeds/projection-context";
+import { useCompletionDrafts } from "@/components/editor/hooks/use-completion-drafts";
 import { useEditorContextMenu } from "@/components/editor/hooks/use-editor-context-menu";
 import { useMarkdownPersistence } from "@/components/editor/hooks/use-markdown-persistence";
 import { useSelectionContextPublish } from "@/components/editor/hooks/use-selection-context-publish";
@@ -25,17 +26,9 @@ import { ImageElement } from "@/components/editor/nodes/block/image-node";
 import { FindReplaceBar } from "@/components/editor/overlays/find-replace-bar";
 import { FrontmatterPanel } from "@/components/editor/overlays/frontmatter-panel";
 import { HeadingRenameDialog } from "@/components/editor/overlays/heading-rename-dialog";
-import {
-	type SlashCommandController,
-	type SlashCommandDraft,
-	SlashCommandMenu,
-} from "@/components/editor/overlays/slash-command-menu";
+import { SlashCommandMenu } from "@/components/editor/overlays/slash-command-menu";
 import { TocSidebar } from "@/components/editor/overlays/toc-sidebar";
-import {
-	type WikiCompletionController,
-	type WikiCompletionDraft,
-	WikiLinkSuggestion,
-} from "@/components/editor/overlays/wiki-link-suggestion";
+import { WikiLinkSuggestion } from "@/components/editor/overlays/wiki-link-suggestion";
 import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
 import { MarkdownEditorToolbar } from "@/components/editor/toolbar/markdown-toolbar";
@@ -50,12 +43,10 @@ import {
 import i18n from "@/i18n";
 import { errorMessage, notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
-import { editorCompletionHasFocus } from "@/lib/markdown/completion-focus";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import { splitFrontmatter } from "@/lib/markdown/doc";
 import { editorContextMenuCapabilities } from "@/lib/markdown/editor-context-menu";
 import { saveImageToMarkdownAssets } from "@/lib/markdown/image";
-import { findSlashCommandTrigger } from "@/lib/markdown/slash-command";
 import { formatModShortcut } from "@/lib/shell/shortcuts";
 import type { LinkFragment, WikiRenameHeadingRequest } from "@/lib/wiki";
 import {
@@ -69,10 +60,7 @@ import {
 	wikiLinkNodeSource,
 	wikiLinkToMarkdown,
 } from "@/lib/wiki/wikilink-model";
-import {
-	findWikiCompletionTrigger,
-	wikiLinkArrowDirection,
-} from "@/lib/wiki-completion";
+import { wikiLinkArrowDirection } from "@/lib/wiki-completion";
 import {
 	findWikiHeadingIndex,
 	hasWikiBlockAnchor,
@@ -149,8 +137,6 @@ export function MarkdownEditor({
 	const onAssetsChangedRef = useRef(onAssetsChanged);
 	onAssetsChangedRef.current = onAssetsChanged;
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
-	const completionControllerRef = useRef<WikiCompletionController | null>(null);
-	const slashCommandControllerRef = useRef<SlashCommandController | null>(null);
 	/** Swallow the `beforeinput` insertParagraph that follows slash Enter confirm. */
 	const suppressNextEditorBreakRef = useRef(false);
 	const syncingWikiLinkPresentationRef = useRef(false);
@@ -161,14 +147,6 @@ export function MarkdownEditor({
 		current: number[] | null;
 		unref: () => number[] | null;
 	} | null>(null);
-	const [wikiCompletionDraft, setWikiCompletionDraft] =
-		useState<WikiCompletionDraft | null>(null);
-	const [slashCommandDraft, setSlashCommandDraft] =
-		useState<SlashCommandDraft | null>(null);
-	const wikiCompletionDraftRef = useRef(wikiCompletionDraft);
-	wikiCompletionDraftRef.current = wikiCompletionDraft;
-	const slashCommandDraftRef = useRef(slashCommandDraft);
-	slashCommandDraftRef.current = slashCommandDraft;
 	const [findOpen, setFindOpen] = useState(false);
 	const [findFocusTick, setFindFocusTick] = useState(0);
 
@@ -268,138 +246,18 @@ export function MarkdownEditor({
 		onAssetsChangedRef,
 	});
 
-	/**
-	 * The suggestion component owns Host queries; this editor-side probe only
-	 * identifies a live `[[` inside an editable text leaf and anchors the menu.
-	 * Checking the DOM code ancestor avoids turning code examples into links.
-	 */
-	const updateWikiCompletionDraft = useCallback(() => {
-		const container = editorContainerRef.current;
-		if (
-			!container ||
-			!editorCompletionHasFocus(container, document.activeElement)
-		) {
-			setWikiCompletionDraft(null);
-			return;
-		}
-		const slateSelection = editor.selection;
-		if (!slateSelection || !RangeApi.isCollapsed(slateSelection)) {
-			setWikiCompletionDraft(null);
-			return;
-		}
-		const entry = editor.api.node(slateSelection.anchor.path);
-		const leaf = entry?.[0];
-		if (!leaf || typeof (leaf as { text?: unknown }).text !== "string") {
-			setWikiCompletionDraft(null);
-			return;
-		}
-		const nativeSelection = window.getSelection();
-		const anchor = nativeSelection?.anchorNode;
-		if (!nativeSelection?.isCollapsed || !anchor) {
-			setWikiCompletionDraft(null);
-			return;
-		}
-		const anchorElement =
-			anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : null;
-		if (
-			!anchorElement ||
-			!container.contains(anchorElement) ||
-			anchorElement.closest("code, pre")
-		) {
-			setWikiCompletionDraft(null);
-			return;
-		}
-		const trigger = findWikiCompletionTrigger(
-			(leaf as { text: string }).text,
-			slateSelection.anchor.offset,
-		);
-		if (!trigger) {
-			setWikiCompletionDraft(null);
-			return;
-		}
-		if (!nativeSelection.rangeCount) {
-			setWikiCompletionDraft(null);
-			return;
-		}
-		const cursor = nativeSelection.getRangeAt(0).getBoundingClientRect();
-		setWikiCompletionDraft({
-			raw: trigger.raw,
-			embed: trigger.embed,
-			left: cursor.left,
-			top: cursor.bottom + 4,
-		});
-	}, [editor]);
-
-	/**
-	 * Slash commands deliberately reuse the editor's current AST transforms
-	 * instead of installing the full Plate SlashKit. A trigger is valid only in
-	 * editable text, outside code/void DOM, and at the current collapsed cursor.
-	 */
-	const updateSlashCommandDraft = useCallback(() => {
-		const container = editorContainerRef.current;
-		if (
-			!container ||
-			!editorCompletionHasFocus(container, document.activeElement)
-		) {
-			setSlashCommandDraft(null);
-			return;
-		}
-		const slateSelection = editor.selection;
-		if (!slateSelection || !RangeApi.isCollapsed(slateSelection)) {
-			setSlashCommandDraft(null);
-			return;
-		}
-		const entry = editor.api.node(slateSelection.anchor.path);
-		const leaf = entry?.[0];
-		if (!leaf || typeof (leaf as { text?: unknown }).text !== "string") {
-			setSlashCommandDraft(null);
-			return;
-		}
-		const nativeSelection = window.getSelection();
-		const anchor = nativeSelection?.anchorNode;
-		if (!nativeSelection?.isCollapsed || !anchor) {
-			setSlashCommandDraft(null);
-			return;
-		}
-		const anchorElement =
-			anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : null;
-		if (
-			!anchorElement ||
-			!container.contains(anchorElement) ||
-			anchorElement.closest("code, pre, [data-slate-void='true']")
-		) {
-			setSlashCommandDraft(null);
-			return;
-		}
-		const trigger = findSlashCommandTrigger(
-			(leaf as { text: string }).text,
-			slateSelection.anchor.offset,
-		);
-		if (!trigger || !nativeSelection.rangeCount) {
-			setSlashCommandDraft(null);
-			return;
-		}
-		const block = editor.api.block();
-		if (!block) {
-			setSlashCommandDraft(null);
-			return;
-		}
-		const cursor = nativeSelection.getRangeAt(0).getBoundingClientRect();
-		const insideCallout = Boolean(
-			editor.api.above({
-				match: { type: editor.getType(KEYS.callout) },
-			}),
-		);
-		setSlashCommandDraft({
-			query: trigger.query,
-			path: [...slateSelection.anchor.path],
-			start: trigger.start,
-			end: trigger.end,
-			left: cursor.left,
-			top: cursor.bottom + 4,
-			allowCallout: block[1].length === 1 && !insideCallout,
-		});
-	}, [editor]);
+	const {
+		wikiCompletionDraft,
+		slashCommandDraft,
+		completionControllerRef,
+		slashCommandControllerRef,
+		updateWikiCompletionDraft,
+		updateSlashCommandDraft,
+		handleMenuKeyDown,
+		setWikiCompletionDraft,
+		setSlashCommandDraft,
+		closeMenus,
+	} = useCompletionDrafts({ editor, editorContainerRef });
 
 	const handleChange = useCallback(() => {
 		window.requestAnimationFrame(updateWikiCompletionDraft);
@@ -980,21 +838,7 @@ export function MarkdownEditor({
 					}
 					return;
 				}
-				if (completionControllerRef.current?.handleKeyDown(event)) {
-					event.stopPropagation();
-					return;
-				}
-				if (slashCommandControllerRef.current?.handleKeyDown(event)) {
-					event.stopPropagation();
-					return;
-				}
-				// If the menu is open but the controller is mid-remount, still
-				// swallow vertical arrows so the caret cannot leave `[[` / `/`.
-				if (
-					(event.key === "ArrowUp" || event.key === "ArrowDown") &&
-					(wikiCompletionDraftRef.current || slashCommandDraftRef.current)
-				) {
-					event.preventDefault();
+				if (handleMenuKeyDown(event)) {
 					event.stopPropagation();
 					return;
 				}
@@ -1016,8 +860,7 @@ export function MarkdownEditor({
 					return;
 				}
 				if (event.key === "Escape") {
-					setWikiCompletionDraft(null);
-					setSlashCommandDraft(null);
+					closeMenus();
 					setFindOpen(false);
 				}
 			}
@@ -1044,6 +887,8 @@ export function MarkdownEditor({
 			handleWikiLinkBoundaryDelete,
 			handleWikiLinkDraftEnter,
 			saveNow,
+			handleMenuKeyDown,
+			closeMenus,
 		],
 	);
 
@@ -1093,11 +938,10 @@ export function MarkdownEditor({
 			) {
 				return;
 			}
-			setWikiCompletionDraft(null);
-			setSlashCommandDraft(null);
+			closeMenus();
 			finalizeWikiLinkDrafts();
 		},
-		[finalizeWikiLinkDrafts],
+		[closeMenus, finalizeWikiLinkDrafts],
 	);
 
 	const handleWikiLinkCompositionStart = useCallback(() => {
