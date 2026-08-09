@@ -1,3 +1,4 @@
+export { marksDir } from "@/lib/pdf/selection/marks-io";
 export type {
 	NormalizedRect,
 	PinPlacement,

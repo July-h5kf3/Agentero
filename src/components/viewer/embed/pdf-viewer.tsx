@@ -249,6 +249,7 @@ import { PDF_PAGE_RASTER_DARK_CLASS } from "@/lib/pdf/page-theme";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
+	marksDir,
 	type NormalizedRect,
 	normalizePageTextRects,
 	pinFromRects,
@@ -1695,12 +1696,13 @@ function PdfViewerInner({
 
 	// Refresh ask conversation cards + agent-trace pins when this viewer is
 	// active (dock may keep inactive PDFs mounted under pdfKeepMounted —
-	// avoid N× listMarkRaw polls). Covers Agent-panel writes that create ask
+	// avoid N× listMarkRaw reads). Covers Agent-panel writes that create ask
 	// threads from 「加入对话」 selections while this tab was open.
 	//
-	// Poll results always carry fresh array identity; only commit state when
-	// the content actually changed — otherwise every 4s tick re-renders the
-	// whole viewer (renderPage deps) and the pages visibly twitch.
+	// Driven by the Vault watcher: listing re-reads every mark file over serial
+	// IPC, so it must not run on a timer. Results always carry fresh array
+	// identity; only commit state when the content actually changed — otherwise
+	// a refresh re-renders the whole viewer and the pages visibly twitch.
 	const lastMarksPollRef = useRef("{asks:[],traces:[]}");
 	useEffect(() => {
 		if (!paperAbsPath || !marksLoadedRef.current || !isActive) return;
@@ -1730,11 +1732,42 @@ function PdfViewerInner({
 		refresh();
 		const onFocus = () => refresh();
 		window.addEventListener("focus", onFocus);
-		const timer = window.setInterval(refresh, 4000);
+
+		// One Agent turn can rewrite several mark files; coalesce the burst.
+		let burstTimer: number | null = null;
+		const scheduleRefresh = () => {
+			if (burstTimer !== null) return;
+			burstTimer = window.setTimeout(() => {
+				burstTimer = null;
+				refresh();
+			}, 200);
+		};
+		const marksKey = `${normalizePathKey(marksDir(paperAbsPath))}/`;
+		let unsubMarks: (() => void) | undefined;
+		if (isTauri()) {
+			void (async () => {
+				const { listen } = await import("@tauri-apps/api/event");
+				if (cancelled) return;
+				unsubMarks = await listen<VaultFileChangedPayload>(
+					VAULT_FILE_CHANGED_EVENT,
+					({ payload }) => {
+						const paths = [...payload.paths];
+						if (payload.rename) {
+							paths.push(payload.rename.from, payload.rename.to);
+						}
+						const hit = paths.some((p) =>
+							normalizePathKey(p).startsWith(marksKey),
+						);
+						if (hit) scheduleRefresh();
+					},
+				);
+			})();
+		}
 		return () => {
 			cancelled = true;
 			window.removeEventListener("focus", onFocus);
-			window.clearInterval(timer);
+			if (burstTimer !== null) window.clearTimeout(burstTimer);
+			unsubMarks?.();
 		};
 	}, [paperAbsPath, isActive]);
 

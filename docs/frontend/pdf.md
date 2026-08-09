@@ -15,7 +15,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 `RenderLayer` 只是瓦片下的底图层，其 scale 另按 `PDF_BASE_LAYER_SCALE_CAP`（1.5）封顶：zoom 超过该值后整页光栅不再重渲染（单 worker 串行渲染下，长文档高倍缩放的整页光栅 + blob 传输是主要开销），清晰层由 `TilingLayer` 承担。瓦片 `tileSize: 1024` + `extraRings: 1`，减少长文档快速滚动时的渲染往返与边缘弹出。
 
-抗抽动（twitch）措施：瓦片 `extraRings: 1` 预渲染视口外圈，减少快速滚动时边缘瓦片延迟弹出；`TilingLayer` patch 在新瓦片集异步光栅到达前保留旧瓦片作拉伸占位（`scale/srcScale` 重映射，1.5s 超时兜底），消除缩放瞬间的空白闪烁；marks 4s 轮询结果先做 JSON 指纹比对，内容未变不提交 state，避免周期性整 viewer 重渲染。
+抗抽动（twitch）措施：瓦片 `extraRings: 1` 预渲染视口外圈，减少快速滚动时边缘瓦片延迟弹出；`TilingLayer` patch 在新瓦片集异步光栅到达前保留旧瓦片作拉伸占位（`scale/srcScale` 重映射，1.5s 超时兜底），消除缩放瞬间的空白闪烁；marks 不再定时轮询，改由 Vault 文件监听（`vault:file-changed`，命中 `{paper}/marks/` 前缀，200ms 合并突发）触发刷新，配合激活时与窗口 focus 兜底，读取结果仍做 JSON 指纹比对，内容未变不提交 state，避免整 viewer 重渲染。
 
 滚动路径开销（触控板一帧内可触发多次 scroll）另有两处收敛：viewport 滚动指标按动画帧合并后再 `setViewportScrollMetrics`（每次提交都会推出新的 scroller layout 对象，令所有挂载页重渲染）；layout hover 命中框与 Eye 调试框按 `hoverableLayoutRegionsByPage` / `rawLayoutRegionsByPage` 预先分页缓存，页渲染只做 `Map.get`，不再每页重跑一遍全文档 NMS。
 
