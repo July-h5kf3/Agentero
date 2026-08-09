@@ -8,9 +8,8 @@ import {
 	Loader2,
 	RefreshCw,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useStore } from "zustand";
 
 import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
@@ -41,10 +40,8 @@ import {
 	type CiteSidecar,
 	citationImportIdentifier,
 	loadPaperRefsAuto,
-	matchCitationByMarker,
 	paperRefsParse,
 } from "@/lib/paper/refs";
-import { citationHoverStore } from "@/lib/pdf/citation-hover-store";
 import { joinVaultPath } from "@/lib/vault/path";
 import { openPaper } from "@/lib/workspace/actions";
 
@@ -52,8 +49,6 @@ type ReferencesPanelProps = {
 	vaultPath: string | null;
 	/** Vault-relative paper folder of the active document; null = not a paper. */
 	paperPath: string | null;
-	/** Active workspace tab id (=== PDF docId) for hover sync. */
-	activeTabId?: string | null;
 	className?: string;
 };
 
@@ -93,7 +88,6 @@ function citationMatchesFilter(citation: Citation, needle: string): boolean {
 export function ReferencesPanel({
 	vaultPath,
 	paperPath,
-	activeTabId = null,
 	className,
 }: ReferencesPanelProps) {
 	const { t } = useTranslation("viewer");
@@ -120,24 +114,6 @@ export function ReferencesPanel({
 				: currentLookupParentDir(),
 		);
 	}, [vaultPath, paperPath, tree]);
-
-	// PDF in-text citation hover → highlight + reveal the matching card.
-	const hoverMarker = useStore(citationHoverStore, (s) =>
-		activeTabId && s.tabId === activeTabId ? s.marker : null,
-	);
-	const hoveredId = useMemo(
-		() =>
-			hoverMarker && sidecar
-				? matchCitationByMarker(sidecar.citations, hoverMarker)
-				: null,
-		[hoverMarker, sidecar],
-	);
-	useEffect(() => {
-		if (!hoveredId) return;
-		listRef.current
-			?.querySelector(`[data-citation-id="${CSS.escape(hoveredId)}"]`)
-			?.scrollIntoView({ block: "nearest" });
-	}, [hoveredId]);
 
 	useEffect(() => {
 		setSidecar(null);
@@ -310,7 +286,6 @@ export function ReferencesPanel({
 											citation={citation}
 											ordinal={citations.indexOf(citation) + 1}
 											importing={importingId === citation.id}
-											hovered={citation.id === hoveredId}
 											folders={folders}
 											lastImportParentDir={lastImportParentDir}
 											onOpenMatched={openMatched}
@@ -402,7 +377,6 @@ function CitationCard({
 	citation,
 	ordinal,
 	importing,
-	hovered,
 	folders,
 	lastImportParentDir,
 	onOpenMatched,
@@ -412,8 +386,6 @@ function CitationCard({
 	/** 1-based position in the full (unfiltered) sidecar list. */
 	ordinal: number;
 	importing: boolean;
-	/** In-text citation under the pointer in the PDF matches this card. */
-	hovered: boolean;
 	folders: string[];
 	lastImportParentDir: string;
 	onOpenMatched: (citation: Citation) => void;
@@ -445,13 +417,7 @@ function CitationCard({
 	};
 
 	return (
-		<div
-			data-citation-id={citation.id}
-			className={cn(
-				"group relative rounded-lg border border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40",
-				hovered && "border-border/60 bg-muted/50",
-			)}
-		>
+		<div className="group relative rounded-lg border border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40">
 			{matched ? (
 				// biome-ignore lint/a11y/useSemanticElements: role=button wrapper for card activation
 				<div

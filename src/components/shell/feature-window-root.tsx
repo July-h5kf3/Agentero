@@ -496,7 +496,6 @@ export function FeatureWindowRoot() {
 					<ReferencesPanel
 						vaultPath={vaultPath}
 						paperPath={referencesPaperPath}
-						activeTabId={null}
 					/>
 				)}
 			</div>

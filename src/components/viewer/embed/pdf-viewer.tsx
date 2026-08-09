@@ -114,7 +114,7 @@ import {
 import {
 	CitationLinkLayer,
 	isLinkObject,
-	useLinkTextResolver,
+	useDestinationPreviewResolver,
 } from "@/components/viewer/embed/citation-links";
 import { usePdfEngineContext } from "@/components/viewer/embed/engine-provider";
 import {
@@ -165,12 +165,6 @@ import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import {
-	type Citation,
-	loadPaperRefsAuto,
-	looksLikeCitationMarker,
-	matchCitationByMarker,
-} from "@/lib/paper/refs";
-import {
 	createNoteTrace,
 	createRunningTraces,
 	deletePdfVisualTrace,
@@ -200,10 +194,6 @@ import type {
 	PdfAskThread,
 } from "@/lib/pdf/ask/types";
 import { bookmarkPageIndex } from "@/lib/pdf/bookmark";
-import {
-	clearCitationHover,
-	setCitationHover,
-} from "@/lib/pdf/citation-hover-store";
 import { createPdfViewportResizeGate } from "@/lib/pdf/dockview-resize";
 import {
 	type EquationSymbol,
@@ -917,7 +907,7 @@ type SelectionMenuState = {
 type CitationPreviewState = {
 	screen: { x: number; y: number };
 	marker: string;
-	citation: Citation | null;
+	previewText: string;
 };
 
 type EditorState = {
@@ -1036,7 +1026,6 @@ function PdfViewerInner({
 	);
 	const [regionSelecting, setRegionSelecting] = useState(false);
 	const [visualCropPending, setVisualCropPending] = useState(false);
-	const [citations, setCitations] = useState<Citation[]>([]);
 	const [citationPreview, setCitationPreview] =
 		useState<CitationPreviewState | null>(null);
 	const [editor, setEditor] = useState<EditorState | null>(null);
@@ -1197,24 +1186,12 @@ function PdfViewerInner({
 		};
 	}, []);
 
+	// Reset per-document UI state when the active PDF document changes.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the effect.
 	useEffect(() => {
-		setCitations([]);
 		setCitationPreview(null);
 		setRegionSelecting(false);
-		clearCitationHover(docId);
-		if (!vaultPath || !paperRelPath) return;
-		let cancelled = false;
-		void loadPaperRefsAuto(vaultPath, paperRelPath)
-			.then((sidecar) => {
-				if (!cancelled) setCitations(sidecar?.citations ?? []);
-			})
-			.catch(() => {
-				if (!cancelled) setCitations([]);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [docId, vaultPath, paperRelPath]);
+	}, [docId]);
 
 	useEffect(() => {
 		if (!zoomFieldFocusedRef.current) {
@@ -4136,7 +4113,7 @@ function PdfViewerInner({
 
 	// ---- In-text citation / internal PDF links ----
 
-	const resolveLinkText = useLinkTextResolver(docId);
+	const resolveDestinationPreview = useDestinationPreviewResolver(docId);
 	const linkHoverSeqRef = useRef(0);
 
 	const cancelCitationHide = useCallback(() => {
@@ -4173,43 +4150,29 @@ function PdfViewerInner({
 		(link: PdfLinkAnnoObject | null) => {
 			const seq = ++linkHoverSeqRef.current;
 			if (!link) {
-				clearCitationHover(docId);
 				scheduleCitationHide();
 				return;
 			}
 			cancelCitationHide();
 			setCitationPreview(null);
-			void resolveLinkText(link).then((text) => {
-				if (linkHoverSeqRef.current !== seq || !text) return;
-				if (!looksLikeCitationMarker(text)) {
-					clearCitationHover(docId);
-					return;
-				}
-				setCitationHover(docId, text);
-				const citationId = matchCitationByMarker(citations, text);
-				const citation =
-					citations.find((item) => item.id === citationId) ?? null;
+			void resolveDestinationPreview(link).then((previewText) => {
+				if (linkHoverSeqRef.current !== seq || !previewText) return;
 				const pageEl = pageElByIndex(hostRef.current, link.pageIndex);
 				if (!pageEl) return;
 				setCitationPreview({
 					screen: rectRightScreen(pageEl, link.rect, zoomRef.current),
-					marker: text,
-					citation,
+					marker: "",
+					previewText,
 				});
 			});
 		},
-		[
-			docId,
-			resolveLinkText,
-			citations,
-			scheduleCitationHide,
-			cancelCitationHide,
-		],
+		[resolveDestinationPreview, scheduleCitationHide, cancelCitationHide],
 	);
 
+	// Clean up the citation preview hide timer when the document changes or unmounts.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the cleanup.
 	useEffect(
 		() => () => {
-			clearCitationHover(docId);
 			if (citationHideTimerRef.current) {
 				clearTimeout(citationHideTimerRef.current);
 			}
@@ -5065,12 +5028,7 @@ function PdfViewerInner({
 							{citationPreview ? (
 								<PdfCitationPreview
 									screen={citationPreview.screen}
-									marker={citationPreview.marker}
-									citation={citationPreview.citation}
-									onOpenReferences={() => {
-										setCitationPreview(null);
-										openRightTab("references");
-									}}
+									previewText={citationPreview.previewText}
 									onPointerEnter={cancelCitationHide}
 									onPointerLeave={scheduleCitationHide}
 								/>
