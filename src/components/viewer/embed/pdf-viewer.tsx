@@ -121,6 +121,7 @@ import type {
 	VisualDraftEditorState,
 } from "@/components/viewer/embed/pdf-viewer-types";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
+import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
 import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
 import i18n from "@/i18n";
@@ -168,7 +169,6 @@ import {
 	deletePdfAskThread,
 	listPdfAskThreads,
 	newMessageId,
-	popoverScreenPoint,
 	toSummaries,
 	writePdfAskThread,
 } from "@/lib/pdf/ask";
@@ -578,14 +578,6 @@ function PdfViewerInner({
 	const pageTextMapRef = useRef(pageTextMap);
 	pageTextMapRef.current = pageTextMap;
 	const [visualTraces, setVisualTraces] = useState<PdfVisualSessionTrace[]>([]);
-	const [activeCard, setActiveCard] = useState<ActiveSelectionCard | null>(
-		null,
-	);
-	const [cardScreen, setCardScreen] = useState<{
-		x: number;
-		y: number;
-		preferRight?: boolean;
-	} | null>(null);
 	const [streaming, setStreaming] = useState(false);
 	const [askError, setAskError] = useState<string | null>(null);
 	const [visualError, setVisualError] = useState<string | null>(null);
@@ -622,8 +614,6 @@ function PdfViewerInner({
 	translatesRef.current = translates;
 	const visualTracesRef = useRef(visualTraces);
 	visualTracesRef.current = visualTraces;
-	const activeCardRef = useRef<ActiveSelectionCard | null>(null);
-	activeCardRef.current = activeCard;
 	const regionSelectingRef = useRef(regionSelecting);
 	regionSelectingRef.current = regionSelecting;
 	const visualCropPendingRef = useRef(visualCropPending);
@@ -662,11 +652,6 @@ function PdfViewerInner({
 	const formulaHoverSurfaceRef = useRef(false);
 	const activeSessionRef = useRef<string | null>(null);
 	const translateSessionRef = useRef<string | null>(null);
-	const hidePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
-	);
-	/** True while pointer is over the active card, pin, or source fragment. */
-	const cardHoverSurfaceRef = useRef(false);
 	const citationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
@@ -674,6 +659,74 @@ function PdfViewerInner({
 	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
 	const paperKey = paperRelPath || paperAbsPath || null;
 	const pdfDark = pdfColorScheme === "dark";
+
+	const discardIfEmptyDraft = useCallback((threadId: string | null) => {
+		if (!threadId) return;
+		const th = threadsRef.current.find((t) => t.id === threadId);
+		if (!th || threadHasUserQuestion(th)) return;
+		setThreads((prev) => prev.filter((t) => t.id !== threadId));
+	}, []);
+
+	const stopTranslateSession = useCallback(() => {
+		const sid = translateSessionRef.current;
+		if (sid) {
+			void cancelAgentRun(sid).catch(() => undefined);
+			if (activeSessionRef.current === sid) activeSessionRef.current = null;
+			translateSessionRef.current = null;
+		}
+		translateStreamingRef.current = false;
+		setTranslateStreaming(false);
+	}, []);
+
+	/** Per-kind chrome reset when a card is opened. */
+	const resetChromeForOpenedCard = useCallback((card: ActiveSelectionCard) => {
+		if (card.kind === "ask") setAskError(null);
+		if (card.kind === "translate") setTranslateError(null);
+	}, []);
+
+	/** Per-kind chrome reset when the open card is dismissed. */
+	const resetChromeForClosedCard = useCallback(
+		(card: ActiveSelectionCard | null) => {
+			if (card?.kind === "ask") {
+				discardIfEmptyDraft(card.id);
+				setAskError(null);
+			}
+			if (card?.kind === "translate") setTranslateError(null);
+			if (isVisualMarkKind(card?.kind)) {
+				setVisualError(null);
+				setVisualCardExpanded(false);
+			}
+			setEditor(null);
+		},
+		[discardIfEmptyDraft],
+	);
+
+	const {
+		activeCard,
+		activeCardRef,
+		cardScreen,
+		cardScreenRef,
+		setActiveCard,
+		setCardScreen,
+		openCard,
+		hideActiveCard,
+		placeActiveCard,
+		rePlaceActiveCardOnScroll,
+		cancelHoverHide,
+		markCardHoverEnter,
+		scheduleHoverHide,
+		cardHoverSurfaceRef,
+	} = usePdfCards({
+		hostRef,
+		pageTextMapRef,
+		threadsRef,
+		translatesRef,
+		visualTracesRef,
+		translateStreamingRef,
+		onCardOpen: resetChromeForOpenedCard,
+		onCardClose: resetChromeForClosedCard,
+		stopTranslateSession,
+	});
 
 	const togglePdfColorScheme = useCallback(() => {
 		setPdfColorScheme((current) => {
@@ -1239,179 +1292,6 @@ function PdfViewerInner({
 		onVisualTracesChangeRef.current?.(visualTraces);
 	}, [visualTraces]);
 
-	const cardScreenRef = useRef<{
-		x: number;
-		y: number;
-		preferRight?: boolean;
-	} | null>(null);
-	/**
-	 * Place the open pin card next to its gutter pin. Returns false when the
-	 * page DOM is not mounted yet (virtualized) so callers can retry — never
-	 * flash a top-left fallback while EmbedPDF is still scrolling/rendering.
-	 *
-	 * Uses the same pinFromRects(+pageText) side choice as the gutter so a
-	 * left-side pin does not open the dialog on the far right of the selection.
-	 */
-	const placeActiveCard = useCallback((card: ActiveSelectionCard): boolean => {
-		const host = hostRef.current;
-		if (!host) return false;
-		let page = 1;
-		let rects: PdfAskAnchor["rects"] = [];
-		if (card.kind === "ask") {
-			const thread = threadsRef.current.find((th) => th.id === card.id);
-			if (!thread) return false;
-			page = thread.anchor.page;
-			rects = thread.anchor.rects;
-		} else if (card.kind === "translate") {
-			const tr = translatesRef.current.find((r) => r.id === card.id);
-			if (!tr) return false;
-			page = tr.page;
-			rects = tr.rects;
-		} else if (isVisualMarkKind(card.kind)) {
-			const tr = visualTracesRef.current.find((item) => item.id === card.id);
-			if (!tr) return false;
-			page = tr.page;
-			rects = tr.rects;
-		} else {
-			return false;
-		}
-		// Same side choice as the gutter pin (page text → may flip left).
-		const pageText = pageTextMapRef.current.get(page - 1);
-		const pin = pinFromRects(rects, pageText);
-		const pageEl = pageElByIndex(host, page - 1);
-		const pt = popoverScreenPoint(pageEl, rects, pin);
-		// Target page not in the virtual DOM yet — keep cardScreen null so the
-		// modal stays hidden until onScroll / rAF retry can place it for real.
-		if (!pt) return false;
-		// Skip identical coords — avoids re-rendering the open card (and its
-		// input) on every scroll tick when the pin did not actually move.
-		const prev = cardScreenRef.current;
-		if (
-			prev &&
-			Math.round(prev.x) === Math.round(pt.x) &&
-			Math.round(prev.y) === Math.round(pt.y) &&
-			prev.preferRight === pt.preferRight
-		) {
-			return true;
-		}
-		cardScreenRef.current = pt;
-		setCardScreen(pt);
-		return true;
-	}, []);
-
-	/** After instant page jumps, the virtual page may land a few frames later. */
-	const placeActiveCardWithRetry = useCallback(
-		(card: ActiveSelectionCard, attempts = 12) => {
-			let tries = 0;
-			const tick = () => {
-				if (placeActiveCard(card)) return;
-				tries += 1;
-				if (tries >= attempts) return;
-				requestAnimationFrame(tick);
-			};
-			requestAnimationFrame(tick);
-		},
-		[placeActiveCard],
-	);
-
-	const cancelHoverHide = useCallback(() => {
-		if (hidePopoverTimerRef.current) {
-			clearTimeout(hidePopoverTimerRef.current);
-			hidePopoverTimerRef.current = null;
-		}
-	}, []);
-
-	/**
-	 * Selection / note modals are portaled `role="dialog"`. After pin leave the
-	 * hide timer may fire before (or without) a card pointerenter — keep open
-	 * while the pointer is still over a dialog or a field inside it is focused.
-	 */
-	const isFloatingDialogActive = useCallback((): boolean => {
-		if (typeof document === "undefined") return false;
-		const dialogs = document.querySelectorAll('[role="dialog"]');
-		for (const node of dialogs) {
-			if (!(node instanceof HTMLElement)) continue;
-			// Fixed floating selection cards / annotation editors only.
-			if (!node.classList.contains("fixed")) continue;
-			try {
-				if (node.matches(":hover")) return true;
-			} catch {
-				// :hover may throw in non-browser test envs
-			}
-			const ae = document.activeElement;
-			if (ae instanceof HTMLElement && node.contains(ae)) return true;
-		}
-		return false;
-	}, []);
-
-	const discardIfEmptyDraft = useCallback((threadId: string | null) => {
-		if (!threadId) return;
-		const th = threadsRef.current.find((t) => t.id === threadId);
-		if (!th || threadHasUserQuestion(th)) return;
-		setThreads((prev) => prev.filter((t) => t.id !== threadId));
-	}, []);
-
-	const hideActiveCard = useCallback(() => {
-		const cur = activeCardRef.current;
-		if (cur?.kind === "ask") {
-			discardIfEmptyDraft(cur.id);
-			setAskError(null);
-		}
-		if (cur?.kind === "translate") setTranslateError(null);
-		if (isVisualMarkKind(cur?.kind)) {
-			setVisualError(null);
-			setVisualCardExpanded(false);
-		}
-		cardHoverSurfaceRef.current = false;
-		setActiveCard(null);
-		cardScreenRef.current = null;
-		setCardScreen(null);
-		setEditor(null);
-	}, [discardIfEmptyDraft]);
-
-	const markCardHoverEnter = useCallback(() => {
-		cardHoverSurfaceRef.current = true;
-		cancelHoverHide();
-	}, [cancelHoverHide]);
-
-	/**
-	 * Leave pin / card / source fragment. Translate cards hide when nothing is
-	 * hovered (unless still streaming). Ask / visual / note editors keep a 1s
-	 * delay, and never dismiss while the floating dialog is hovered or focused.
-	 */
-	const scheduleHoverHide = useCallback(() => {
-		cardHoverSurfaceRef.current = false;
-		cancelHoverHide();
-		hidePopoverTimerRef.current = setTimeout(() => {
-			hidePopoverTimerRef.current = null;
-			if (cardHoverSurfaceRef.current) return;
-			// Still interacting with the floating note / chat modal.
-			if (isFloatingDialogActive()) {
-				cardHoverSurfaceRef.current = true;
-				return;
-			}
-			// Ephemeral translate result: stay open only while streaming or hovered.
-			if (
-				activeCardRef.current?.kind === "translate" &&
-				translateStreamingRef.current
-			) {
-				return;
-			}
-			hideActiveCard();
-		}, 1000);
-	}, [cancelHoverHide, hideActiveCard, isFloatingDialogActive]);
-
-	const stopTranslateSession = useCallback(() => {
-		const sid = translateSessionRef.current;
-		if (sid) {
-			void cancelAgentRun(sid).catch(() => undefined);
-			if (activeSessionRef.current === sid) activeSessionRef.current = null;
-			translateSessionRef.current = null;
-		}
-		translateStreamingRef.current = false;
-		setTranslateStreaming(false);
-	}, []);
-
 	// Translate cards are ephemeral: once streaming ends, auto-hide unless the
 	// pointer is still over the card, pin, or source highlight.
 	const activeTranslateCardId =
@@ -1421,40 +1301,12 @@ function PdfViewerInner({
 		if (translateStreaming) return;
 		if (cardHoverSurfaceRef.current) return;
 		scheduleHoverHide();
-	}, [activeTranslateCardId, translateStreaming, scheduleHoverHide]);
-
-	const openCard = useCallback(
-		(card: ActiveSelectionCard) => {
-			// Cancel pending hide and treat open as an active hover surface so
-			// the card does not auto-close while the pointer is still over the
-			// pin / newly mounted modal (mount under cursor skips pointerenter).
-			cancelHoverHide();
-			cardHoverSurfaceRef.current = true;
-			if (
-				activeCardRef.current?.kind === "translate" &&
-				(card.kind !== "translate" || card.id !== activeCardRef.current.id)
-			) {
-				stopTranslateSession();
-			}
-			setActiveCard(card);
-			if (card.kind === "ask") setAskError(null);
-			if (card.kind === "translate") setTranslateError(null);
-			// Place now if the page is mounted. If not (far jump / virtualized),
-			// clear stale coords so the modal does not flash at the old pin, then
-			// retry for a few frames after instant scroll mounts the page.
-			if (!placeActiveCard(card)) {
-				cardScreenRef.current = null;
-				setCardScreen(null);
-				placeActiveCardWithRetry(card);
-			}
-		},
-		[
-			cancelHoverHide,
-			placeActiveCard,
-			placeActiveCardWithRetry,
-			stopTranslateSession,
-		],
-	);
+	}, [
+		activeTranslateCardId,
+		translateStreaming,
+		scheduleHoverHide,
+		cardHoverSurfaceRef,
+	]);
 
 	const openThread = useCallback(
 		(thread: PdfAskThread) => openCard({ kind: "ask", id: thread.id }),
@@ -2198,6 +2050,8 @@ function PdfViewerInner({
 			closeVisualDraftEditor,
 			upsertVisualTrace,
 			openCard,
+			cardScreenRef,
+			setCardScreen,
 		],
 	);
 
@@ -2361,6 +2215,8 @@ function PdfViewerInner({
 			resolvePdfAskAgent,
 			requestVisualAgentTurn,
 			hideActiveCard,
+			cardScreenRef,
+			setCardScreen,
 		],
 	);
 
@@ -2394,7 +2250,7 @@ function PdfViewerInner({
 				});
 			}
 		},
-		[paperAbsPath, upsertVisualTrace],
+		[paperAbsPath, upsertVisualTrace, activeCardRef],
 	);
 
 	/** Header「加入侧边栏对话」from an existing visual mark pin. */
@@ -2427,7 +2283,7 @@ function PdfViewerInner({
 			});
 			openRightTab("agent");
 		})();
-	}, [paperAbsPath, paperRelPath, t]);
+	}, [paperAbsPath, paperRelPath, t, activeCardRef]);
 
 	const handleVisualContinue = useCallback(
 		(question: string) => {
@@ -2520,7 +2376,7 @@ function PdfViewerInner({
 				}
 			})();
 		},
-		[resolvePdfAskAgent, requestVisualAgentTurn, paperAbsPath],
+		[resolvePdfAskAgent, requestVisualAgentTurn, paperAbsPath, activeCardRef],
 	);
 
 	const handleSend = useCallback(
@@ -2545,7 +2401,7 @@ function PdfViewerInner({
 				}
 			})();
 		},
-		[sendToThread, resolvePdfAskAgent],
+		[sendToThread, resolvePdfAskAgent, activeCardRef],
 	);
 
 	/** Edit last (or any) user turn: drop that message and everything after, then re-send. */
@@ -2581,7 +2437,7 @@ function PdfViewerInner({
 				}
 			})();
 		},
-		[sendToThread, resolvePdfAskAgent],
+		[sendToThread, resolvePdfAskAgent, activeCardRef],
 	);
 
 	const dismissAskChrome = useCallback(() => {
@@ -2595,7 +2451,7 @@ function PdfViewerInner({
 			setActiveCard(null);
 			setCardScreen(null);
 		}
-	}, []);
+	}, [activeCardRef, setActiveCard, setCardScreen]);
 
 	const handleHide = useCallback(() => {
 		const id =
@@ -2617,7 +2473,7 @@ function PdfViewerInner({
 			}
 		}
 		dismissAskChrome();
-	}, [upsertThread, persist, dismissAskChrome]);
+	}, [upsertThread, persist, dismissAskChrome, activeCardRef]);
 
 	const handleDelete = useCallback(() => {
 		const id =
@@ -2627,7 +2483,7 @@ function PdfViewerInner({
 			if (paperAbsPath) void deletePdfAskThread(paperAbsPath, id);
 		}
 		dismissAskChrome();
-	}, [paperAbsPath, dismissAskChrome]);
+	}, [paperAbsPath, dismissAskChrome, activeCardRef]);
 
 	const deleteTranslateCard = useCallback(() => {
 		const id =
@@ -2640,7 +2496,7 @@ function PdfViewerInner({
 			if (paperAbsPath) void deletePdfTranslate(paperAbsPath, id);
 		}
 		hideActiveCard();
-	}, [paperAbsPath, stopTranslateSession, hideActiveCard]);
+	}, [paperAbsPath, stopTranslateSession, hideActiveCard, activeCardRef]);
 
 	const deleteVisualTraceById = useCallback(
 		(id: string) => {
@@ -2653,7 +2509,7 @@ function PdfViewerInner({
 				hideActiveCard();
 			}
 		},
-		[paperAbsPath, hideActiveCard],
+		[paperAbsPath, hideActiveCard, activeCardRef],
 	);
 
 	const handleDeleteVisualTrace = useCallback(() => {
@@ -2662,7 +2518,7 @@ function PdfViewerInner({
 			: null;
 		if (id) deleteVisualTraceById(id);
 		else hideActiveCard();
-	}, [deleteVisualTraceById, hideActiveCard]);
+	}, [deleteVisualTraceById, hideActiveCard, activeCardRef]);
 
 	const openVisualTraceSession = useCallback(
 		async (trace: PdfVisualSessionTrace) => {
@@ -2724,7 +2580,7 @@ function PdfViewerInner({
 		if (!isVisualMarkKind(card?.kind)) return;
 		const tr = visualTracesRef.current.find((item) => item.id === card.id);
 		if (tr) void openVisualTraceSession(tr);
-	}, [openVisualTraceSession]);
+	}, [openVisualTraceSession, activeCardRef]);
 
 	const handleStopVisualSession = useCallback(() => {
 		// Shared agent session store is the source of truth after modal↔panel
@@ -2763,7 +2619,7 @@ function PdfViewerInner({
 		}
 		store.setSubmitting(false);
 		setVisualError(null);
-	}, []);
+	}, [activeCardRef]);
 
 	const openEditorForAnnotation = useCallback(
 		(id: string) => {
@@ -2784,7 +2640,7 @@ function PdfViewerInner({
 				comment: obj.contents?.trim() ?? "",
 			});
 		},
-		[annotationCap, docId, cancelHoverHide],
+		[annotationCap, docId, cancelHoverHide, cardHoverSurfaceRef],
 	);
 
 	const handleOpenPin = useCallback(
@@ -3109,6 +2965,7 @@ function PdfViewerInner({
 		persistTranslate,
 		markTranslateFailure,
 		openCard,
+		cardHoverSurfaceRef,
 	]);
 
 	// Show the selection action menu when a drag-selection ends.
@@ -3163,10 +3020,6 @@ function PdfViewerInner({
 			clearActiveSelection("pdf");
 		};
 	}, [selectionCap, docCap, docId, paperRelPath, paperAbsPath]);
-
-	const rePlaceActiveCardOnScroll = useCallback(() => {
-		if (activeCardRef.current) placeActiveCard(activeCardRef.current);
-	}, [placeActiveCard]);
 
 	// Re-anchor the active pin modal on scroll + zoom. zoomLevel forces
 	// re-placement after zoom. Use scrollReady (boolean) — not `scroll` —
