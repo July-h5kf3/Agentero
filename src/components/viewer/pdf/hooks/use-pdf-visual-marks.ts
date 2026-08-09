@@ -26,25 +26,17 @@
  *   so every turn goes through `agentSessionStore.requestTurn`.
  */
 
-import type { PdfEngine } from "@embedpdf/models";
-import type { useDocumentManagerCapability } from "@embedpdf/plugin-document-manager/react";
-import type { useInteractionManagerCapability } from "@embedpdf/plugin-interaction-manager/react";
-import type { useSelectionCapability } from "@embedpdf/plugin-selection/react";
 import {
 	type Dispatch,
 	type RefObject,
 	type SetStateAction,
 	useCallback,
-	useEffect,
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { PdfAskThreads } from "@/components/viewer/pdf/hooks/use-pdf-ask-threads";
-import { isPdfDocumentCloseRaceError } from "@/components/viewer/pdf/host-dom";
-import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/region-crop";
 import type {
 	CardScreenPoint,
-	SelectionMenuState,
 	VisualDraftEditorState,
 } from "@/components/viewer/pdf/types";
 import { cancelAgentRun } from "@/lib/agent";
@@ -65,7 +57,6 @@ import {
 	writePdfVisualTrace,
 } from "@/lib/pdf/agent-trace";
 import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
-import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
 import type { ActiveSelectionCard } from "@/lib/pdf/selection";
 import {
 	openRightTab,
@@ -73,40 +64,11 @@ import {
 	setAgentPanelMounted,
 } from "@/lib/shell/ui-store";
 
-type SelectionCapabilityProvides = ReturnType<
-	typeof useSelectionCapability
->["provides"];
-
-type DocumentManagerCapability = ReturnType<
-	typeof useDocumentManagerCapability
->["provides"];
-
-type InteractionManagerCapability = ReturnType<
-	typeof useInteractionManagerCapability
->["provides"];
-
-/** Crop options shared by the manual (⌘.) and the layout-hover entry points. */
-export type BeginVisualAnnotationOptions = {
-	/** Layout-hover sequence token; a stale crop is dropped instead of opening. */
-	seq?: number;
-	/** Hover-opened drafts auto-hide after the pointer leaves. */
-	ephemeral?: boolean;
-};
-
 export type UsePdfVisualMarksOptions = {
-	docId: string;
 	/** Sidecar root for `marks/<id>.json` (null for loose PDFs — nothing persists). */
 	paperAbsPath: string | null;
 	/** Vault-relative provenance stamped into new marks. */
 	paperRelPath: string | null;
-	/** Shared PDFium engine (null until the WASM host finished booting). */
-	engine: PdfEngine | null;
-	/** EmbedPDF capabilities; owned by `PdfViewerInner` (plugin context). */
-	docCap: DocumentManagerCapability;
-	selectionCap: SelectionCapabilityProvides;
-	interactionCap: InteractionManagerCapability;
-	/** Text-selection cluster: framing a region dismisses an open menu. */
-	setSelectionMenu: Dispatch<SetStateAction<SelectionMenuState | null>>;
 	/** Persisted visual marks; owned by {@link usePdfMarksIo}. */
 	visualTracesRef: RefObject<PdfVisualSessionTrace[]>;
 	setVisualTraces: Dispatch<SetStateAction<PdfVisualSessionTrace[]>>;
@@ -124,47 +86,13 @@ export type UsePdfVisualMarksOptions = {
 	 * glossary card so their mutual exclusivity cannot be split across files.
 	 */
 	visualDraftEditor: VisualDraftEditorState | null;
-	openVisualDraftEditor: (draft: VisualDraftEditorState) => void;
 	closeVisualDraftEditor: () => void;
-	/** Closed before a crop starts: a legend must not survive into a draft. */
-	closeFormulaAnnotationPreview: () => void;
-	/** Screen anchor beside a page-normalized region (draft card placement). */
-	screenPointForRegion: (
-		pageIndex0: number,
-		region: PdfAskNormalizedRect,
-	) => { x: number; y: number };
-	/** Bumped by the layout cluster to drop late crops after leave / supersede. */
-	layoutHoverSeqRef: RefObject<number>;
-	/**
-	 * Mirrors of `regionSelecting` / `visualCropPending`, written here and read by
-	 * the layout-hover guard. Created by the parent because
-	 * {@link usePdfLayoutHover} is declared first and needs the same ref objects.
-	 */
-	regionSelectingRef: RefObject<boolean>;
-	visualCropPendingRef: RefObject<boolean>;
 };
 
 export type PdfVisualMarks = {
-	/** Region framing (marquee) mode is armed. */
-	regionSelecting: boolean;
-	/** A crop is in flight; blocks re-entry and layout hover. */
-	visualCropPending: boolean;
 	visualError: string | null;
 	/** Keep the just-created ⌘↵ card expanded until the user dismisses it. */
 	visualCardExpanded: boolean;
-	/** Enter / leave region framing. Shared by the toolbar and the handle (⌘.). */
-	toggleRegionSelect: () => void;
-	/** Crop a region and open the draft editor (does not send). */
-	beginVisualAnnotation: (
-		page: number,
-		region: PdfAskNormalizedRect,
-		opts?: BeginVisualAnnotationOptions,
-	) => Promise<void>;
-	/** Marquee release on a page → crop that region. */
-	handleVisualRegionSelect: (
-		page: number,
-		region: PdfAskNormalizedRect,
-	) => void;
 	/** Draft editor save: note-only visual mark (no Agent thread). */
 	handleVisualDraftSave: (comment: string) => void;
 	/** Draft editor「加入侧边栏对话」: crop → Agent composer chip. */
@@ -189,14 +117,8 @@ export type PdfVisualMarks = {
 };
 
 export function usePdfVisualMarks({
-	docId,
 	paperAbsPath,
 	paperRelPath,
-	engine,
-	docCap,
-	selectionCap,
-	interactionCap,
-	setSelectionMenu,
 	visualTracesRef,
 	setVisualTraces,
 	upsertVisualTrace,
@@ -207,147 +129,17 @@ export function usePdfVisualMarks({
 	setCardScreen,
 	resolvePdfAskAgent,
 	visualDraftEditor,
-	openVisualDraftEditor,
 	closeVisualDraftEditor,
-	closeFormulaAnnotationPreview,
-	screenPointForRegion,
-	layoutHoverSeqRef,
-	regionSelectingRef,
-	visualCropPendingRef,
 }: UsePdfVisualMarksOptions): PdfVisualMarks {
 	const { t } = useTranslation("viewer");
-	const [regionSelecting, setRegionSelecting] = useState(false);
-	const [visualCropPending, setVisualCropPending] = useState(false);
 	const [visualError, setVisualError] = useState<string | null>(null);
 	/** Keep the just-created Cmd+Enter card expanded until the user dismisses it. */
 	const [visualCardExpanded, setVisualCardExpanded] = useState(false);
-	regionSelectingRef.current = regionSelecting;
-	visualCropPendingRef.current = visualCropPending;
 
 	const resetVisualCardChrome = useCallback(() => {
 		setVisualError(null);
 		setVisualCardExpanded(false);
 	}, []);
-
-	// Reset per-document UI state when the active PDF document changes.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the effect.
-	useEffect(() => {
-		setRegionSelecting(false);
-	}, [docId]);
-
-	/** Enter/leave region framing. Shared by the toolbar and the handle. */
-	const toggleRegionSelect = useCallback(() => {
-		if (visualCropPendingRef.current) return;
-		setSelectionMenu(null);
-		closeVisualDraftEditor();
-		selectionCap?.clear(docId);
-		setRegionSelecting((active) => !active);
-	}, [
-		closeVisualDraftEditor,
-		selectionCap,
-		docId,
-		setSelectionMenu,
-		visualCropPendingRef,
-	]);
-
-	/** Crop a region and open the visual-annotation draft editor (does not send). */
-	const beginVisualAnnotation = useCallback(
-		async (
-			page: number,
-			region: PdfAskNormalizedRect,
-			opts?: BeginVisualAnnotationOptions,
-		) => {
-			if (!engine || !docCap || visualCropPendingRef.current) return;
-			if (!docCap.isDocumentOpen(docId)) return;
-			const document = docCap.getDocument(docId);
-			if (!document) {
-				notifyError(t("pdfExplain.cropFailed"));
-				return;
-			}
-			setVisualCropPending(true);
-			setRegionSelecting(false);
-			// Visual draft and formula legend are mutually exclusive; close the
-			// legend up front so it does not linger for the length of the crop.
-			closeFormulaAnnotationPreview();
-			try {
-				const image = await renderPdfRegionPromptImage({
-					engine,
-					document,
-					pageIndex: page - 1,
-					region,
-				});
-				if (!docCap.isDocumentOpen(docId)) return;
-				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
-					return;
-				}
-				const screen = screenPointForRegion(page - 1, region);
-				const ephemeral = opts?.ephemeral === true;
-				openVisualDraftEditor({
-					screen,
-					page,
-					region,
-					image,
-					ephemeral: ephemeral || undefined,
-				});
-			} catch (error) {
-				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
-					return;
-				}
-				if (
-					!docCap.isDocumentOpen(docId) ||
-					isPdfDocumentCloseRaceError(error)
-				) {
-					return;
-				}
-				const message =
-					error instanceof Error ? error.message : t("pdfExplain.cropFailed");
-				notifyError(t("pdfExplain.cropFailed"), { description: message });
-			} finally {
-				setVisualCropPending(false);
-			}
-		},
-		[
-			engine,
-			docCap,
-			docId,
-			t,
-			closeFormulaAnnotationPreview,
-			openVisualDraftEditor,
-			screenPointForRegion,
-			layoutHoverSeqRef,
-			visualCropPendingRef,
-		],
-	);
-
-	const handleVisualRegionSelect = useCallback(
-		(page: number, region: PdfAskNormalizedRect) => {
-			void beginVisualAnnotation(page, region);
-		},
-		[beginVisualAnnotation],
-	);
-
-	useEffect(() => {
-		if (!regionSelecting) return;
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
-			event.preventDefault();
-			setRegionSelecting(false);
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [regionSelecting]);
-
-	// Region-select mode must not allow EmbedPDF text selection under the marquee.
-	useEffect(() => {
-		if (!regionSelecting) return;
-		setSelectionMenu(null);
-		selectionCap?.clear(docId);
-		const scope = interactionCap?.forDocument(docId);
-		scope?.pause();
-		return () => {
-			scope?.resume();
-		};
-	}, [regionSelecting, selectionCap, interactionCap, docId, setSelectionMenu]);
 
 	/**
 	 * Save from the region editor: note-only visual mark (no Agent thread).
@@ -850,13 +642,8 @@ export function usePdfVisualMarks({
 	}, [activeCardRef]);
 
 	return {
-		regionSelecting,
-		visualCropPending,
 		visualError,
 		visualCardExpanded,
-		toggleRegionSelect,
-		beginVisualAnnotation,
-		handleVisualRegionSelect,
 		handleVisualDraftSave,
 		handleVisualAddToChat,
 		handleVisualSendNow,

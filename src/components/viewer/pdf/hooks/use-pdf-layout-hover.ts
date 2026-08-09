@@ -23,7 +23,7 @@ import {
 	useState,
 } from "react";
 import { pageElByIndex } from "@/components/viewer/pdf/coords";
-import type { BeginVisualAnnotationOptions } from "@/components/viewer/pdf/hooks/use-pdf-visual-marks";
+import type { BeginVisualAnnotationOptions } from "@/components/viewer/pdf/hooks/use-pdf-region-framing";
 import type {
 	FormulaAnnotationPreviewState,
 	ScreenPoint,

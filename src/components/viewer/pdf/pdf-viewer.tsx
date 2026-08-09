@@ -71,6 +71,7 @@ import { usePdfLayoutTranslate } from "@/components/viewer/pdf/hooks/use-pdf-lay
 import { usePdfMarksIo } from "@/components/viewer/pdf/hooks/use-pdf-marks-io";
 import { usePdfOutline } from "@/components/viewer/pdf/hooks/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/pdf/hooks/use-pdf-page-text";
+import { usePdfRegionFraming } from "@/components/viewer/pdf/hooks/use-pdf-region-framing";
 import { usePdfSelectionTranslate } from "@/components/viewer/pdf/hooks/use-pdf-selection-translate";
 import { usePdfTextSelection } from "@/components/viewer/pdf/hooks/use-pdf-text-selection";
 import { usePdfViewerHandle } from "@/components/viewer/pdf/hooks/use-pdf-viewer-handle";
@@ -845,16 +846,35 @@ function PdfViewerInner({
 		[formulaAnnotationPreview],
 	);
 
-	// ---- Region-crop visual marks (⌘. framing / layout hover) ----
+	// ---- Region framing (⌘. marquee → crop) ----
 
 	const {
 		regionSelecting,
 		visualCropPending,
-		visualError,
-		visualCardExpanded,
 		toggleRegionSelect,
 		beginVisualAnnotation,
 		handleVisualRegionSelect,
+	} = usePdfRegionFraming({
+		docId,
+		engine,
+		docCap,
+		selectionCap,
+		interactionCap,
+		setSelectionMenu,
+		openVisualDraftEditor,
+		closeVisualDraftEditor,
+		closeFormulaAnnotationPreview,
+		screenPointForRegion,
+		layoutHoverSeqRef,
+		regionSelectingRef,
+		visualCropPendingRef,
+	});
+
+	// ---- Visual marks (draft save, agent turns, existing pins) ----
+
+	const {
+		visualError,
+		visualCardExpanded,
 		handleVisualDraftSave,
 		handleVisualAddToChat,
 		handleVisualSendNow,
@@ -867,14 +887,8 @@ function PdfViewerInner({
 		deleteVisualTraceById,
 		resetVisualCardChrome,
 	} = usePdfVisualMarks({
-		docId,
 		paperAbsPath,
 		paperRelPath,
-		engine,
-		docCap,
-		selectionCap,
-		interactionCap,
-		setSelectionMenu,
 		visualTracesRef,
 		setVisualTraces,
 		upsertVisualTrace,
@@ -885,13 +899,7 @@ function PdfViewerInner({
 		setCardScreen,
 		resolvePdfAskAgent,
 		visualDraftEditor,
-		openVisualDraftEditor,
 		closeVisualDraftEditor,
-		closeFormulaAnnotationPreview,
-		screenPointForRegion,
-		layoutHoverSeqRef,
-		regionSelectingRef,
-		visualCropPendingRef,
 	});
 	beginVisualAnnotationRef.current = beginVisualAnnotation;
 	resetVisualCardChromeRef.current = resetVisualCardChrome;
