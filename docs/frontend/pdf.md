@@ -17,11 +17,13 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 抗抽动（twitch）措施：瓦片 `extraRings: 1` 预渲染视口外圈，减少快速滚动时边缘瓦片延迟弹出；`TilingLayer` patch 在新瓦片集异步光栅到达前保留旧瓦片作拉伸占位（`scale/srcScale` 重映射，1.5s 超时兜底），消除缩放瞬间的空白闪烁；marks 4s 轮询结果先做 JSON 指纹比对，内容未变不提交 state，避免周期性整 viewer 重渲染。
 
+滚动路径开销（触控板一帧内可触发多次 scroll）另有两处收敛：viewport 滚动指标按动画帧合并后再 `setViewportScrollMetrics`（每次提交都会推出新的 scroller layout 对象，令所有挂载页重渲染）；layout hover 命中框与 Eye 调试框按 `hoverableLayoutRegionsByPage` / `rawLayoutRegionsByPage` 预先分页缓存，页渲染只做 `Map.get`，不再每页重跑一遍全文档 NMS。
+
 ## 阅读能力
 
 | 能力 | 说明 |
 |---|---|
-| 缩放 | 可输入 50%–300% 精确比例；支持 +/-、⌘滚轮；适应宽度 / 适应整页放在底部栏的沉浸式按钮左侧；真实 scale 重渲染。⌘滚轮步进按动画帧合并（`createWheelZoomCoalescer`）：一帧内多个 wheel 事件先累加抵消，再一次性应用净步进，避免触控板高频事件逐事件触发整页重光栅 |
+| 缩放 | 可输入 50%–300% 精确比例；支持 +/-、⌘滚轮；适应宽度 / 适应整页放在底部栏的沉浸式按钮左侧；真实 scale 重渲染。⌘滚轮步进按动画帧合并（`createWheelZoomCoalescer`）：一帧内多个 wheel 事件先累加抵消，再一次性应用净步进，避免触控板高频事件逐事件触发整页重光栅。wheel 监听不常驻 non-passive（`bindWheelZoomGesture`）：普通滚动手势期间切成 passive，滚轮静默后再换回 non-passive，保证捏合缩放仍可 `preventDefault`，同时普通滚动不被主线程阻塞 |
 | 导航 | 底部页码 pill、PageUp/Down、Home/End |
 | 大纲 | 左侧书签浮层 |
 | 查找 | `⌘F` + 命中高亮 |
@@ -78,7 +80,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/lib/pdf/region.ts` | 区域坐标归一化与 PDF rect 转换 |
 | `src/lib/pdf/translate/` | 划词翻译 IO |
 | `src/lib/pdf/zoom.ts` | 精确缩放比例解析与范围限制 |
-| `src/lib/pdf/wheel-zoom.ts` | ⌘滚轮缩放 delta 累加与每帧合并步进 |
+| `src/lib/pdf/wheel-zoom.ts` | ⌘滚轮缩放 delta 累加与每帧合并步进；wheel 监听 passive / non-passive 切换 |
 | `src/lib/pdf/annotations-store.ts` | 按 tab 状态 |
 | `src/lib/pdf/selection/` | 选区与 marks IO |
 
