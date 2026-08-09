@@ -1,7 +1,6 @@
 import { createPluginRegistration } from "@embedpdf/core";
 import { EmbedPDF } from "@embedpdf/core/react";
 import type {
-	PdfBookmarkObject,
 	PdfHighlightAnnoObject,
 	PdfLinkAnnoObject,
 } from "@embedpdf/models";
@@ -105,6 +104,7 @@ import type {
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
 import { usePdfCards } from "@/components/viewer/embed/use-pdf-cards";
 import { usePdfFind } from "@/components/viewer/embed/use-pdf-find";
+import { usePdfOutline } from "@/components/viewer/embed/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/embed/use-pdf-page-text";
 import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
 import i18n from "@/i18n";
@@ -206,7 +206,6 @@ import {
 	setLayoutOverlayVisible,
 	toLayoutTranslateItems,
 } from "@/lib/pdf/layout";
-import { setPaperOutline } from "@/lib/pdf/outline-location";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
@@ -569,8 +568,6 @@ function PdfViewerInner({
 	const [translateError, setTranslateError] = useState<string | null>(null);
 	const translateStreamingRef = useRef(false);
 
-	const [outline, setOutline] = useState<PdfBookmarkObject[]>([]);
-	const [showOutline, setShowOutline] = useState(false);
 	const [pdfColorScheme, setPdfColorScheme] =
 		useState<PdfColorScheme>(readPdfColorScheme);
 
@@ -718,6 +715,14 @@ function PdfViewerInner({
 		findPrev,
 		closeFind,
 	} = usePdfFind({ hostRef, search, searchState, scroll });
+
+	const { outline, showOutline, toggleOutline } = usePdfOutline({
+		bookmarkCap,
+		docId,
+		totalPages,
+		paperAbsPath,
+		paperRelPath,
+	});
 
 	const togglePdfColorScheme = useCallback(() => {
 		setPdfColorScheme((current) => {
@@ -2984,28 +2989,6 @@ function PdfViewerInner({
 		rePlaceActiveCardOnScroll,
 	]);
 
-	// Load the document outline (bookmarks / TOC) once available.
-	useEffect(() => {
-		if (!bookmarkCap || totalPages <= 0) return;
-		let cancelled = false;
-		void bookmarkCap
-			.forDocument(docId)
-			.getBookmarks()
-			.toPromise()
-			.then((res) => {
-				if (cancelled) return;
-				const bookmarks = res?.bookmarks ?? [];
-				setOutline(bookmarks);
-				// Share with annotation embeds for location breadcrumbs.
-				const paperKey = paperAbsPath || paperRelPath;
-				if (paperKey) setPaperOutline(paperKey, bookmarks);
-			})
-			.catch(() => undefined);
-		return () => {
-			cancelled = true;
-		};
-	}, [bookmarkCap, docId, totalPages, paperAbsPath, paperRelPath]);
-
 	const saveEditor = useCallback(
 		(text: string) => {
 			if (!editor) return;
@@ -3690,7 +3673,7 @@ function PdfViewerInner({
 			<PdfOutlinePanel
 				outline={outline}
 				showOutline={showOutline}
-				onToggleOutline={() => setShowOutline((v) => !v)}
+				onToggleOutline={toggleOutline}
 				onGoToPage={goToPage}
 			/>
 			<PdfFindBar
