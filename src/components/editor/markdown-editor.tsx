@@ -18,6 +18,7 @@ import {
 import { MarkdownDocProvider } from "@/components/editor/context/markdown-doc-context";
 import { Editor, EditorContainer } from "@/components/editor/editor-surface";
 import { WikiEmbedProjectionProvider } from "@/components/editor/embeds/projection-context";
+import { useMarkdownPersistence } from "@/components/editor/hooks/use-markdown-persistence";
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
 import { FindReplaceBar } from "@/components/editor/overlays/find-replace-bar";
 import { FrontmatterPanel } from "@/components/editor/overlays/frontmatter-panel";
@@ -57,7 +58,7 @@ import { errorMessage, notifyError, notifyWarning } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import { editorCompletionHasFocus } from "@/lib/markdown/completion-focus";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
-import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown/doc";
+import { splitFrontmatter } from "@/lib/markdown/doc";
 import {
 	type EditorLinkTemplateKind,
 	editorContextMenuCapabilities,
@@ -69,16 +70,7 @@ import {
 	replaceMarkdownEditorValue,
 } from "@/lib/markdown/editor-format";
 import { formatMarkdownSource } from "@/lib/markdown/format";
-import {
-	frontmatterInterior,
-	wrapFrontmatter,
-} from "@/lib/markdown/frontmatter";
-import {
-	collectImageUrlCounts,
-	createManagedAssetGc,
-	saveImageToMarkdownAssets,
-} from "@/lib/markdown/image";
-import { settleMarkdownSaveAttempt } from "@/lib/markdown/save-state";
+import { saveImageToMarkdownAssets } from "@/lib/markdown/image";
 import { findSlashCommandTrigger } from "@/lib/markdown/slash-command";
 import { formatModShortcut } from "@/lib/shell/shortcuts";
 import type { LinkFragment, WikiRenameHeadingRequest } from "@/lib/wiki";
@@ -146,8 +138,6 @@ export type MarkdownEditorProps = {
 	navigationIntent?: { id: number; fragment: LinkFragment };
 };
 
-const CHANGE_DEBOUNCE_MS = 500;
-
 const EmbeddedMarkdownProjection = lazy(async () => {
 	const module = await import(
 		"@/components/editor/embeds/embedded-markdown-projection"
@@ -176,42 +166,10 @@ export function MarkdownEditor({
 	onRenameHeading,
 	navigationIntent,
 }: MarkdownEditorProps) {
-	const frontmatterRef = useRef("");
-	/** YAML interior for the Properties panel (no `---` fences). */
-	const [frontmatterYaml, setFrontmatterYaml] = useState(() => {
-		const { frontmatter } = splitFrontmatter(initialMarkdown);
-		// Seed ref before first serialize / persist can run.
-		frontmatterRef.current = frontmatter;
-		return frontmatterInterior(frontmatter);
-	});
-	const savedRef = useRef(initialMarkdown);
-	const readyRef = useRef(false);
-	/**
-	 * Tracks the dirty flag so `onDirtyChange` fires only on a real transition.
-	 * Without this, every keystroke would call it and re-render the whole app
-	 * (the tab-bar unsaved indicator), which made editing laggy on large notes.
-	 */
-	const dirtyRef = useRef(false);
-	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const persistInFlightRef = useRef<Promise<void> | null>(null);
-	const persistQueuedRef = useRef(false);
 	const filePathRef = useRef(filePath ?? null);
 	filePathRef.current = filePath ?? null;
 	const onAssetsChangedRef = useRef(onAssetsChanged);
 	onAssetsChangedRef.current = onAssetsChanged;
-	/** Image URL ref-counts; used to GC `./assets/` when an image node is removed. */
-	const imageCountsRef = useRef<Map<string, number> | null>(null);
-	/**
-	 * Debounced asset GC so cut → paste / undo still finds the file.
-	 * Immediate delete used to leave a live `./assets/…` node with a missing file.
-	 */
-	const assetGcRef = useRef(
-		createManagedAssetGc({
-			onDeleted: () => {
-				onAssetsChangedRef.current?.();
-			},
-		}),
-	);
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
 	const contextMenuSelectionRef = useRef<RangeRef | null>(null);
 	const completionControllerRef = useRef<WikiCompletionController | null>(null);
@@ -322,12 +280,30 @@ export function MarkdownEditor({
 	const editor = usePlateEditor({
 		plugins,
 		value: (ed) => {
-			const { frontmatter, body } = splitFrontmatter(initialMarkdown);
-			frontmatterRef.current = frontmatter;
+			const { body } = splitFrontmatter(initialMarkdown);
 			return ed
 				.getApi(MarkdownPlugin)
 				.markdown.deserialize(prepareMarkdownForDeserialize(body || " "));
 		},
+	});
+
+	const {
+		frontmatterYaml,
+		onFrontmatterChange: handleFrontmatterChange,
+		serialize,
+		noteDocumentChanged,
+		saveNow,
+		savedRef,
+		dirtyRef,
+	} = useMarkdownPersistence({
+		editor,
+		initialMarkdown,
+		filePath,
+		readOnly,
+		onPersist,
+		onDirtyChange,
+		filePathRef,
+		onAssetsChangedRef,
 	});
 
 	/**
@@ -463,134 +439,11 @@ export function MarkdownEditor({
 		});
 	}, [editor]);
 
-	const serialize = useCallback(() => {
-		const body = editor.getApi(MarkdownPlugin).markdown.serialize();
-		return joinFrontmatter(frontmatterRef.current, body);
-	}, [editor]);
-
-	const setDirty = useCallback(
-		(dirty: boolean) => {
-			if (dirtyRef.current === dirty) return;
-			dirtyRef.current = dirty;
-			onDirtyChange?.(dirty);
-		},
-		[onDirtyChange],
-	);
-
-	const persist = useCallback(() => {
-		if (readOnly || !filePath || !onPersist) return;
-		persistQueuedRef.current = true;
-		if (persistInFlightRef.current) return;
-
-		const task = (async () => {
-			while (persistQueuedRef.current) {
-				persistQueuedRef.current = false;
-				const markdown = serialize();
-				const lastSaved = savedRef.current;
-				if (markdown === lastSaved) {
-					setDirty(false);
-					continue;
-				}
-				if (!markdown.trim() && lastSaved.trim()) return;
-
-				let persisted = false;
-				try {
-					persisted = await onPersist(filePath, markdown, lastSaved);
-				} catch {
-					// The App owns user-facing persistence errors. Keep this editor
-					// dirty and retain the last disk-confirmed snapshot.
-				}
-				const settlement = settleMarkdownSaveAttempt({
-					attemptedMarkdown: markdown,
-					currentMarkdown: serialize(),
-					lastSaved,
-					persisted,
-				});
-				savedRef.current = settlement.savedMarkdown;
-				setDirty(settlement.dirty);
-				if (!persisted) {
-					persistQueuedRef.current = false;
-					return;
-				}
-				if (settlement.retryLatest) persistQueuedRef.current = true;
-			}
-		})();
-		persistInFlightRef.current = task;
-		const finish = () => {
-			if (persistInFlightRef.current === task) {
-				persistInFlightRef.current = null;
-				if (persistQueuedRef.current) persistRef.current();
-			}
-		};
-		void task.then(finish, finish);
-	}, [filePath, onPersist, readOnly, serialize, setDirty]);
-
-	// Latest persist closure, for the unmount flush (captures this file's path).
-	const persistRef = useRef(persist);
-	persistRef.current = persist;
-
-	// Mark ready after the initial normalization pass so opening a file never saves.
-	// Seed image URL counts so we only GC assets removed after open.
-	// On unmount, flush pending edit + deferred asset GC for this file.
-	useEffect(() => {
-		readyRef.current = true;
-		imageCountsRef.current = collectImageUrlCounts(editor.children);
-		const assetGc = assetGcRef.current;
-		return () => {
-			if (timerRef.current) {
-				clearTimeout(timerRef.current);
-				timerRef.current = null;
-				persistRef.current();
-			}
-			void assetGc.flush();
-		};
-	}, [editor]);
-
-	const schedulePersist = useCallback(() => {
-		if (readOnly || !readyRef.current) return;
-		if (!dirtyRef.current) {
-			setDirty(true);
-		}
-		if (timerRef.current) clearTimeout(timerRef.current);
-		timerRef.current = setTimeout(() => {
-			timerRef.current = null;
-			persistRef.current();
-		}, CHANGE_DEBOUNCE_MS);
-	}, [readOnly, setDirty]);
-
-	const handleFrontmatterChange = useCallback(
-		(interior: string) => {
-			setFrontmatterYaml(interior);
-			frontmatterRef.current = wrapFrontmatter(interior);
-			schedulePersist();
-		},
-		[schedulePersist],
-	);
-
 	const handleChange = useCallback(() => {
 		window.requestAnimationFrame(updateWikiCompletionDraft);
 		window.requestAnimationFrame(updateSlashCommandDraft);
-		if (readOnly || !readyRef.current) return;
-
-		// Schedule (or cancel) managed asset GC from ref-count deltas.
-		const nextCounts = collectImageUrlCounts(editor.children);
-		const prevCounts = imageCountsRef.current;
-		imageCountsRef.current = nextCounts;
-		const mdPath = filePathRef.current;
-		// Skip bookkeeping for image-free notes — the common case.
-		if (mdPath && prevCounts && (prevCounts.size || nextCounts.size)) {
-			assetGcRef.current.observe(mdPath, prevCounts, nextCounts);
-		}
-
-		// Mark dirty once (not on every keystroke) to avoid re-rendering the app.
-		schedulePersist();
-	}, [
-		editor,
-		readOnly,
-		schedulePersist,
-		updateSlashCommandDraft,
-		updateWikiCompletionDraft,
-	]);
+		noteDocumentChanged();
+	}, [noteDocumentChanged, updateSlashCommandDraft, updateWikiCompletionDraft]);
 
 	const expandWikiLinkAt = useCallback(
 		(path: number[], cursorOffset: number) => {
@@ -1220,11 +1073,7 @@ export function MarkdownEditor({
 			}
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
 				event.preventDefault();
-				if (timerRef.current) {
-					clearTimeout(timerRef.current);
-					timerRef.current = null;
-				}
-				persistRef.current();
+				saveNow();
 			}
 		},
 		[
@@ -1232,6 +1081,7 @@ export function MarkdownEditor({
 			handleWikiLinkArrow,
 			handleWikiLinkBoundaryDelete,
 			handleWikiLinkDraftEnter,
+			saveNow,
 		],
 	);
 
@@ -1319,7 +1169,7 @@ export function MarkdownEditor({
 		return heading
 			? savedWikiHeadingAt(savedRef.current, ordinal, heading.level)
 			: null;
-	}, [editor]);
+	}, [editor, savedRef.current]);
 
 	const handleEditorContextMenu = useCallback(() => {
 		contextMenuSelectionRef.current?.unref();
@@ -1342,7 +1192,13 @@ export function MarkdownEditor({
 				? heading
 				: null,
 		);
-	}, [currentHeadingAnchor, editor, onRenameHeading, readOnly]);
+	}, [
+		currentHeadingAnchor,
+		editor,
+		onRenameHeading,
+		readOnly,
+		dirtyRef.current,
+	]);
 
 	const handleContextMenuOpenChange = useCallback((open: boolean) => {
 		if (open) return;
@@ -1515,7 +1371,13 @@ export function MarkdownEditor({
 				setHeadingRenameBusy(false);
 			}
 		},
-		[headingContext, onRenameHeading, readOnly],
+		[
+			headingContext,
+			onRenameHeading,
+			readOnly,
+			savedRef.current,
+			dirtyRef.current,
+		],
 	);
 
 	const docCtx = useMemo(
