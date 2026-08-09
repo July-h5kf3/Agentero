@@ -75,3 +75,90 @@ export function createWheelZoomCoalescer({
 		},
 	};
 }
+
+/** Wheel stream must be silent this long before a scroll gesture is over. */
+export const WHEEL_SCROLL_IDLE_MS = 200;
+
+export type WheelZoomGestureOptions = {
+	target: Pick<HTMLElement, "addEventListener" | "removeEventListener">;
+	/** Ctrl/Cmd+wheel or trackpad pinch tick, already default-prevented when possible. */
+	onZoomWheel: (event: WheelEvent) => void;
+	/** Wheel-idle delay before plain scrolling is assumed finished. */
+	scrollIdleMs?: number;
+};
+
+/**
+ * Bind wheel-zoom without keeping the container permanently non-passive.
+ *
+ * A non-passive wheel listener forces every tick through the main thread before
+ * the container may scroll, which shows up as scroll jank whenever the viewer is
+ * busy. Zoom still needs `preventDefault` (platform pinch zoom would otherwise
+ * scale the whole app), so the non-passive listener stays attached until a plain
+ * scroll gesture starts and comes back once the wheel stream goes idle. A pinch
+ * that begins mid-scroll still zooms; only that first tick keeps its default.
+ */
+export function bindWheelZoomGesture({
+	target,
+	onZoomWheel,
+	scrollIdleMs = WHEEL_SCROLL_IDLE_MS,
+}: WheelZoomGestureOptions): { dispose(): void } {
+	let passive = false;
+	let idleTimer: ReturnType<typeof setTimeout> | null = null;
+	let disposed = false;
+
+	const clearIdleTimer = () => {
+		if (idleTimer === null) return;
+		clearTimeout(idleTimer);
+		idleTimer = null;
+	};
+
+	const setPassive = (next: boolean) => {
+		if (passive === next) return;
+		target.removeEventListener(
+			"wheel",
+			passive ? passiveListener : activeListener,
+		);
+		passive = next;
+		target.addEventListener("wheel", next ? passiveListener : activeListener, {
+			passive: next,
+		});
+	};
+
+	const handleWheel = (event: WheelEvent, canPreventDefault: boolean) => {
+		if (disposed) return;
+		if (event.ctrlKey || event.metaKey) {
+			if (canPreventDefault && event.cancelable) event.preventDefault();
+			clearIdleTimer();
+			setPassive(false);
+			onZoomWheel(event);
+			return;
+		}
+		setPassive(true);
+		clearIdleTimer();
+		idleTimer = setTimeout(() => {
+			idleTimer = null;
+			setPassive(false);
+		}, scrollIdleMs);
+	};
+
+	function activeListener(event: WheelEvent) {
+		handleWheel(event, true);
+	}
+	function passiveListener(event: WheelEvent) {
+		handleWheel(event, false);
+	}
+
+	target.addEventListener("wheel", activeListener, { passive: false });
+
+	return {
+		dispose() {
+			if (disposed) return;
+			disposed = true;
+			clearIdleTimer();
+			target.removeEventListener(
+				"wheel",
+				passive ? passiveListener : activeListener,
+			);
+		},
+	};
+}

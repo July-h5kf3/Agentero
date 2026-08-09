@@ -261,7 +261,10 @@ import {
 	writePdfTranslate,
 } from "@/lib/pdf/translate";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
-import { createWheelZoomCoalescer } from "@/lib/pdf/wheel-zoom";
+import {
+	bindWheelZoomGesture,
+	createWheelZoomCoalescer,
+} from "@/lib/pdf/wheel-zoom";
 import {
 	formatPdfZoomPercentage,
 	PDF_ZOOM_MAX,
@@ -692,7 +695,8 @@ function ActiveCardScrollSync({
  * Steps are coalesced per animation frame (createWheelZoomCoalescer): a
  * trackpad pinch fires many wheel events per second, and each applied step
  * re-rasterizes all visible pages on the main thread — batching keeps that to
- * once per frame.
+ * once per frame. bindWheelZoomGesture keeps the listener passive while the user
+ * is merely scrolling, so plain scrolls stay off the main thread.
  */
 function WheelZoomHandler({ docId }: { docId: string }) {
 	const viewportRef = useViewportElement();
@@ -718,19 +722,17 @@ function WheelZoomHandler({ docId }: { docId: string }) {
 			}, 150);
 		};
 
-		const handleWheel = (e: WheelEvent) => {
-			if (!e.ctrlKey && !e.metaKey) return;
-			e.preventDefault();
+		const binding = bindWheelZoomGesture({
+			target: container,
+			onZoomWheel: (e) => {
+				if (!zoomRef.current) return;
+				coalescer.addDelta(e.deltaY);
+				scheduleReset();
+			},
+		});
 
-			if (!zoomRef.current) return;
-
-			coalescer.addDelta(e.deltaY);
-			scheduleReset();
-		};
-
-		container.addEventListener("wheel", handleWheel, { passive: false });
 		return () => {
-			container.removeEventListener("wheel", handleWheel);
+			binding.dispose();
 			if (resetTimeout) clearTimeout(resetTimeout);
 			coalescer.dispose();
 		};
