@@ -5,7 +5,7 @@ import {
 	type PlateElementProps,
 	useSelected,
 } from "platejs/react";
-import type { MouseEvent } from "react";
+import { type MouseEvent, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/context/markdown-doc-context";
 import { WikiEmbedElement } from "@/components/editor/embeds/wiki-embed-node";
@@ -38,7 +38,13 @@ function WikiLinkNavigationElement({
 	const markdownDoc = useMarkdownDoc();
 
 	const target = el.value ?? "";
-	const path = resolveWikiTarget(target, wikiNav?.mdFiles ?? []);
+	const mdFiles = wikiNav?.mdFiles ?? [];
+	// resolveWikiTarget scans the whole md file list several times over; this
+	// component re-renders on every selection change that touches the link.
+	const path = useMemo(
+		() => resolveWikiTarget(target, mdFiles),
+		[mdFiles, target],
+	);
 	const fragment: LinkFragment | undefined = el.heading
 		? el.heading.startsWith("^")
 			? { kind: "block", id: el.heading.slice(1) }
