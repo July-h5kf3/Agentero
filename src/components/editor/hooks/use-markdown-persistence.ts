@@ -47,7 +47,7 @@ export type MarkdownPersistence = {
 	onFrontmatterChange: (interior: string) => void;
 	/** The whole document as Markdown, frontmatter re-attached. */
 	serialize: () => string;
-	/** Debounced autosave plus `./assets/` ref-count reconciliation. */
+	/** Debounced autosave; also reconciles `./assets/` when the debounce fires. */
 	noteDocumentChanged: () => void;
 	/** Flush the pending debounce and write immediately. */
 	saveNow: () => void;
@@ -170,6 +170,26 @@ export function useMarkdownPersistence({
 	const persistRef = useRef(persist);
 	persistRef.current = persist;
 
+	/**
+	 * Diff `./assets/` ref-counts and hand the delta to the GC.
+	 *
+	 * `collectImageUrlCounts` walks every node, so this runs once per debounce
+	 * window rather than per keystroke. The GC is itself debounced, so deferring
+	 * the diff does not change when files actually get deleted.
+	 */
+	const reconcileAssets = useCallback(() => {
+		const nextCounts = collectImageUrlCounts(editor.children);
+		const prevCounts = imageCountsRef.current;
+		imageCountsRef.current = nextCounts;
+		const mdPath = filePathRef.current;
+		// Skip bookkeeping for image-free notes — the common case.
+		if (mdPath && prevCounts && (prevCounts.size || nextCounts.size)) {
+			assetGcRef.current.observe(mdPath, prevCounts, nextCounts);
+		}
+	}, [editor, filePathRef]);
+	const reconcileAssetsRef = useRef(reconcileAssets);
+	reconcileAssetsRef.current = reconcileAssets;
+
 	// Mark ready after the initial normalization pass so opening a file never saves.
 	// Seed image URL counts so we only GC assets removed after open.
 	// On unmount, flush pending edit + deferred asset GC for this file.
@@ -181,6 +201,7 @@ export function useMarkdownPersistence({
 			if (timerRef.current) {
 				clearTimeout(timerRef.current);
 				timerRef.current = null;
+				reconcileAssetsRef.current();
 				persistRef.current();
 			}
 			void assetGc.flush();
@@ -195,6 +216,7 @@ export function useMarkdownPersistence({
 		if (timerRef.current) clearTimeout(timerRef.current);
 		timerRef.current = setTimeout(() => {
 			timerRef.current = null;
+			reconcileAssetsRef.current();
 			persistRef.current();
 		}, CHANGE_DEBOUNCE_MS);
 	}, [readOnly, setDirty]);
@@ -208,28 +230,12 @@ export function useMarkdownPersistence({
 		[schedulePersist],
 	);
 
-	const noteDocumentChanged = useCallback(() => {
-		if (readOnly || !readyRef.current) return;
-
-		// Schedule (or cancel) managed asset GC from ref-count deltas.
-		const nextCounts = collectImageUrlCounts(editor.children);
-		const prevCounts = imageCountsRef.current;
-		imageCountsRef.current = nextCounts;
-		const mdPath = filePathRef.current;
-		// Skip bookkeeping for image-free notes — the common case.
-		if (mdPath && prevCounts && (prevCounts.size || nextCounts.size)) {
-			assetGcRef.current.observe(mdPath, prevCounts, nextCounts);
-		}
-
-		// Mark dirty once (not on every keystroke) to avoid re-rendering the app.
-		schedulePersist();
-	}, [editor, filePathRef, readOnly, schedulePersist]);
-
 	const saveNow = useCallback(() => {
 		if (timerRef.current) {
 			clearTimeout(timerRef.current);
 			timerRef.current = null;
 		}
+		reconcileAssetsRef.current();
 		persistRef.current();
 	}, []);
 
@@ -237,7 +243,7 @@ export function useMarkdownPersistence({
 		frontmatterYaml,
 		onFrontmatterChange,
 		serialize,
-		noteDocumentChanged,
+		noteDocumentChanged: schedulePersist,
 		saveNow,
 		savedRef,
 		dirtyRef,
