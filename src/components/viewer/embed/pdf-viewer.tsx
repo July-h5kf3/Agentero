@@ -342,6 +342,37 @@ function isPdfDocumentCloseRaceError(error: unknown): boolean {
 	return /document does not open/i.test(message);
 }
 
+function isEditableClipboardTarget(target: EventTarget | null): boolean {
+	if (!(target instanceof HTMLElement)) return false;
+	const editable = target.closest(
+		"input, textarea, select, [role='textbox'], [contenteditable]",
+	);
+	return (
+		editable instanceof HTMLElement &&
+		editable.getAttribute("contenteditable") !== "false"
+	);
+}
+
+function nativeSelectionBelongsToHost(host: HTMLElement | null): boolean {
+	if (!host) return false;
+	const selection = window.getSelection();
+	if (!selection || selection.isCollapsed || selection.rangeCount === 0)
+		return false;
+	const node = selection.getRangeAt(0).commonAncestorContainer;
+	const el =
+		node.nodeType === Node.ELEMENT_NODE
+			? (node as Element)
+			: node.parentElement;
+	return Boolean(el && host.contains(el));
+}
+
+function hasNativeSelectionOutsideHost(host: HTMLElement | null): boolean {
+	const selection = window.getSelection();
+	if (!selection || selection.isCollapsed || !selection.toString().trim())
+		return false;
+	return !nativeSelectionBelongsToHost(host);
+}
+
 export type PdfViewerHandle = {
 	getHighlights: () => PdfHighlight[];
 	scrollToHighlight: (id: string) => void;
@@ -3249,6 +3280,41 @@ function PdfViewerInner({
 	const handleCopy = useCallback(() => {
 		selectionCap?.copyToClipboard(docId);
 	}, [selectionCap, docId]);
+
+	useEffect(() => {
+		if (!isActive || !selectionMenu || !selectionCap) return;
+		const selectedText = selectionMenu.anchor.quote ?? "";
+		if (!selectedText.trim()) return;
+		const host = hostRef.current;
+
+		const shouldHandlePdfCopy = (target: EventTarget | null): boolean => {
+			if (isEditableClipboardTarget(target)) return false;
+			if (hasNativeSelectionOutsideHost(host)) return false;
+			return true;
+		};
+
+		const onCopy = (event: ClipboardEvent) => {
+			if (!shouldHandlePdfCopy(event.target)) return;
+			event.preventDefault();
+			event.clipboardData?.setData("text/plain", selectedText);
+		};
+
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (!(event.metaKey || event.ctrlKey)) return;
+			if (event.shiftKey || event.altKey || event.key.toLowerCase() !== "c")
+				return;
+			if (!shouldHandlePdfCopy(event.target)) return;
+			event.preventDefault();
+			selectionCap.copyToClipboard(docId);
+		};
+
+		document.addEventListener("copy", onCopy);
+		window.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("copy", onCopy);
+			window.removeEventListener("keydown", onKeyDown);
+		};
+	}, [isActive, selectionMenu, selectionCap, docId]);
 
 	const handleMenuAsk = useCallback(() => {
 		if (!selectionMenu) return;
