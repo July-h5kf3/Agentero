@@ -2223,6 +2223,15 @@ function PdfViewerInner({
 		}
 	}, [cancelLayoutDraftHide, docId]);
 
+	/** Enter/leave region framing. Shared by the toolbar and the handle. */
+	const toggleRegionSelect = useCallback(() => {
+		if (visualCropPendingRef.current) return;
+		setSelectionMenu(null);
+		closeVisualDraftEditor();
+		selectionCap?.clear(docId);
+		setRegionSelecting((active) => !active);
+	}, [closeVisualDraftEditor, selectionCap, docId]);
+
 	const closeFormulaAnnotationPreview = useCallback(() => {
 		cancelFormulaHover();
 		cancelFormulaHide();
@@ -2408,20 +2417,29 @@ function PdfViewerInner({
 	);
 
 	/**
+	 * True while another interaction owns the page: region framing, an in-flight
+	 * crop, an open visual draft, or the selection menu. Layout hover must not
+	 * open on top of any of them.
+	 */
+	const layoutHoverBlocked = useCallback(
+		() =>
+			Boolean(
+				regionSelectingRef.current ||
+					visualCropPendingRef.current ||
+					visualDraftEditorRef.current ||
+					selectionMenuRef.current,
+			),
+		[],
+	);
+
+	/**
 	 * After dwelling on a layout region:
 	 * - formula + Annotation.md symbols → 「公式解析」glossary card (light UX)
 	 * - otherwise → same visual editor as manual region-select (crop only)
 	 */
 	const scheduleLayoutHoverOpen = useCallback(
 		(region: PdfLayoutRegion) => {
-			if (
-				regionSelectingRef.current ||
-				visualCropPendingRef.current ||
-				visualDraftEditorRef.current ||
-				selectionMenuRef.current
-			) {
-				return;
-			}
+			if (layoutHoverBlocked()) return;
 
 			const symbols = equationSymbolsRef.current;
 			const formulaLegend =
@@ -2454,14 +2472,7 @@ function PdfViewerInner({
 				formulaHoverTimerRef.current = setTimeout(() => {
 					formulaHoverTimerRef.current = null;
 					if (formulaHoverRegionIdRef.current !== region.id) return;
-					if (
-						regionSelectingRef.current ||
-						visualCropPendingRef.current ||
-						visualDraftEditorRef.current ||
-						selectionMenuRef.current
-					) {
-						return;
-					}
+					if (layoutHoverBlocked()) return;
 					openFormulaLegend(region);
 				}, LAYOUT_FORMULA_HOVER_DWELL_MS);
 				return;
@@ -2483,15 +2494,7 @@ function PdfViewerInner({
 			layoutHoverTimerRef.current = setTimeout(() => {
 				layoutHoverTimerRef.current = null;
 				if (layoutHoverRegionIdRef.current !== region.id) return;
-				if (
-					regionSelectingRef.current ||
-					visualCropPendingRef.current ||
-					visualDraftEditorRef.current ||
-					formulaAnnotationPreviewRef.current ||
-					selectionMenuRef.current
-				) {
-					return;
-				}
+				if (layoutHoverBlocked() || formulaAnnotationPreviewRef.current) return;
 				setFocusedLayoutRegion(docId, region.id);
 				const seq = ++layoutHoverSeqRef.current;
 				void beginVisualAnnotation(region.pageIndex + 1, region.bbox, {
@@ -2505,6 +2508,7 @@ function PdfViewerInner({
 			cancelFormulaHover,
 			cancelLayoutHover,
 			docId,
+			layoutHoverBlocked,
 			markFormulaHoverEnter,
 			openFormulaLegend,
 		],
@@ -2939,14 +2943,10 @@ function PdfViewerInner({
 		const latest = visualTracesRef.current.find((tr) => tr.id === traceId);
 		if (!latest) return;
 		void (async () => {
-			const image =
-				(await loadPdfVisualTraceImage(paperAbsPath ?? "", latest.image)) ??
-				(latest.image?.data
-					? {
-							data: latest.image.data,
-							mimeType: latest.image.mimeType || "image/png",
-						}
-					: null);
+			const image = await loadPdfVisualTraceImage(
+				paperAbsPath ?? "",
+				latest.image,
+			);
 			if (!image?.data) {
 				notifyError(t("pdfExplain.cropFailed"));
 				return;
@@ -3023,17 +3023,10 @@ function PdfViewerInner({
 						| import("@/lib/agent/visual-context-store").PdfVisualDraft[]
 						| undefined;
 					if (firstAgentAttach) {
-						const image =
-							(await loadPdfVisualTraceImage(
-								paperAbsPath ?? "",
-								latest.image,
-							)) ??
-							(latest.image?.data
-								? {
-										data: latest.image.data,
-										mimeType: latest.image.mimeType || "image/png",
-									}
-								: null);
+						const image = await loadPdfVisualTraceImage(
+							paperAbsPath ?? "",
+							latest.image,
+						);
 						if (image?.data) {
 							visualDrafts = [
 								{
@@ -4156,13 +4149,7 @@ function PdfViewerInner({
 			deleteVisualTrace: (id) => {
 				deleteVisualTraceById(id);
 			},
-			toggleVisualAnnotation: () => {
-				if (visualCropPending) return;
-				setSelectionMenu(null);
-				closeVisualDraftEditor();
-				selectionCap?.clear(docId);
-				setRegionSelecting((active) => !active);
-			},
+			toggleVisualAnnotation: toggleRegionSelect,
 			analyzeLayout: () => {
 				// Prefer source/layout.json → merge → sidebar. Full ONNX (PDF→JSON)
 				// only when there is no sidecar (or force is set elsewhere).
@@ -4220,9 +4207,7 @@ function PdfViewerInner({
 		openThread,
 		openCard,
 		deleteVisualTraceById,
-		selectionCap,
-		visualCropPending,
-		closeVisualDraftEditor,
+		toggleRegionSelect,
 	]);
 
 	// Keep the page-number input in sync with the observed current page.
@@ -4737,6 +4722,16 @@ function PdfViewerInner({
 		? t("pdf.useLightMode")
 		: t("pdf.useDarkMode");
 
+	const layoutTranslateRunning = layoutTranslateJob.status === "running";
+	const layoutTranslateActive =
+		layoutTranslateRunning ||
+		layoutTranslateJob.items.some((it) => it.translated);
+	const layoutTranslateLabel = layoutTranslateRunning
+		? t("pdf.layoutTranslate.stop")
+		: layoutTranslateActive
+			? t("pdf.layoutTranslate.clear")
+			: t("pdf.layoutTranslate.start");
+
 	return (
 		<div ref={hostRef} className="relative flex h-full min-h-0 w-full flex-col">
 			{outline.length > 0 ? (
@@ -4937,12 +4932,7 @@ function PdfViewerInner({
 									aria-label={t("pdfExplain.selectRegion")}
 									aria-pressed={regionSelecting}
 									disabled={visualCropPending || !engine}
-									onClick={() => {
-										setSelectionMenu(null);
-										closeVisualDraftEditor();
-										selectionCap?.clear(docId);
-										setRegionSelecting((active) => !active);
-									}}
+									onClick={toggleRegionSelect}
 								>
 									<ScanSearch
 										className={cn(
@@ -4967,28 +4957,14 @@ function PdfViewerInner({
 								<Button
 									type="button"
 									size="icon-xs"
-									variant={
-										layoutTranslateJob.status === "running" ||
-										layoutTranslateJob.items.some((it) => it.translated)
-											? "secondary"
-											: "ghost"
-									}
+									variant={layoutTranslateActive ? "secondary" : "ghost"}
 									className="shrink-0 self-center"
-									aria-label={
-										layoutTranslateJob.status === "running"
-											? t("pdf.layoutTranslate.stop")
-											: layoutTranslateJob.items.some((it) => it.translated)
-												? t("pdf.layoutTranslate.clear")
-												: t("pdf.layoutTranslate.start")
-									}
-									aria-pressed={
-										layoutTranslateJob.status === "running" ||
-										layoutTranslateJob.items.some((it) => it.translated)
-									}
+									aria-label={layoutTranslateLabel}
+									aria-pressed={layoutTranslateActive}
 									disabled={!engine}
 									onClick={toggleLayoutTranslate}
 								>
-									{layoutTranslateJob.status === "running" ? (
+									{layoutTranslateRunning ? (
 										<Loader2 className="size-3.5 animate-spin" aria-hidden />
 									) : (
 										<Languages className="size-3.5" aria-hidden />
@@ -4996,11 +4972,7 @@ function PdfViewerInner({
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent side="bottom">
-								{layoutTranslateJob.status === "running"
-									? t("pdf.layoutTranslate.stop")
-									: layoutTranslateJob.items.some((it) => it.translated)
-										? t("pdf.layoutTranslate.clear")
-										: t("pdf.layoutTranslate.start")}
+								{layoutTranslateLabel}
 							</TooltipContent>
 						</Tooltip>
 						{onOpenAnnotations ? (
