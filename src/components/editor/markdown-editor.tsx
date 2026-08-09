@@ -20,8 +20,8 @@ import { MarkdownEditorToolbar } from "@/components/editor/editor-toolbar";
 import { FindReplaceBar } from "@/components/editor/find-replace-bar";
 import { FrontmatterPanel } from "@/components/editor/frontmatter-panel";
 import { HeadingRenameDialog } from "@/components/editor/heading-rename-dialog";
-import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
+import { ImageElement } from "@/components/editor/nodes/block/image-node";
 import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
 import {

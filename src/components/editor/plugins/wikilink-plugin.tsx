@@ -1,7 +1,7 @@
 "use client";
 
 import { createPlatePlugin } from "platejs/react";
-import { WikiLinkElement } from "@/components/editor/wikilink-node";
+import { WikiLinkElement } from "@/components/editor/nodes/inline/wikilink-node";
 
 /**
  * Stable inline `[[wikilink]]` / `![[embed]]` node.

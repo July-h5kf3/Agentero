@@ -1,7 +1,7 @@
 import { ElementApi, KEYS, NodeApi } from "platejs";
 import { createPlatePlugin } from "platejs/react";
 
-import { LinkElement } from "@/components/editor/link-node";
+import { LinkElement } from "@/components/editor/nodes/inline/link-node";
 import {
 	convertCompleteMarkdownLinkAtCaret,
 	convertMarkdownLinkBeforeClosingParen,
