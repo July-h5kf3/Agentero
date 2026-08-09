@@ -43,7 +43,7 @@ import {
 	toggleLayoutOverlayVisible,
 } from "@/lib/pdf/layout";
 
-export type FiguresPanelProps = {
+type FiguresPanelProps = {
 	/** EmbedPDF documentId / PDF tab id used as layout store key. */
 	documentId: string | null;
 	/** Whether a PDF viewer handle is currently registered for this doc. */

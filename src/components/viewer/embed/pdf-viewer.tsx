@@ -933,7 +933,6 @@ type SelectionMenuState = {
 
 type CitationPreviewState = {
 	screen: { x: number; y: number };
-	marker: string;
 	previewText: string;
 };
 
@@ -941,7 +940,6 @@ type EditorState = {
 	screen: { x: number; y: number };
 	pageIndex: number;
 	id: string;
-	quote: string;
 	comment: string;
 };
 
@@ -1128,7 +1126,6 @@ function PdfViewerInner({
 	} | null>(null);
 	const [streaming, setStreaming] = useState(false);
 	const [askError, setAskError] = useState<string | null>(null);
-	const [visualStreaming, setVisualStreaming] = useState(false);
 	const [visualError, setVisualError] = useState<string | null>(null);
 	/** Keep the just-created Cmd+Enter card expanded until the user dismisses it. */
 	const [visualCardExpanded, setVisualCardExpanded] = useState(false);
@@ -1202,7 +1199,6 @@ function PdfViewerInner({
 	/** True while pointer is over the formula hit region or legend card. */
 	const formulaHoverSurfaceRef = useRef(false);
 	const activeSessionRef = useRef<string | null>(null);
-	const visualSessionRef = useRef<string | null>(null);
 	const translateSessionRef = useRef<string | null>(null);
 	const hidePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
@@ -3277,14 +3273,12 @@ function PdfViewerInner({
 
 	const handleStopVisualSession = useCallback(() => {
 		// Shared agent session store is the source of truth after modal↔panel
-		// unification. visualSessionRef is legacy and may be null for turns
-		// that went through requestTurn → panel send.
+		// unification.
 		const store = agentSessionStore.getState();
 		const card = activeCardRef.current;
 		const traceId = isVisualMarkKind(card?.kind) ? card.id : null;
 		const bound = traceId ? store.findByVisualTraceId(traceId) : undefined;
 		const sid =
-			visualSessionRef.current ||
 			bound?.id ||
 			(store.submitting && store.activeTabId !== "draft"
 				? store.activeTabId
@@ -3313,8 +3307,6 @@ function PdfViewerInner({
 			);
 		}
 		store.setSubmitting(false);
-		visualSessionRef.current = null;
-		setVisualStreaming(false);
 		setVisualError(null);
 	}, []);
 
@@ -3334,7 +3326,6 @@ function PdfViewerInner({
 				screen: rectRightScreen(pageEl, obj.rect, zoomRef.current),
 				pageIndex: obj.pageIndex,
 				id,
-				quote: ((obj.custom ?? {}) as { quote?: string }).quote?.trim() ?? "",
 				comment: obj.contents?.trim() ?? "",
 			});
 		},
@@ -3429,7 +3420,6 @@ function PdfViewerInner({
 					screen: rectRightScreen(pageEl, anchorPage.rect, zoomRef.current),
 					pageIndex: first.pageIndex,
 					id: first.id,
-					quote,
 					comment: "",
 				});
 			}
@@ -4343,7 +4333,6 @@ function PdfViewerInner({
 				if (!pageEl) return;
 				setCitationPreview({
 					screen: rectRightScreen(pageEl, link.rect, zoomRef.current),
-					marker: "",
 					previewText,
 				});
 			});
@@ -5151,7 +5140,6 @@ function PdfViewerInner({
 									trace={activeVisualTrace}
 									screen={cardScreen}
 									preferRight={cardScreen.preferRight ?? true}
-									streaming={visualStreaming}
 									error={visualError}
 									initialExpanded={visualCardExpanded}
 									onOpenSession={handleOpenActiveVisualSession}
