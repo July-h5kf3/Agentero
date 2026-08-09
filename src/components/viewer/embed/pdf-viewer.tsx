@@ -58,14 +58,7 @@ import {
 	TilingLayer,
 	TilingPluginPackage,
 } from "@embedpdf/plugin-tiling/react";
-import {
-	useIsViewportGated,
-	useViewportCapability,
-	useViewportElement,
-	useViewportPlugin,
-	ViewportElementContext,
-	ViewportPluginPackage,
-} from "@embedpdf/plugin-viewport/react";
+import { ViewportPluginPackage } from "@embedpdf/plugin-viewport/react";
 import {
 	useZoom,
 	ZoomGestureWrapper,
@@ -90,18 +83,7 @@ import {
 	Sun,
 	X,
 } from "lucide-react";
-import {
-	type CSSProperties,
-	type HTMLAttributes,
-	type ReactNode,
-	type RefObject,
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
@@ -112,11 +94,13 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ActiveCardScrollSync } from "@/components/viewer/embed/active-card-scroll-sync";
 import {
 	CitationLinkLayer,
 	isLinkObject,
 	useDestinationPreviewResolver,
 } from "@/components/viewer/embed/citation-links";
+import { DockviewViewport } from "@/components/viewer/embed/dockview-viewport";
 import { usePdfEngineContext } from "@/components/viewer/embed/engine-provider";
 import {
 	EMBED_PAGE_ATTR,
@@ -125,9 +109,40 @@ import {
 	rectTopCenterScreen,
 } from "@/components/viewer/embed/geometry";
 import { LayoutTranslateOverlay } from "@/components/viewer/embed/layout-translate-overlay";
+import { OutlineTree } from "@/components/viewer/embed/outline-tree";
+import {
+	PDF_COLOR_SCHEME_EVENT,
+	type PdfColorScheme,
+	readPdfColorScheme,
+	writePdfColorScheme,
+} from "@/components/viewer/embed/pdf-color-scheme";
+import {
+	hasNativeSelectionOutsideHost,
+	isEditableClipboardTarget,
+	isPdfDocumentCloseRaceError,
+} from "@/components/viewer/embed/pdf-host-dom";
+import {
+	EMPTY_CITATION_LINKS,
+	EMPTY_LAYOUT_REGIONS_BY_PAGE,
+	EMPTY_PINS,
+	PAGE_LAYER_STYLE,
+	PDF_BASE_LAYER_SCALE_CAP,
+	pdfRasterDpr,
+} from "@/components/viewer/embed/pdf-page-constants";
 import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
 import { PdfRegionSelectLayer } from "@/components/viewer/embed/pdf-region-select-layer";
+import type {
+	CitationPreviewState,
+	EditorState,
+	FormulaAnnotationPreviewState,
+	PdfViewerHandle,
+	PdfViewerInnerProps,
+	PdfViewerProps,
+	SelectionMenuState,
+	VisualDraftEditorState,
+} from "@/components/viewer/embed/pdf-viewer-types";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
+import { WheelZoomHandler } from "@/components/viewer/embed/wheel-zoom-handler";
 import { AnnotationEditor } from "@/components/viewer/pdf-ask/annotation-editor";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import { FormulaAnnotationCard } from "@/components/viewer/pdf-ask/formula-annotation-card";
@@ -161,7 +176,6 @@ import {
 } from "@/lib/core/background-tasks";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
-import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
@@ -194,8 +208,6 @@ import type {
 	PdfAskNormalizedRect,
 	PdfAskThread,
 } from "@/lib/pdf/ask/types";
-import { bookmarkPageIndex } from "@/lib/pdf/bookmark";
-import { createPdfViewportResizeGate } from "@/lib/pdf/dockview-resize";
 import {
 	type EquationSymbol,
 	equationAnnotationPath,
@@ -264,10 +276,6 @@ import {
 } from "@/lib/pdf/translate";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
 import {
-	bindWheelZoomGesture,
-	createWheelZoomCoalescer,
-} from "@/lib/pdf/wheel-zoom";
-import {
 	formatPdfZoomPercentage,
 	PDF_ZOOM_MAX,
 	PDF_ZOOM_MIN,
@@ -292,191 +300,11 @@ import {
 } from "@/lib/vault/fs-watch";
 import { normalizePathKey } from "@/lib/vault/path";
 import { openPath } from "@/lib/workspace/actions";
-import { isDockviewSashTarget } from "@/lib/workspace/dockview-sash";
 
-type PdfColorScheme = "light" | "dark";
-
-const PDF_COLOR_SCHEME_STORAGE_KEY = "agentero-pdf-color-scheme";
-const PDF_COLOR_SCHEME_EVENT = "agentero:pdf-color-scheme";
-
-function getDocumentColorScheme(): PdfColorScheme {
-	if (typeof document === "undefined") return "light";
-	return document.documentElement.classList.contains("dark") ? "dark" : "light";
-}
-
-function readPdfColorScheme(): PdfColorScheme {
-	const stored = readJsonStorage<PdfColorScheme | null>(
-		PDF_COLOR_SCHEME_STORAGE_KEY,
-		null,
-	);
-	return stored === "light" || stored === "dark"
-		? stored
-		: getDocumentColorScheme();
-}
-
-function writePdfColorScheme(next: PdfColorScheme): void {
-	writeJsonStorage(PDF_COLOR_SCHEME_STORAGE_KEY, next);
-	if (typeof window !== "undefined") {
-		window.dispatchEvent(
-			new CustomEvent<PdfColorScheme>(PDF_COLOR_SCHEME_EVENT, {
-				detail: next,
-			}),
-		);
-	}
-}
-
-function isPdfDocumentCloseRaceError(error: unknown): boolean {
-	const message =
-		error instanceof Error
-			? error.message
-			: typeof error === "string"
-				? error
-				: error && typeof error === "object" && "message" in error
-					? String((error as { message?: unknown }).message)
-					: "";
-	return /document does not open/i.test(message);
-}
-
-function isEditableClipboardTarget(target: EventTarget | null): boolean {
-	if (!(target instanceof HTMLElement)) return false;
-	const editable = target.closest(
-		"input, textarea, select, [role='textbox'], [contenteditable]",
-	);
-	return (
-		editable instanceof HTMLElement &&
-		editable.getAttribute("contenteditable") !== "false"
-	);
-}
-
-function nativeSelectionBelongsToHost(host: HTMLElement | null): boolean {
-	if (!host) return false;
-	const selection = window.getSelection();
-	if (!selection || selection.isCollapsed || selection.rangeCount === 0)
-		return false;
-	const node = selection.getRangeAt(0).commonAncestorContainer;
-	const el =
-		node.nodeType === Node.ELEMENT_NODE
-			? (node as Element)
-			: node.parentElement;
-	return Boolean(el && host.contains(el));
-}
-
-function hasNativeSelectionOutsideHost(host: HTMLElement | null): boolean {
-	const selection = window.getSelection();
-	if (!selection || selection.isCollapsed || !selection.toString().trim())
-		return false;
-	return !nativeSelectionBelongsToHost(host);
-}
-
-export type PdfViewerHandle = {
-	getHighlights: () => PdfHighlight[];
-	scrollToHighlight: (id: string) => void;
-	editComment: (id: string) => void;
-	deleteHighlight: (id: string) => void;
-	/** Jump to an ask pin and reopen its conversation card. */
-	scrollToAsk: (id: string) => void;
-	deleteAsk: (id: string) => void;
-	/** Jump to a visual agent-trace pin and open its preview card. */
-	scrollToVisualTrace: (id: string) => void;
-	deleteVisualTrace: (id: string) => void;
-	/** Toggle visual-region annotation mode (⌘.). */
-	toggleVisualAnnotation: () => void;
-	/** Run EmbedPDF layout analysis for figures / tables / formulas. */
-	analyzeLayout: () => void;
-	/** Jump to a layout region (0-based page) and focus its overlay. */
-	scrollToLayoutRegion: (region: {
-		id: string;
-		pageIndex: number;
-		bbox: PdfAskNormalizedRect;
-	}) => void;
-	/** Crop a normalized page region (for figure sidebar thumbnails). */
-	renderRegion: (args: {
-		pageIndex: number;
-		bbox: PdfAskNormalizedRect;
-		maxEdgePx?: number;
-	}) => Promise<PromptImage | null>;
-};
-
-export type PdfViewerProps = {
-	/**
-	 * PDF source: local `blob:` (bytes via fs) or remote https. Prefer local
-	 * vault PDF; remote URL is fallback when download fails.
-	 */
-	source: string | null;
-	/**
-	 * Local PDF bytes. Preferred over `source`: the engine opens the document
-	 * straight from the buffer, avoiding a `fetch(blob:)` that stalls/fails in
-	 * some webviews (Windows WebView2). `source` is the fallback (remote https).
-	 */
-	sourceBytes?: ArrayBuffer | null;
-	/** Stable per-tab document id (EmbedPDF documentId + scope key). */
-	docId?: string | null;
-	/** Absolute path to paper folder for annotations/marks persistence */
-	paperAbsPath?: string | null;
-	/** Vault-relative paper path stored inside JSON */
-	paperRelPath?: string | null;
-	/** Current vault root for ACP cwd */
-	vaultPath?: string | null;
-	/** Open the annotations overview (App-level right sidebar tab). */
-	onOpenAnnotations?: () => void;
-	/** Open Translate settings from a translation error card. */
-	onOpenSettings?: () => void;
-	className?: string;
-	/** Register/unregister an imperative handle for the annotations panel */
-	onHandle?: (handle: PdfViewerHandle | null) => void;
-	/** Called whenever the highlight list changes (for the annotations panel) */
-	onHighlightsChange?: (highlights: PdfHighlight[]) => void;
-	/** Called whenever PDF ask threads change (for the annotations panel) */
-	onAsksChange?: (threads: PdfAskThread[]) => void;
-	/** Called whenever visual agent-trace marks change (for the annotations panel) */
-	onVisualTracesChange?: (traces: PdfVisualSessionTrace[]) => void;
-	/**
-	 * Workspace active tab. Dock may keep inactive PDFs mounted (`pdfKeepMounted`);
-	 * only the active viewer should poll marks/ (expensive base64 JSON list).
-	 */
-	isActive?: boolean;
-};
-
-/** Recursive outline (bookmarks) list for the PDF side panel. */
-function OutlineTree({
-	nodes,
-	depth,
-	onGoToPage,
-}: {
-	nodes: PdfBookmarkObject[];
-	depth: number;
-	onGoToPage: (page: number) => void;
-}) {
-	return (
-		<ul className="space-y-0.5">
-			{nodes.map((n) => (
-				<li key={`${depth}-${n.title}-${JSON.stringify(n.target ?? null)}`}>
-					<button
-						type="button"
-						className="w-full truncate rounded px-2 py-1 text-left text-muted-foreground text-xs hover:bg-muted/60 hover:text-foreground"
-						style={{ paddingLeft: 8 + depth * 12 }}
-						title={n.title}
-						onClick={() => {
-							const pageIndex = bookmarkPageIndex(n);
-							if (pageIndex != null) {
-								onGoToPage(pageIndex + 1);
-							}
-						}}
-					>
-						{n.title}
-					</button>
-					{n.children?.length ? (
-						<OutlineTree
-							nodes={n.children}
-							depth={depth + 1}
-							onGoToPage={onGoToPage}
-						/>
-					) : null}
-				</li>
-			))}
-		</ul>
-	);
-}
+export type {
+	PdfViewerHandle,
+	PdfViewerProps,
+} from "@/components/viewer/embed/pdf-viewer-types";
 
 /**
  * PDF viewer built on EmbedPDF (headless, PDFium/WASM). The engine is shared
@@ -627,342 +455,6 @@ export function PdfViewer(props: PdfViewerProps) {
 		</div>
 	);
 }
-
-type PdfViewerInnerProps = PdfViewerProps & { docId: string };
-
-/**
- * Full devicePixelRatio rasters on high-DPI screens make every zoom step
- * expensive (PDFium renders in a single worker shared by all pages). Cap the
- * raster dpr: pages stay sharp enough for reading while each re-render costs
- * far less WASM work.
- */
-const PDF_RASTER_DPR_CAP = 1.5;
-
-function pdfRasterDpr(): number {
-	const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
-	return Math.min(dpr, PDF_RASTER_DPR_CAP);
-}
-
-/**
- * RenderLayer is only the base coat under the sharp TilingLayer — cap its
- * scale so zooming past this never re-rasterizes whole pages (the single
- * worker serializes renders; on long documents full-page rasters at high
- * zoom plus their blob transfers dominate). Tiles keep the viewport sharp.
- */
-const PDF_BASE_LAYER_SCALE_CAP = 1.5;
-
-/** Stable identity for "no layout regions" so page renders can bail out. */
-const EMPTY_LAYOUT_REGIONS_BY_PAGE: ReadonlyMap<number, PdfLayoutRegion[]> =
-	new Map();
-
-/** Stable identity for pages without gutter pins. */
-const EMPTY_PINS: SelectionPin[] = [];
-
-/** Pages with no link annotations reuse one array so the layer memo holds. */
-const EMPTY_CITATION_LINKS: PdfLinkAnnoObject[] = [];
-
-/** Every page stacks these layers; a fresh literal per render defeats memo. */
-const PAGE_LAYER_STYLE: CSSProperties = { position: "absolute", inset: 0 };
-
-/**
- * Native viewport scroll → re-place floating selection cards.
- * Must render inside DockviewViewport (ViewportElementContext).
- */
-function ActiveCardScrollSync({
-	active,
-	onScroll,
-}: {
-	active: boolean;
-	onScroll: () => void;
-}) {
-	const viewportRef = useViewportElement();
-	const onScrollRef = useRef(onScroll);
-	onScrollRef.current = onScroll;
-	useEffect(() => {
-		if (!active) return;
-		const el = viewportRef?.current;
-		if (!el) return;
-		let raf: number | null = null;
-		const handle = () => {
-			if (raf != null) return;
-			raf = requestAnimationFrame(() => {
-				raf = null;
-				onScrollRef.current();
-			});
-		};
-		el.addEventListener("scroll", handle, { passive: true });
-		return () => {
-			if (raf != null) cancelAnimationFrame(raf);
-			el.removeEventListener("scroll", handle);
-		};
-	}, [active, viewportRef]);
-	return null;
-}
-
-/**
- * Custom Ctrl/Cmd+wheel zoom handler.
- *
- * EmbedPDF's ZoomGestureWrapper multiplies the current scale by a factor
- * derived from `deltaY`, which makes a single mouse-wheel tick double or
- * halve the zoom. We disable that built-in behavior and instead step the zoom
- * with the same fixed increments used by the toolbar +/- buttons.
- *
- * Steps are coalesced per animation frame (createWheelZoomCoalescer): a
- * trackpad pinch fires many wheel events per second, and each applied step
- * re-rasterizes all visible pages on the main thread — batching keeps that to
- * once per frame. bindWheelZoomGesture keeps the listener passive while the user
- * is merely scrolling, so plain scrolls stay off the main thread.
- */
-function WheelZoomHandler({ docId }: { docId: string }) {
-	const viewportRef = useViewportElement();
-	const { provides: zoom } = useZoom(docId);
-	const zoomRef = useRef(zoom);
-	zoomRef.current = zoom;
-
-	useEffect(() => {
-		const container = viewportRef?.current;
-		if (!container) return;
-
-		const coalescer = createWheelZoomCoalescer({
-			onZoomIn: () => zoomRef.current?.zoomIn(),
-			onZoomOut: () => zoomRef.current?.zoomOut(),
-		});
-
-		let resetTimeout: ReturnType<typeof setTimeout> | null = null;
-		const scheduleReset = () => {
-			if (resetTimeout) clearTimeout(resetTimeout);
-			resetTimeout = setTimeout(() => {
-				resetTimeout = null;
-				coalescer.reset();
-			}, 150);
-		};
-
-		const binding = bindWheelZoomGesture({
-			target: container,
-			onZoomWheel: (e) => {
-				if (!zoomRef.current) return;
-				coalescer.addDelta(e.deltaY);
-				scheduleReset();
-			},
-		});
-
-		return () => {
-			binding.dispose();
-			if (resetTimeout) clearTimeout(resetTimeout);
-			coalescer.dispose();
-		};
-	}, [viewportRef]);
-
-	return null;
-}
-
-/**
- * Dockview updates panel geometry on every sash pointermove. EmbedPDF's
- * ResizeObserver otherwise turns each of those moves into viewport + scroll
- * state updates. Keep the DOM viewport following the panel while resize
- * metrics are gated; releasing the sash lets EmbedPDF observe the final size
- * once.
- */
-type DockviewViewportProps = HTMLAttributes<HTMLDivElement> & {
-	children: ReactNode;
-	documentId: string;
-	hostRef: RefObject<HTMLDivElement | null>;
-};
-
-function DockviewViewport({
-	children,
-	documentId,
-	hostRef,
-	...props
-}: DockviewViewportProps) {
-	const [viewportGap, setViewportGap] = useState(0);
-	const viewportRef = useRef<HTMLDivElement>(null);
-	const { plugin: viewportPlugin } = useViewportPlugin();
-	const { provides: viewportCapability } = useViewportCapability();
-	const isGated = useIsViewportGated(documentId);
-
-	useEffect(() => {
-		if (viewportCapability) {
-			setViewportGap(viewportCapability.getViewportGap());
-		}
-	}, [viewportCapability]);
-
-	useLayoutEffect(() => {
-		const viewport = viewportRef.current;
-		if (!viewportPlugin || !viewport) return;
-
-		try {
-			viewportPlugin.registerViewport(documentId);
-		} catch {
-			return;
-		}
-
-		const ownerDocument = viewport.ownerDocument;
-		const ownerWindow = ownerDocument.defaultView;
-		const workspace = hostRef.current?.closest(".agentero-dockview") ?? null;
-		const requestFrame = (callback: FrameRequestCallback) =>
-			ownerWindow
-				? ownerWindow.requestAnimationFrame(callback)
-				: requestAnimationFrame(callback);
-		const cancelFrame = (handle: number) => {
-			if (ownerWindow) ownerWindow.cancelAnimationFrame(handle);
-			else cancelAnimationFrame(handle);
-		};
-		const commitResize = () => {
-			viewportPlugin.setViewportResizeMetrics(documentId, {
-				width: viewport.offsetWidth,
-				height: viewport.offsetHeight,
-				clientWidth: viewport.clientWidth,
-				clientHeight: viewport.clientHeight,
-				scrollTop: viewport.scrollTop,
-				scrollLeft: viewport.scrollLeft,
-				scrollWidth: viewport.scrollWidth,
-				scrollHeight: viewport.scrollHeight,
-				clientLeft: viewport.clientLeft,
-				clientTop: viewport.clientTop,
-			});
-		};
-		const resizeGate = createPdfViewportResizeGate({
-			commitResize,
-			requestFrame,
-			cancelFrame,
-		});
-		let dockResizeActive = false;
-
-		const removeEndListeners = () => {
-			ownerDocument.removeEventListener("pointerup", finishResize, true);
-			ownerDocument.removeEventListener("pointercancel", finishResize, true);
-			ownerDocument.removeEventListener("contextmenu", finishResize, true);
-			ownerWindow?.removeEventListener("blur", finishResize);
-		};
-
-		const finishResize = () => {
-			if (!dockResizeActive) return;
-			dockResizeActive = false;
-			removeEndListeners();
-			resizeGate.endDockResize();
-		};
-
-		const handlePointerDown = (event: PointerEvent) => {
-			if (
-				dockResizeActive ||
-				!workspace ||
-				!isDockviewSashTarget(event.target, workspace)
-			) {
-				return;
-			}
-
-			dockResizeActive = true;
-			resizeGate.beginDockResize();
-			ownerDocument.addEventListener("pointerup", finishResize, true);
-			ownerDocument.addEventListener("pointercancel", finishResize, true);
-			ownerDocument.addEventListener("contextmenu", finishResize, true);
-			ownerWindow?.addEventListener("blur", finishResize);
-		};
-
-		let scrollFrame: number | null = null;
-		const handleScroll = () => {
-			if (scrollFrame != null) return;
-			scrollFrame = requestFrame(() => {
-				scrollFrame = null;
-				viewportPlugin.setViewportScrollMetrics(documentId, {
-					scrollTop: viewport.scrollTop,
-					scrollLeft: viewport.scrollLeft,
-				});
-			});
-		};
-		viewport.addEventListener("scroll", handleScroll, { passive: true });
-
-		const ResizeObserverCtor = ownerWindow?.ResizeObserver ?? ResizeObserver;
-		const resizeObserver = new ResizeObserverCtor(() => {
-			resizeGate.notifyResize();
-		});
-		resizeObserver.observe(viewport);
-
-		const unsubscribeScrollRequest = viewportPlugin.onScrollRequest(
-			documentId,
-			({ x, y, behavior = "auto" }) => {
-				requestFrame(() => {
-					viewport.scrollTo({ left: x, top: y, behavior });
-				});
-			},
-		);
-
-		ownerDocument.addEventListener("pointerdown", handlePointerDown, true);
-		return () => {
-			ownerDocument.removeEventListener("pointerdown", handlePointerDown, true);
-			removeEndListeners();
-			dockResizeActive = false;
-			resizeGate.dispose();
-			resizeObserver.disconnect();
-			if (scrollFrame != null) cancelFrame(scrollFrame);
-			viewport.removeEventListener("scroll", handleScroll);
-			unsubscribeScrollRequest();
-			viewportPlugin.unregisterViewport(documentId);
-		};
-	}, [documentId, hostRef, viewportPlugin]);
-
-	const { style, ...restProps } = props;
-
-	return (
-		<ViewportElementContext.Provider
-			value={viewportRef as RefObject<HTMLDivElement>}
-		>
-			<div
-				{...restProps}
-				ref={viewportRef}
-				style={{
-					width: "100%",
-					height: "100%",
-					overflow: "auto",
-					...style,
-					padding: `${viewportGap}px`,
-				}}
-			>
-				{!isGated && children}
-			</div>
-		</ViewportElementContext.Provider>
-	);
-}
-
-type SelectionMenuState = {
-	screen: { x: number; y: number };
-	anchor: PdfAskAnchor;
-	pages: FormattedSelection[];
-};
-
-type CitationPreviewState = {
-	screen: { x: number; y: number };
-	previewText: string;
-};
-
-type EditorState = {
-	screen: { x: number; y: number };
-	pageIndex: number;
-	id: string;
-	comment: string;
-};
-
-type VisualDraftEditorState = {
-	screen: { x: number; y: number };
-	page: number;
-	region: PdfAskNormalizedRect;
-	image: PromptImage;
-	/**
-	 * Opened by layout-region hover: auto-closes after leaving the region /
-	 * draft card (grace period). Manual region-select drafts stay until dismiss.
-	 */
-	ephemeral?: boolean;
-};
-
-/** Hover card for formula regions when `{paper}/Annotation.md` has symbols. */
-type FormulaAnnotationPreviewState = {
-	screen: { x: number; y: number };
-	regionId: string;
-	page: number;
-	region: PdfAskNormalizedRect;
-	symbols: EquationSymbol[];
-};
 
 function PdfViewerInner({
 	docId,
