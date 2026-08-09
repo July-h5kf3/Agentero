@@ -90,6 +90,17 @@ export function formatWikiFragment(fragment: LinkFragment): string {
 }
 
 /**
+ * Suffix appended after a wiki target: `@id` for annotations, `#…` otherwise.
+ * Empty when there is no fragment.
+ */
+export function wikiFragmentSuffix(fragment?: LinkFragment | null): string {
+	if (!fragment) return "";
+	return fragment.kind === "annotation"
+		? `@${fragment.id}`
+		: `#${formatWikiFragment(fragment)}`;
+}
+
+/**
  * Preferred user-facing link body: `target@id` for annotations, else `target#frag`.
  */
 export function formatWikiLinkBody(

@@ -34,6 +34,7 @@ import {
 	parseWikiHref,
 	resolveWikiReference,
 	WIKI_HREF_PREFIX,
+	wikiFragmentSuffix,
 } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
 
@@ -352,14 +353,7 @@ export function LinkElement(props: PlateElementProps) {
 						event.stopPropagation();
 						if (wikiNav?.vaultPath && markdownDoc.filePath) {
 							try {
-								const fragment =
-									wiki.fragment?.kind === "block"
-										? `#^${wiki.fragment.id}`
-										: wiki.fragment?.kind === "annotation"
-											? `@${wiki.fragment.id}`
-											: wiki.fragment?.kind === "heading"
-												? `#${wiki.fragment.path.join("#")}`
-												: "";
+								const fragment = wikiFragmentSuffix(wiki.fragment);
 								const resolved = await resolveWikiReference(
 									wikiNav.vaultPath,
 									markdownDoc.filePath,
