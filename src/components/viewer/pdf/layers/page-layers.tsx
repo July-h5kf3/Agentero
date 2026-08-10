@@ -19,8 +19,14 @@ import { RenderLayer } from "@embedpdf/plugin-render/react";
 import { SearchLayer } from "@embedpdf/plugin-search/react";
 import { SelectionLayer } from "@embedpdf/plugin-selection/react";
 import { TilingLayer } from "@embedpdf/plugin-tiling/react";
+import { EyeOff, Languages, Loader2 } from "lucide-react";
 import { memo, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
 	EMPTY_CITATION_LINKS,
 	EMPTY_PINS,
@@ -87,6 +93,10 @@ export type PdfPageLayoutSlice = {
 		number,
 		readonly LayoutTranslateItem[]
 	>;
+	layoutTranslatePageStateByPage: ReadonlyMap<
+		number,
+		{ active: boolean; running: boolean }
+	>;
 	equationSymbolCount: number;
 	/** Layout-hover drafts auto-hide, so their frame needs a hover surface. */
 	visualDraftEphemeral: boolean;
@@ -110,6 +120,7 @@ export type PdfPageHandlers = {
 	onLayoutHoverLeave: (regionId: string) => void;
 	onDraftHoverEnter: () => void;
 	onDraftHoverLeave: () => void;
+	onTogglePageLayoutTranslate: (pageIndex: number) => void;
 	/** Delete a highlight annotation directly from its on-page selection menu. */
 	onDeleteHighlightAnnotation: (pageIndex: number, id: string) => void;
 	/** Open the note editor for a highlight from its on-page selection menu. */
@@ -135,6 +146,61 @@ export type PdfPageLayersProps = {
 	mode: PdfPageModeSlice;
 	handlers: PdfPageHandlers;
 };
+
+type PageTranslateTabProps = {
+	pageIndex: number;
+	active: boolean;
+	running: boolean;
+	onToggle: (pageIndex: number) => void;
+};
+
+const PageTranslateTab = memo(function PageTranslateTab({
+	pageIndex,
+	active,
+	running,
+	onToggle,
+}: PageTranslateTabProps) {
+	const { t } = useTranslation("viewer");
+	const label = running
+		? t("pdf.layoutTranslate.pageRunning")
+		: active
+			? t("pdf.layoutTranslate.hidePage")
+			: t("pdf.layoutTranslate.translatePage");
+	const shortLabel = active
+		? t("pdf.layoutTranslate.hidePageShort")
+		: t("pdf.layoutTranslate.translatePageShort");
+	const Icon = running ? Loader2 : active ? EyeOff : Languages;
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<button
+					type="button"
+					className={cn(
+						"absolute top-2 right-2 z-[6] flex min-h-20 w-10 flex-col items-center justify-center gap-1 rounded-md border border-border/80 bg-background/95 px-1.5 py-2 font-medium text-[11px] text-foreground shadow-sm ring-1 ring-black/5 backdrop-blur-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 dark:ring-white/10",
+						active && "border-primary/30 bg-primary/10 text-primary",
+					)}
+					aria-label={label}
+					aria-pressed={active}
+					onClick={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						onToggle(pageIndex);
+					}}
+					onPointerDown={(event) => event.stopPropagation()}
+				>
+					<Icon
+						className={cn("size-3.5 shrink-0", running && "animate-spin")}
+						aria-hidden="true"
+					/>
+					<span className="leading-none" style={{ writingMode: "vertical-rl" }}>
+						{shortLabel}
+					</span>
+				</button>
+			</TooltipTrigger>
+			<TooltipContent side="left">{label}</TooltipContent>
+		</Tooltip>
+	);
+});
 
 export const PdfPageLayers = memo(function PdfPageLayers({
 	docId,
@@ -175,6 +241,9 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	const pins = marks.pinsByPage.get(pageNumber) ?? EMPTY_PINS;
 	const layoutTranslateOnPage =
 		layout.layoutTranslateItemsByPage.get(pageIndex);
+	const pageTranslateState = layout.layoutTranslatePageStateByPage.get(
+		pageIndex,
+	) ?? { active: false, running: false };
 	// Page shell: paper-white in light mode; near-black when PDF dark mode is on
 	// so loading gaps match inverted page rasters.
 	return (
@@ -241,6 +310,12 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 							onChangeColor={handlers.onChangeHighlightColor}
 						/>
 					)}
+				/>
+				<PageTranslateTab
+					pageIndex={pageIndex}
+					active={pageTranslateState.active}
+					running={pageTranslateState.running}
+					onToggle={handlers.onTogglePageLayoutTranslate}
 				/>
 				<CitationLinkLayer
 					links={marks.citationLinks.get(pageIndex) ?? EMPTY_CITATION_LINKS}

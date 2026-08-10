@@ -118,6 +118,16 @@ export type LayoutTranslateSidecar = {
 	items: LayoutTranslateSidecarItem[];
 };
 
+export type LayoutTranslateWriteOptions = {
+	/**
+	 * Single-page translation writes only a subset of layout blocks. Preserve
+	 * cached blocks from other pages instead of replacing the whole sidecar.
+	 */
+	preserveExisting?: boolean;
+	/** Existing cached blocks on these pages are replaced by `items`. */
+	replacePageIndexes?: readonly number[];
+};
+
 /** Prefer body extract; fall back to caption title for headers. */
 export function layoutRegionSourceText(region: PdfLayoutRegion): string {
 	return (region.text ?? region.title ?? "").replace(/\s+/g, " ").trim();
@@ -411,6 +421,7 @@ export async function writeLayoutTranslateSidecar(
 	paperAbsPath: string | null | undefined,
 	key: LayoutTranslateCacheKey,
 	items: readonly LayoutTranslateItem[],
+	options: LayoutTranslateWriteOptions = {},
 ): Promise<void> {
 	if (!paperAbsPath) return;
 	const done = items
@@ -426,6 +437,18 @@ export async function writeLayoutTranslateSidecar(
 				translated: item.translated?.trim() ?? "",
 			}),
 		);
+	const merged = new Map<string, LayoutTranslateSidecarItem>();
+	if (options.preserveExisting) {
+		const existing = await readLayoutTranslateSidecar(paperAbsPath, key);
+		const replacePageIndexes = new Set(options.replacePageIndexes ?? []);
+		for (const item of existing?.items ?? []) {
+			if (replacePageIndexes.has(item.pageIndex)) continue;
+			merged.set(item.id, item);
+		}
+	}
+	for (const item of done) {
+		merged.set(item.id, item);
+	}
 	const sidecar: LayoutTranslateSidecar = {
 		schemaVersion: LAYOUT_TRANSLATE_SIDECAR_SCHEMA_VERSION,
 		source: {
@@ -436,7 +459,13 @@ export async function writeLayoutTranslateSidecar(
 			targetLang: key.targetLang,
 			serviceKey: key.serviceKey,
 		},
-		items: done,
+		items: [...merged.values()].sort(
+			(a, b) =>
+				a.pageIndex - b.pageIndex ||
+				a.readingOrder - b.readingOrder ||
+				a.bbox.y - b.bbox.y ||
+				a.bbox.x - b.bbox.x,
+		),
 	};
 	await writeVaultFile(
 		layoutTranslateSidecarPath(paperAbsPath),
@@ -456,13 +485,14 @@ export function persistLayoutTranslateSidecarBestEffort(
 	paperAbsPath: string | null | undefined,
 	key: LayoutTranslateCacheKey,
 	items: readonly LayoutTranslateItem[],
+	options: LayoutTranslateWriteOptions = {},
 ): void {
 	if (!paperAbsPath) return;
 	const pending = translateSidecarWriteTimers.get(paperAbsPath);
 	if (pending) clearTimeout(pending);
 	const timer = setTimeout(() => {
 		translateSidecarWriteTimers.delete(paperAbsPath);
-		void writeLayoutTranslateSidecar(paperAbsPath, key, items).catch(
+		void writeLayoutTranslateSidecar(paperAbsPath, key, items, options).catch(
 			(error) => {
 				logger.warn("layout translate cache write failed", {
 					error: error instanceof Error ? error.message : String(error),
