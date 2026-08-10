@@ -9,6 +9,7 @@
  * render, so `layoutCapRef` stays in `PdfViewerInner` and is injected.
  */
 
+import type { useDocumentManagerCapability } from "@embedpdf/plugin-document-manager/react";
 import type { useLayoutAnalysisCapability } from "@embedpdf/plugin-layout-analysis/react";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -48,6 +49,9 @@ export type StartLayoutAnalysisOptions = {
 type LayoutCapability = ReturnType<
 	typeof useLayoutAnalysisCapability
 >["provides"];
+type DocumentManagerCapability = ReturnType<
+	typeof useDocumentManagerCapability
+>["provides"];
 
 export type UsePdfLayoutRunOptions = {
 	docId: string;
@@ -64,6 +68,8 @@ export type UsePdfLayoutRunOptions = {
 	/** The value gates the auto-run effect; the ref must never become a dep. */
 	layoutCap: LayoutCapability;
 	layoutCapRef: RefObject<LayoutCapability>;
+	docCap: DocumentManagerCapability;
+	docCapRef: RefObject<DocumentManagerCapability>;
 };
 
 export type PdfLayoutRun = {
@@ -83,6 +89,8 @@ export function usePdfLayoutRun({
 	totalPages,
 	layoutCap,
 	layoutCapRef,
+	docCap,
+	docCapRef,
 }: UsePdfLayoutRunOptions): PdfLayoutRun {
 	const { t } = useTranslation("viewer");
 	const layoutTaskRef = useRef<LayoutAnalysisTask | null>(null);
@@ -98,6 +106,13 @@ export function usePdfLayoutRun({
 	 */
 	const startLayoutAnalysis = useCallback(
 		(opts?: StartLayoutAnalysisOptions) => {
+			const docs = docCapRef.current ?? docCap;
+			if (!docs?.isDocumentOpen(docId)) {
+				if (opts?.notifyOnError !== false) {
+					notifyError(t("figures.viewerUnavailable"));
+				}
+				return;
+			}
 			const la = layoutCapRef.current?.forDocument(docId);
 			if (!la) {
 				if (opts?.notifyOnError !== false) {
@@ -140,6 +155,8 @@ export function usePdfLayoutRun({
 						paperAbsPath,
 						totalPages: pages > 0 ? pages : null,
 						force: opts?.force === true,
+						isDocumentOpen: () =>
+							docCapRef.current?.isDocumentOpen(docId) ?? false,
 						onDone: () => {
 							layoutTaskRef.current = null;
 							if (opts?.showOverlay) {
@@ -249,7 +266,7 @@ export function usePdfLayoutRun({
 				notifyError(t("pdf.layout.failed"), { description: message });
 			});
 		},
-		[docId, paperAbsPath, paperRelPath, t, layoutCapRef],
+		[docId, paperAbsPath, paperRelPath, t, layoutCapRef, docCap, docCapRef],
 	);
 	const startLayoutAnalysisRef = useRef(startLayoutAnalysis);
 	startLayoutAnalysisRef.current = startLayoutAnalysis;
@@ -269,6 +286,7 @@ export function usePdfLayoutRun({
 		if (!isActive) return;
 		if (!layoutCap || totalPages <= 0) return;
 		if (getLayoutDocumentResult(docId)) return;
+		if (!docCap?.isDocumentOpen(docId)) return;
 		if (!layoutCap.forDocument(docId)) return;
 
 		let cancelled = false;
@@ -354,6 +372,7 @@ export function usePdfLayoutRun({
 	}, [
 		isActive,
 		layoutCap,
+		docCap,
 		docId,
 		totalPages,
 		paperAbsPath,

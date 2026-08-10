@@ -839,6 +839,8 @@ function PdfViewerInner({
 		totalPages,
 		layoutCap,
 		layoutCapRef,
+		docCap,
+		docCapRef,
 	});
 
 	const {

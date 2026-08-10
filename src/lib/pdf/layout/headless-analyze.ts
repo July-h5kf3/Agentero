@@ -197,6 +197,7 @@ export async function analyzePaperLayoutHeadless(opts: {
 				paperLabel: opts.paperLabel,
 				totalPages: pageCount > 0 ? pageCount : null,
 				force: false,
+				isDocumentOpen: () => docCap.isDocumentOpen(documentId),
 				onDone: (s) => finish(() => resolve(s)),
 				onError: (message, aborted) => {
 					finish(() => {
