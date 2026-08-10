@@ -71,7 +71,7 @@ import { useWikiNav } from "@/lib/wiki/nav-context";
 import {
 	findWikiHeadingIndex,
 	hasWikiBlockAnchor,
-} from "@/lib/wiki-navigation";
+} from "@/lib/wiki/navigation";
 
 export type MarkdownEditorProps = {
 	/** Initial Markdown content for the open file. The component reseeds on remount (key). */
