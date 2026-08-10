@@ -532,7 +532,9 @@ AGENTS.md 要求「尽可能复用能力」，因此先调研了现成框架。�
 
 1–6 互相独立且全为低风险，可先行兑现收益。9 的投入较大（约 300–400 行，见 §8.5），做完 1–8 后再评估。10 必须跟在 9 之后。
 
-> 剩余未竟项集中在 3（原子写 + 自写抑制）、6（`CatalogHandle` + `spawn_blocking`）、10（enqueue 收敛 + reconcile）。三者都会改变 watcher / SQLite 连接 / 打开论文关键路径的运行时行为，单测难以覆盖，建议在 `pnpm tauri dev` 下逐项验证后提交。
+> 已额外兑现：§7.6 细节 3（`background-task:progress` 单一全局 listener 按 taskId 路由，`a0149774`）、§8.2（缓存命中只读——viewer 不再回写 `layout.json`，`fc943551`；配合索引未变更跳过，缓存命中零写盘）、§11「layout sidecar 轮询 → 0」（`use-pdf-layout-run.ts` 已改为 watcher 事件驱动）。
+>
+> 剩余未竟项：**6（`CatalogHandle` + `spawn_blocking`）** 与 **10（enqueue 收敛 + reconcile driver + `job:changed`→任务面板投影 + 取消收口）**。3 仅剩「原子写 + 自写抑制」，因 sidecar 读时已校验可重建、缓存命中已零写，边际收益低。上述改动会改变 SQLite 连接线程模型 / 打开论文关键路径 / 任务面板取消语义的运行时行为，单测难以覆盖，建议在 `pnpm tauri dev` 下逐项验证后提交。
 
 ## 10. 函数审计与清理
 
