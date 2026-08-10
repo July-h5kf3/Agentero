@@ -139,6 +139,50 @@ pub async fn job_parse_body_enqueue(
     Ok(ApiResult::ok(snapshot))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobReconcilePaperArgs {
+    pub vault_path: String,
+    pub path: String,
+}
+
+/// Per-paper reconcile (pipeline-orchestration §7.4 入口②): backfill a
+/// `ParseBody` job when the paper has a PDF but no TeX and no `PAPER.md`.
+/// Returns `null` when nothing needs doing.
+#[tauri::command]
+pub async fn job_reconcile_paper(
+    app: tauri::AppHandle,
+    center: State<'_, JobCenter>,
+    caps: State<'_, crate::features::catalog::CapsCache>,
+    args: JobReconcilePaperArgs,
+) -> Result<ApiResult<Option<JobSnapshot>>, String> {
+    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
+        Ok(valid) => valid,
+        Err(e) => return Ok(map_err(e)),
+    };
+    if !caps.caps_for(&vault, &path).needs_paper_md() {
+        return Ok(ApiResult::ok(None));
+    }
+    let snapshot = center
+        .enqueue_parse_body(&vault, &path, parse_lane(None), false, None)
+        .await;
+    emit_job_changed(&app, snapshot.clone());
+
+    match center.try_start(&snapshot.id).await {
+        StartOutcome::Started(..) => {
+            let job_id = snapshot.id.clone();
+            let runner = center.handle();
+            tauri::async_runtime::spawn(async move {
+                runner.run_parse_body_job(app, job_id).await;
+            });
+        }
+        StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
+        StartOutcome::Waiting => {}
+    }
+
+    Ok(ApiResult::ok(Some(snapshot)))
+}
+
 #[tauri::command]
 pub async fn job_layout_analyze_enqueue(
     app: tauri::AppHandle,

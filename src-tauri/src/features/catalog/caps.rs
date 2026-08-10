@@ -14,6 +14,13 @@ impl PaperCaps {
     pub fn has_pdf(&self) -> bool {
         self.pdf_path.is_some()
     }
+
+    /// True when the paper needs a `PAPER.md` backfill: it has a local PDF to
+    /// parse, no LaTeX source that would supersede liteparse, and no existing
+    /// `PAPER.md`. This is the reconcile predicate for the `ParseBody` job.
+    pub fn needs_paper_md(&self) -> bool {
+        self.has_pdf() && !self.has_tex && !self.has_paper_md
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -238,6 +245,36 @@ mod tests {
         fs::write(ltx_root.join("source/deep/main.LTX"), "ltx").expect("write ltx");
         assert!(probe_paper_caps(&ltx_root).has_tex);
         fs::remove_dir_all(&ltx_root).ok();
+    }
+
+    #[test]
+    fn needs_paper_md_only_with_pdf_no_tex_no_paper_md() {
+        // PDF only → needs backfill.
+        let pdf_only = temp_paper_dir("needs-paper-md");
+        fs::write(pdf_only.join("paper.pdf"), b"%PDF").expect("write pdf");
+        assert!(probe_paper_caps(&pdf_only).needs_paper_md());
+        fs::remove_dir_all(&pdf_only).ok();
+
+        // PDF + existing PAPER.md → already done.
+        let with_md = temp_paper_dir("has-paper-md");
+        fs::write(with_md.join("paper.pdf"), b"%PDF").expect("write pdf");
+        fs::write(with_md.join("PAPER.md"), "body").expect("write paper md");
+        assert!(!probe_paper_caps(&with_md).needs_paper_md());
+        fs::remove_dir_all(&with_md).ok();
+
+        // PDF + TeX → liteparse superseded by source.
+        let with_tex = temp_paper_dir("has-tex");
+        fs::write(with_tex.join("paper.pdf"), b"%PDF").expect("write pdf");
+        fs::create_dir_all(with_tex.join("source")).expect("create source dir");
+        fs::write(with_tex.join("source/main.tex"), "tex").expect("write tex");
+        assert!(!probe_paper_caps(&with_tex).needs_paper_md());
+        fs::remove_dir_all(&with_tex).ok();
+
+        // No PDF → nothing to parse.
+        let no_pdf = temp_paper_dir("no-pdf");
+        fs::write(no_pdf.join("NOTES.md"), "notes").expect("write notes");
+        assert!(!probe_paper_caps(&no_pdf).needs_paper_md());
+        fs::remove_dir_all(&no_pdf).ok();
     }
 
     #[test]
