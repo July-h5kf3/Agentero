@@ -528,7 +528,7 @@ AGENTS.md 要求「尽可能复用能力」，因此先调研了现成框架。�
 | 7 | `CapsCache` 内存能力位 + 删 `collectPapersNeedingAssetDownload` | 中 | 消灭所有目录 walk | 部分：`CapsCache` 完成（`ff5756be`）；`collectPapersNeedingAssetDownload` 删除依赖 reconcile 扫描（见 10） |
 | 8 | `paper_open_bundle` 聚合命令 | 中 | T0 从 4 IPC → 1 IPC | 完成（`ac17af96`） |
 | 9 | `JobCenter` 内存队列 + `job:changed` 事件 + `governor` 限流 | 高 | 轮询消失，队列语义统一，S2 不再 429 | 完成：调度器（`61938b50`）、ParseBody / ParseRefs / LayoutAnalyze executor（`2952c686`）、per-kind 并发上限 + finish 后 drain（`aab07bd4`，§7.3）；在线引用以 `Semaphore(2)` 限流（`online.rs`）替代 `governor` |
-| 10 | enqueue 点收敛到 3 入口 + `reconcile` 扫描 + 删 `downloadAllMissingAssets` / `loadPaperRefsAuto` | 高 | 重复触发消失（依赖 9） | 部分：`job:changed`→任务面板投影 + 取消收口 + layout wrapper 委托（`a39ea522`）、per-paper reconcile 原语（`c5d86cb2`）；余下 ParseBody/ParseRefs 投影、reconcile driver 接入打开流程、删 `downloadAllMissingAssets` / `loadPaperRefsAuto` / `collectPapersNeedingAssetDownload` / `maybeTriggerDeferredParse` |
+| 10 | enqueue 点收敛到 3 入口 + `reconcile` 扫描 + 删 `downloadAllMissingAssets` / `loadPaperRefsAuto` | 高 | 重复触发消失（依赖 9） | 大部分：投影(layout/parseRefs/parseBody)+取消收口+running 取消（`a39ea522`/`d4c0c34b`/`674d8217`/`7b996334`）、layout/`enqueuePaperPdfParse` 委托、per-paper + vault-wide reconcile driver（`c5d86cb2`/`fc0f57dc`）；余下 `DownloadAssets` job runner、删 `downloadAllMissingAssets` / `loadPaperRefsAuto` / `collectPapersNeedingAssetDownload` |
 
 1–6 互相独立且全为低风险，可先行兑现收益。9 的投入较大（约 300–400 行，见 §8.5），做完 1–8 后再评估。10 必须跟在 9 之后。
 
