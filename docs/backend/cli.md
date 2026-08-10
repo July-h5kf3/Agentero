@@ -6,7 +6,7 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 
 - 目录：`cli/`（crate `agentero-cli`）
 - path 依赖 `agentero_lib`：`features::{vault,catalog,import,wiki}` + `core::{error,fs}`
-- 桌面安装包内置同版本 CLI：[../development/bundled-cli.md](../development/bundled-cli.md)（[#165](https://github.com/poco-ai/Agentero/issues/165) / [#166](https://github.com/poco-ai/Agentero/issues/166)）
+- 桌面安装包内置同版本 CLI（[#165](https://github.com/poco-ai/Agentero/issues/165) / [#166](https://github.com/poco-ai/Agentero/issues/166)）
   - 设置 → 关于：显示 CLI 版本、是否已安装 PATH 入口，并支持手动安装 / 卸载（不静默改 shell rc）
 
 ## 命令组

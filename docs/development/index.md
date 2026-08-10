@@ -23,9 +23,8 @@
 | [paper-behavior-dag.md](paper-behavior-dag.md) | 导入（identifier / Connector / 本地 PDF / BibTeX 四条入口）与打开论文的行为 DAG、现状不合理之处（`PAPER.md` 生成责任在前端、refs 重复 spawn、PDF/TeX 串行）与目标 DAG |
 | [plaza.md](plaza.md) | 广场（Cool Papers / 推荐 / 播客） |
 | [usage-analytics.md](usage-analytics.md) | \#239 使用记录总结：`.agentero/usage.sqlite` 事件与画像、Agent 习惯 context 三层接入、继续阅读 / 周回顾 / 库内推荐 |
-| [bundled-cli.md](bundled-cli.md) | 桌面安装包内置 CLI、命令行打开 Vault 与跨平台 PATH 策略 |
 | [zotero-word-integration.md](zotero-word-integration.md) | 官方 Zotero Word 插件 provider 兼容、文档迁移与平台实现评估 |
-| [mark-cli-roadmap.md](mark-cli-roadmap.md) | \#170 阅读标注**内置进 CLI**（方案/命令面/边界）+ 基础→上层→Skill；与 [bundled-cli](bundled-cli.md) 分发衔接 |
+| [mark-cli-roadmap.md](mark-cli-roadmap.md) | \#170 阅读标注**内置进 CLI**（方案/命令面/边界）+ 基础→上层→Skill；与 [CLI 文档](../backend/cli.md) 分发衔接 |
 | [mark-locate-lazy.md](mark-locate-lazy.md) | 文字定位：打开 PDF 再算（惰性，默认主路径） |
 | [mark-locate-eager.md](mark-locate-eager.md) | 文字定位：标注时算（即时 B1 viewer / 可选 B2 headless） |
 
