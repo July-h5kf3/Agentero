@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/core/utils";
-import { paperDirFromPath } from "@/lib/paper";
 import {
 	type CiteGraphNode,
 	type CiteGraphNodeType,
@@ -112,8 +111,9 @@ export function GraphPanel({
 
 	const centerHint = useMemo(() => {
 		if (!selectedPath) return null;
-		// Citation graph is paper-centric: only paper folders (or files under them).
-		return paperDirFromPath(selectedPath);
+		// ReferencesPanel already resolves the active document to a vault-relative
+		// paper folder, so use it directly as the graph center.
+		return selectedPath;
 	}, [selectedPath]);
 
 	useEffect(() => {
