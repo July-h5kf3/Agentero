@@ -2,7 +2,7 @@
  * Searchable font family picker (Obsidian-style): built-in stacks + system fonts.
  */
 
-import { Check, ChevronsUpDown, LoaderCircle } from "lucide-react";
+import { ChevronsUpDown, LoaderCircle } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -158,9 +158,6 @@ export function FontFamilyPicker({
 										style={css ? { fontFamily: css } : undefined}
 									>
 										<span className="truncate">{presetLabel}</span>
-										{selected ? (
-											<Check className="ml-auto size-3.5 shrink-0 opacity-100" />
-										) : null}
 									</CommandItem>
 								);
 							})}
@@ -186,9 +183,6 @@ export function FontFamilyPicker({
 											style={{ fontFamily: `"${name.replace(/"/g, '\\"')}"` }}
 										>
 											<span className="truncate">{name}</span>
-											{selected ? (
-												<Check className="ml-auto size-3.5 shrink-0 opacity-100" />
-											) : null}
 										</CommandItem>
 									);
 								})}

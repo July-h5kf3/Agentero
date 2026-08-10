@@ -74,9 +74,20 @@ export function resolveFontFamilyCss(
 }
 
 /**
+ * CSS custom properties consumed by @theme (see src/index.css).
+ * Utilities are inlined as `var(--agentero-font-*)`, so runtime overrides here
+ * actually change chrome / mono UI. Do not set --font-sans alone — Tailwind
+ * does not re-read that for .font-sans when using @theme inline.
+ */
+const CSS_VAR_SANS = "--agentero-font-sans";
+const CSS_VAR_HEADING = "--agentero-font-heading";
+const CSS_VAR_MONO = "--agentero-font-mono";
+
+/**
  * Apply interface + mono CSS variables on `documentElement`.
- * Interface drives `--font-sans` / `--font-heading`; mono drives `--font-mono`.
- * Empty values clear inline overrides so `@theme` defaults return.
+ * Interface → chrome UI (sidebars, settings, toolbars).
+ * Mono → code blocks / font-mono / pre.
+ * Empty values clear inline overrides so :root defaults return.
  */
 export function applyChromeFontCss(
 	interfaceFontFamily: string,
@@ -86,18 +97,21 @@ export function applyChromeFontCss(
 	const root = document.documentElement;
 	const iface = resolveFontFamilyCss(interfaceFontFamily, "interface");
 	if (iface) {
-		root.style.setProperty("--font-sans", iface);
-		root.style.setProperty("--font-heading", iface);
+		root.style.setProperty(CSS_VAR_SANS, iface);
+		root.style.setProperty(CSS_VAR_HEADING, iface);
+		// Belt-and-suspenders: inheritance for nodes without font-sans class.
+		root.style.fontFamily = iface;
 	} else {
-		root.style.removeProperty("--font-sans");
-		root.style.removeProperty("--font-heading");
+		root.style.removeProperty(CSS_VAR_SANS);
+		root.style.removeProperty(CSS_VAR_HEADING);
+		root.style.fontFamily = "";
 	}
 
 	const mono = resolveFontFamilyCss(monoFontFamily, "mono");
 	if (mono) {
-		root.style.setProperty("--font-mono", mono);
+		root.style.setProperty(CSS_VAR_MONO, mono);
 	} else {
-		root.style.removeProperty("--font-mono");
+		root.style.removeProperty(CSS_VAR_MONO);
 	}
 }
 
