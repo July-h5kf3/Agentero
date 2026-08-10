@@ -9,6 +9,7 @@ pub mod pdf_parse;
 pub mod zotero_commands;
 
 mod assets;
+pub(crate) mod batch;
 pub(crate) mod map;
 pub(crate) mod parse;
 mod skill_import;
@@ -304,80 +305,41 @@ pub async fn import_by_identifier_batch(
         return Err(AppError::message("vault path is not a directory"));
     }
 
-    let mut skipped: Vec<SkippedImport> = Vec::new();
-    let mut errors: Vec<String> = Vec::new();
     let skills: Vec<SkillImportResult> = Vec::new();
     let mut skill_candidates: Vec<SkillDiscovery> = Vec::new();
-    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut preflight = batch::preflight_identifier_batch(
+        &args.texts,
+        &vault,
+        batch::SkillBatchMode::Collect,
+        false,
+    );
 
-    // Phase 1: parse, deduplicate, and filter against existing catalog.
-    let mut to_import: Vec<(String, LookupImportArgs)> = Vec::new();
-    for raw in &args.texts {
-        let raw = raw.trim();
-        if raw.is_empty() {
-            continue;
+    for pending in &preflight.skills {
+        match discover_skill_source(&vault, &pending.source, app, args.task_id.as_deref()).await {
+            Ok(discovery) => skill_candidates.push(discovery),
+            Err(e) => preflight.errors.push(format!("{}: {e}", pending.raw)),
         }
-        let Some((kind, value)) = extract_primary_identifier(raw) else {
-            errors.push(format!("{raw}: unrecognized identifier"));
-            continue;
-        };
-
-        let kind_str = identifier_kind_str(kind);
-        let dedup_key = format!("{kind_str}:{value}");
-        if seen.contains_key(&dedup_key) {
-            skipped.push(SkippedImport {
-                raw: raw.to_string(),
-                kind: kind_str,
-                value: value.clone(),
-                reason: "duplicate_in_batch".to_string(),
-            });
-            continue;
-        }
-        seen.insert(dedup_key.clone(), raw.to_string());
-
-        if kind == IdentifierKind::Skill {
-            let Some(source) = parse::extract_skill_source(raw) else {
-                errors.push(format!("{raw}: invalid skill source"));
-                continue;
-            };
-            match discover_skill_source(&vault, &source, app, args.task_id.as_deref()).await {
-                Ok(discovery) => skill_candidates.push(discovery),
-                Err(e) => errors.push(format!("{raw}: {e}")),
-            }
-            continue;
-        }
-
-        // Check catalog for existing paper by canonical identifier.
-        if let Some(column) = identifier_kind_column(kind) {
-            match papers::find_by_identifier(&vault, column, &value) {
-                Ok(Some(_record)) => {
-                    skipped.push(SkippedImport {
-                        raw: raw.to_string(),
-                        kind: kind_str,
-                        value: value.clone(),
-                        reason: "already_in_library".to_string(),
-                    });
-                    continue;
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    // Log but do not block import on catalog read failure.
-                    log::warn!("catalog lookup failed for {value}: {e}");
-                }
-            }
-        }
-
-        to_import.push((
-            raw.to_string(),
-            LookupImportArgs {
-                vault_path: args.vault_path.clone(),
-                parent_dir: args.parent_dir.clone(),
-                text: raw.to_string(),
-                translator_base_url: args.translator_base_url.clone(),
-                task_id: args.task_id.clone(),
-            },
-        ));
     }
+
+    let to_import: Vec<(String, LookupImportArgs)> = preflight
+        .papers
+        .into_iter()
+        .map(|pending| {
+            let raw = pending.raw;
+            (
+                raw.clone(),
+                LookupImportArgs {
+                    vault_path: args.vault_path.clone(),
+                    parent_dir: args.parent_dir.clone(),
+                    text: raw,
+                    translator_base_url: args.translator_base_url.clone(),
+                    task_id: args.task_id.clone(),
+                },
+            )
+        })
+        .collect();
+    let skipped = preflight.skipped;
+    let mut errors = preflight.errors;
 
     let total = to_import.len();
     if total == 0 {

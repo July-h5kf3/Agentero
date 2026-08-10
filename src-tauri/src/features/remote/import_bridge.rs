@@ -4,16 +4,14 @@ use super::session::RemoteSession;
 use crate::core::error::AppError;
 use crate::core::fs::{VaultFs, WriteOpts};
 use crate::features::catalog::papers;
-use crate::features::import::parse::{
-    extract_arxiv_id, extract_primary_identifier, IdentifierKind,
-};
+use crate::features::import::batch::{preflight_identifier_batch, SkillBatchMode};
+use crate::features::import::parse::extract_arxiv_id;
 use crate::features::import::{
-    enrich_remote_urls, ensure_paper_assets, identifier_kind_column, identifier_kind_str,
-    map_zotero_item, normalize_parent_dir, paper_record_from_meta, resolve_metadata,
-    slug_from_stem, title_from_stem, write_paper_shell, AssetDownloadResult, ImportLocalPdfArgs,
-    ImportLocalPdfResult, LocalPdfImportEntry, LookupImportArgs, LookupImportBatchArgs,
-    LookupImportBatchResult, LookupImportResult, PaperDownloadAssetsArgs, PaperImportArgs,
-    PaperImportResult, SkippedImport, DEFAULT_TRANSLATOR_BASE_URL,
+    enrich_remote_urls, ensure_paper_assets, map_zotero_item, normalize_parent_dir,
+    paper_record_from_meta, resolve_metadata, slug_from_stem, title_from_stem, write_paper_shell,
+    AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LocalPdfImportEntry,
+    LookupImportArgs, LookupImportBatchArgs, LookupImportBatchResult, LookupImportResult,
+    PaperDownloadAssetsArgs, PaperImportArgs, PaperImportResult, DEFAULT_TRANSLATOR_BASE_URL,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -120,67 +118,26 @@ pub async fn import_by_identifier_batch_remote(
     args: LookupImportBatchArgs,
 ) -> Result<LookupImportBatchResult, AppError> {
     let mut imported: Vec<LookupImportResult> = Vec::new();
-    let mut skipped: Vec<SkippedImport> = Vec::new();
-    let mut errors: Vec<String> = Vec::new();
-    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let preflight = preflight_identifier_batch(
+        &args.texts,
+        &session.work_root,
+        SkillBatchMode::RejectRemote,
+        true,
+    );
+    let skipped = preflight.skipped;
+    let mut errors = preflight.errors;
 
-    for raw in &args.texts {
-        let raw = raw.trim();
-        if raw.is_empty() {
-            continue;
-        }
-        let Some((kind, value)) = extract_primary_identifier(raw) else {
-            errors.push(format!("{raw}: unrecognized identifier"));
-            continue;
-        };
-        if kind == IdentifierKind::Skill {
-            errors.push(format!(
-                "{raw}: skill import is not supported for remote vaults"
-            ));
-            continue;
-        }
-
-        let kind_str = identifier_kind_str(kind);
-        let dedup_key = format!("{kind_str}:{value}");
-        if seen.contains_key(&dedup_key) {
-            skipped.push(SkippedImport {
-                raw: raw.to_string(),
-                kind: kind_str,
-                value: value.clone(),
-                reason: "duplicate_in_batch".to_string(),
-            });
-            continue;
-        }
-        seen.insert(dedup_key.clone(), raw.to_string());
-
-        if let Some(column) = identifier_kind_column(kind) {
-            match papers::find_by_identifier(&session.work_root, column, &value) {
-                Ok(Some(_record)) => {
-                    skipped.push(SkippedImport {
-                        raw: raw.to_string(),
-                        kind: kind_str,
-                        value: value.clone(),
-                        reason: "already_in_library".to_string(),
-                    });
-                    continue;
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    log::warn!("remote catalog lookup failed for {value}: {e}");
-                }
-            }
-        }
-
+    for pending in preflight.papers {
         let single = LookupImportArgs {
             vault_path: args.vault_path.clone(),
             parent_dir: args.parent_dir.clone(),
-            text: raw.to_string(),
+            text: pending.raw.clone(),
             translator_base_url: args.translator_base_url.clone(),
             task_id: args.task_id.clone(),
         };
         match import_by_identifier_remote(session.clone(), single).await {
             Ok(r) => imported.push(r),
-            Err(e) => errors.push(format!("{raw}: {e}")),
+            Err(e) => errors.push(format!("{}: {e}", pending.raw)),
         }
     }
 
