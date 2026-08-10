@@ -79,6 +79,7 @@ pub fn run() {
         .manage(crate::features::agent::AskUserGate::new())
         .manage(crate::features::bridge::BridgeController::new())
         .manage(crate::features::bridge::BridgeClientController::new())
+        .manage(crate::features::jobs::JobCenter::new())
         .manage(WikiIndexState::new())
         .manage(crate::features::doctor::DoctorDirtyPathsState::default())
         .manage(ExternalRenameRepairStore::new())
