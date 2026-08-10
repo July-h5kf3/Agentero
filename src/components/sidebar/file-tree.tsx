@@ -3,6 +3,7 @@ import {
 	Check,
 	Download,
 	FileText,
+	FolderIcon,
 	FolderInput,
 	FolderPlus,
 	Library,
@@ -119,6 +120,13 @@ export type TreeCreateDraft = {
 	kind: TreeCreateKind;
 	/** Absolute path of the parent directory (vault root or folder). */
 	parentPath: string;
+};
+
+export type TreeRenameDraft = {
+	/** Absolute path of the file/folder being renamed. */
+	path: string;
+	/** Current disk name (basename). */
+	currentName: string;
 };
 
 /** One flattened, windowable tree row in display order. */
@@ -304,6 +312,110 @@ function TreeCreateInput({
 	);
 }
 
+/** Inline name input for renaming a file/folder (VS Code / Finder style). */
+function TreeRenameInput({
+	initialName,
+	icon,
+	onConfirm,
+	onCancel,
+}: {
+	initialName: string;
+	icon: ReactNode;
+	onConfirm: (name: string) => void;
+	onCancel: () => void;
+}) {
+	const { t } = useTranslation("sidebar");
+	const [value, setValue] = useState(initialName);
+	const [error, setError] = useState<string | null>(null);
+	const inputRef = useRef<HTMLInputElement>(null);
+	const committedRef = useRef(false);
+
+	useEffect(() => {
+		const el = inputRef.current;
+		if (!el) return;
+		el.focus();
+		el.select();
+	}, []);
+
+	const commit = useCallback(() => {
+		if (committedRef.current) return;
+		const name = value.trim();
+		if (!name) {
+			committedRef.current = true;
+			onCancel();
+			return;
+		}
+		if (!isValidVaultEntryName(name)) {
+			setError(t("fileTree.invalidName"));
+			requestAnimationFrame(() => inputRef.current?.focus());
+			return;
+		}
+		if (name === initialName) {
+			committedRef.current = true;
+			onCancel();
+			return;
+		}
+		committedRef.current = true;
+		onConfirm(name);
+	}, [value, initialName, onCancel, onConfirm, t]);
+
+	const cancel = useCallback(() => {
+		if (committedRef.current) return;
+		committedRef.current = true;
+		onCancel();
+	}, [onCancel]);
+
+	return (
+		<div className="relative">
+			<div
+				className={cn(
+					"flex h-7 items-center gap-1 rounded px-2",
+					error ? "bg-destructive/10" : "bg-muted/60",
+				)}
+			>
+				<span className="size-4 shrink-0" aria-hidden />
+				{icon}
+				<input
+					ref={inputRef}
+					type="text"
+					value={value}
+					title={error ?? undefined}
+					aria-label={t("fileTree.rename")}
+					aria-invalid={Boolean(error)}
+					className={cn(
+						"h-5 min-w-0 flex-1 rounded-sm border border-ring bg-background px-1 text-sm outline-none",
+						error && "border-destructive",
+					)}
+					onChange={(e) => {
+						setValue(e.target.value);
+						if (error) setError(null);
+					}}
+					onKeyDown={(e) => {
+						e.stopPropagation();
+						if (e.key === "Enter") {
+							e.preventDefault();
+							commit();
+						} else if (e.key === "Escape") {
+							e.preventDefault();
+							cancel();
+						}
+					}}
+					onBlur={() => {
+						requestAnimationFrame(() => {
+							if (!committedRef.current) commit();
+						});
+					}}
+				/>
+			</div>
+			{error ? (
+				<p className="pointer-events-none absolute top-full right-0 left-8 z-10 mt-0.5 rounded bg-background/95 px-1 text-destructive text-[0.6875rem] leading-tight shadow-sm">
+					{error}
+				</p>
+			) : null}
+		</div>
+	);
+}
+
 type FileTreeProps = {
 	nodes: FileNode[];
 	/** True while the root Vault tree is being loaded. */
@@ -314,6 +426,14 @@ type FileTreeProps = {
 	createDraft: TreeCreateDraft | null;
 	onConfirmCreate: (name: string) => void;
 	onCancelCreate: () => void;
+	/** Inline rename draft; replaces the rename dialog for file/folder items. */
+	renameDraft?: TreeRenameDraft | null;
+	/** Start inline rename for the given tree path. */
+	onStartRename?: (path: string) => void;
+	/** Confirm inline rename; parent performs the link-aware vault move. */
+	onConfirmRename?: (path: string, newName: string) => void | Promise<void>;
+	/** Cancel inline rename and clear the draft. */
+	onCancelRename?: () => void;
 	/** Called for normal files and for paper folders (collapsed leaves). */
 	onSelectFile: (node: FileNode) => void;
 	/** Virtual library node → papers table in center pane. */
@@ -358,8 +478,6 @@ type FileTreeProps = {
 	onDeletePath?: (path: string) => void | Promise<void>;
 	/** Batch delete multiple real tree paths (one confirm). */
 	onDeletePaths?: (paths: string[]) => void | Promise<void>;
-	/** Rename one real tree path through the link-aware Vault transaction. */
-	onRenamePath?: (path: string) => void | Promise<void>;
 	/** Move paths into a papers/ folder chosen by the inline picker. */
 	onMoveTo?: (paths: string[], destParentRel: string) => void;
 	/** Move paths to the destination implied by a drag-and-drop target. */
@@ -413,6 +531,10 @@ export const FileTree = memo(
 			createDraft,
 			onConfirmCreate,
 			onCancelCreate,
+			renameDraft,
+			onStartRename,
+			onConfirmRename,
+			onCancelRename,
 			onSelectFile,
 			onSelectLibrary,
 			onSelectTrash,
@@ -429,7 +551,6 @@ export const FileTree = memo(
 			onOpenPaperNotes,
 			onDeletePath,
 			onDeletePaths,
-			onRenamePath,
 			onMoveTo,
 			onDropMove,
 			onCutPaths,
@@ -927,7 +1048,7 @@ export const FileTree = memo(
 				path: string,
 				mods: { meta: boolean; ctrl: boolean; shift: boolean },
 			) => {
-				if (createDraft) return;
+				if (createDraft || renameDraft) return;
 				if (isVirtualTreePath(path)) {
 					clearSelection();
 					openRow(path);
@@ -967,7 +1088,14 @@ export const FileTree = memo(
 				setAnchor(path);
 				openRow(path);
 			},
-			[anchor, clearSelection, createDraft, openRow, selectableOrder],
+			[
+				anchor,
+				clearSelection,
+				createDraft,
+				renameDraft,
+				openRow,
+				selectableOrder,
+			],
 		);
 
 		const orderedSelected = useCallback(
@@ -1098,7 +1226,7 @@ export const FileTree = memo(
 
 		const handleRowDragStart = useCallback(
 			(path: string, e: ReactDragEvent) => {
-				if (createDraft || isVirtualTreePath(path)) {
+				if (createDraft || renameDraft || isVirtualTreePath(path)) {
 					e.preventDefault();
 					return;
 				}
@@ -1112,7 +1240,7 @@ export const FileTree = memo(
 					// some webviews restrict setData; state still drives the drop
 				}
 			},
-			[createDraft, selected, orderedSelected],
+			[createDraft, renameDraft, selected, orderedSelected],
 		);
 
 		const handleRowDragOver = useCallback(
@@ -1312,7 +1440,7 @@ export const FileTree = memo(
 
 		const handleContextMenuPath = useCallback(
 			(path: string, event: ReactMouseEvent) => {
-				if (createDraft) return;
+				if (createDraft || renameDraft) return;
 				// Real vault paths + virtual Library (export) / Recycle Bin (empty).
 				if (
 					!canRevealPath(path) &&
@@ -1328,7 +1456,7 @@ export const FileTree = memo(
 				setRevealError(null);
 				setContextMenu({ path, x: event.clientX, y: event.clientY });
 			},
-			[canRevealPath, createDraft, onExportLibrary],
+			[canRevealPath, createDraft, renameDraft, onExportLibrary],
 		);
 
 		const handleEmptyTrashFromMenu = useCallback(() => {
@@ -1406,11 +1534,11 @@ export const FileTree = memo(
 		}, [contextMenu, onPasteInto]);
 
 		const handleRenameFromMenu = useCallback(() => {
-			if (!contextMenu || !onRenamePath) return;
+			if (!contextMenu || !onStartRename) return;
 			const path = contextMenu.path;
 			setContextMenu(null);
-			void onRenamePath(path);
-		}, [contextMenu, onRenamePath]);
+			onStartRename(path);
+		}, [contextMenu, onStartRename]);
 
 		const handleNewFileFromMenu = useCallback(() => {
 			if (!contextMenu || !vaultPath || !onStartCreate) return;
@@ -1627,7 +1755,7 @@ export const FileTree = memo(
 								</span>
 							</button>
 						) : null}
-						{menuCount === 1 && onRenamePath ? (
+						{menuCount === 1 && onStartRename && !isPaperMenu ? (
 							<button
 								type="button"
 								role="menuitem"
@@ -1878,6 +2006,30 @@ export const FileTree = memo(
 			);
 		};
 
+		const renderRenameInput = (
+			node: FileNode,
+			paperLeaf: boolean,
+		): ReactNode => {
+			if (!renameDraft || paperLeaf) return null;
+			let icon: ReactNode;
+			if (node.kind === "directory") {
+				icon = <FolderIcon className="size-4 text-blue-500" />;
+			} else {
+				const Icon = contextPathIcon(node.name);
+				icon = <Icon className="size-4 text-muted-foreground" />;
+			}
+			return (
+				<TreeRenameInput
+					initialName={renameDraft.currentName}
+					icon={icon}
+					onConfirm={(newName) => {
+						if (onConfirmRename) void onConfirmRename(node.path, newName);
+					}}
+					onCancel={() => onCancelRename?.()}
+				/>
+			);
+		};
+
 		return (
 			<TooltipProvider delayDuration={300}>
 				<div
@@ -2072,7 +2224,9 @@ export const FileTree = memo(
 														? trashRow
 														: row.kind === "create"
 															? createRow
-															: renderNodeRow(row.node, row.paperLeaf)}
+															: renameDraft?.path === row.node.path
+																? renderRenameInput(row.node, row.paperLeaf)
+																: renderNodeRow(row.node, row.paperLeaf)}
 											</div>
 										);
 									})}

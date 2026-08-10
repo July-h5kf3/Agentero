@@ -39,7 +39,9 @@ import { setZoteroOpen, setZoteroSyncOpen } from "@/lib/shell/ui-store";
 import { vaultDisplayName } from "@/lib/vault";
 import {
 	cancelCreate,
+	cancelRenamePath,
 	confirmCreate,
+	confirmRenamePath,
 	createNewVault,
 	cutSelectedPaths,
 	dropMovePaths,
@@ -78,6 +80,9 @@ const onOpenRemoteVaultClick = (args: {
 const onMigrateZotero = () => setZoteroOpen(true);
 const onSyncZotero = () => setZoteroSyncOpen(true);
 const onConfirmCreate = (name: string) => void confirmCreate(name);
+const onConfirmRename = (path: string, name: string) =>
+	void confirmRenamePath(path, name);
+const onCancelRename = () => cancelRenamePath();
 const onDeletePath = (path: string) => void trashPathsAndNotify([path]);
 const onDeletePaths = (paths: string[]) => void trashPathsAndNotify(paths);
 const onMoveTo = (paths: string[], dest: string) =>
@@ -99,6 +104,7 @@ export function VaultSidebar() {
 	const treeLoading = useVaultStore((s) => s.treeLoading);
 	const treeSelectedPath = useVaultStore((s) => s.treeSelectedPath);
 	const createDraft = useVaultStore((s) => s.createDraft);
+	const renameDraft = useVaultStore((s) => s.renameDraft);
 	const busy = useVaultStore((s) => s.busy);
 	const recentVaults = useVaultStore((s) => s.recentVaults);
 	const cutPaths = useVaultStore((s) => s.cutPaths);
@@ -180,9 +186,12 @@ export function VaultSidebar() {
 					createDraft={createDraft}
 					onConfirmCreate={onConfirmCreate}
 					onCancelCreate={cancelCreate}
+					renameDraft={renameDraft}
+					onStartRename={startRenamePath}
+					onConfirmRename={onConfirmRename}
+					onCancelRename={onCancelRename}
 					onDeletePath={onDeletePath}
 					onDeletePaths={onDeletePaths}
-					onRenamePath={startRenamePath}
 					onMoveTo={onMoveTo}
 					onDropMove={onDropMove}
 					onCutPaths={cutSelectedPaths}

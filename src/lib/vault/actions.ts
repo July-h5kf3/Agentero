@@ -69,6 +69,7 @@ import {
 	refreshTree,
 	setCreateDraft,
 	setCutPaths,
+	setRenameDraft,
 	setTree,
 	setTreeLoading,
 	setTreeSelectedPath,
@@ -80,11 +81,7 @@ import { moveVaultPath, normalizeVaultRel } from "@/lib/wiki";
 import { syncMovedPaths } from "@/lib/wiki/actions";
 import {
 	rebuildWikiAndNotify,
-	setRenameBusy,
-	setRenameDraft,
-	setRenameError,
 	trackInternalRenamePaths,
-	wikiStore,
 } from "@/lib/wiki/store";
 import {
 	closeTabsUnderPath,
@@ -821,7 +818,7 @@ export async function dropMovePaths(
 	}
 }
 
-/** Open the in-app rename dialog for a path. */
+/** Start inline rename for a tree path. */
 export function startRenamePath(path: string): void {
 	const vaultPath = getVaultPath();
 	if (!vaultPath || isRemoteVaultHandle(vaultPath)) {
@@ -830,47 +827,52 @@ export function startRenamePath(path: string): void {
 	}
 	const fromRel = vaultRelativePath(vaultPath, path);
 	if (!fromRel) return;
-	const currentName = basenameOf(path);
-	setRenameError(null);
-	setRenameDraft({ path, currentName, value: currentName });
+	setRenameDraft({ path, currentName: basenameOf(path) });
 }
 
-export async function confirmRenamePath(): Promise<void> {
-	const { renameDraft, renameBusy } = wikiStore.getState();
+export function cancelRenamePath(): void {
+	setRenameDraft(null);
+}
+
+export async function confirmRenamePath(
+	path: string,
+	nextName: string,
+): Promise<void> {
 	const vaultPath = getVaultPath();
-	if (!renameDraft || !vaultPath || renameBusy) return;
-	const nextName = renameDraft.value.trim();
-	if (!isValidVaultEntryName(nextName)) {
-		setRenameError(i18n.t("sidebar:fileTree.invalidName"));
-		return;
-	}
-	if (nextName === renameDraft.currentName) {
+	if (!vaultPath) return;
+	const trimmed = nextName.trim();
+	if (!isValidVaultEntryName(trimmed)) {
+		notifyError(i18n.t("sidebar:fileTree.invalidName"));
 		setRenameDraft(null);
-		setRenameError(null);
 		return;
 	}
-	const fromRel = vaultRelativePath(vaultPath, renameDraft.path);
+	const fromRel = vaultRelativePath(vaultPath, path);
 	if (!fromRel) {
-		setRenameError(i18n.t("sidebar:fileTree.renameFailed"));
+		notifyError(i18n.t("sidebar:fileTree.renameFailed"));
+		setRenameDraft(null);
+		return;
+	}
+	const currentName = basenameOf(fromRel);
+	if (trimmed === currentName) {
+		setRenameDraft(null);
 		return;
 	}
 	const parent = fromRel.includes("/")
 		? fromRel.slice(0, fromRel.lastIndexOf("/"))
 		: "";
-	const toRel = parent ? `${parent}/${nextName}` : nextName;
+	const toRel = parent ? `${parent}/${trimmed}` : trimmed;
 	const toAbs = joinVaultPath(vaultPath, toRel);
-	const pendingEventPaths = [renameDraft.path, toAbs];
+	const pendingEventPaths = [path, toAbs];
 	trackInternalRenamePaths(pendingEventPaths, Number.POSITIVE_INFINITY);
+	setVaultBusy(true);
 	try {
-		setRenameBusy(true);
-		setRenameError(null);
 		const result = await moveVaultPath(
 			vaultPath,
 			fromRel,
 			toRel,
 			dirtyVaultPaths(vaultPath),
 		);
-		syncMovedPaths(vaultPath, renameDraft.path, toAbs, fromRel, toRel, result);
+		syncMovedPaths(vaultPath, path, toAbs, fromRel, toRel, result);
 		await refreshTree(vaultPath);
 		await refreshLibrary();
 		setRenameDraft(null);
@@ -881,13 +883,13 @@ export async function confirmRenamePath(): Promise<void> {
 		);
 	} catch (error) {
 		trackInternalRenamePaths(pendingEventPaths, Date.now() + 2000);
-		setRenameError(
+		notifyError(
 			error instanceof Error
 				? error.message
 				: i18n.t("sidebar:fileTree.renameFailed"),
 		);
 	} finally {
-		setRenameBusy(false);
+		setVaultBusy(false);
 	}
 }
 

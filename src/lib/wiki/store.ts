@@ -1,8 +1,8 @@
 /**
- * Wiki / rename state (zustand vanilla): index revision signal, in-app rename
- * dialog draft, and external-rename repair flow. Also owns the debounced wiki
- * rebuild scheduler and the watcher-echo filters (internal rename transactions
- * and self-writes; module-level timers replace the old App refs).
+ * Wiki state (zustand vanilla): index revision signal and external-rename
+ * repair flow. Also owns the debounced wiki rebuild scheduler and the
+ * watcher-echo filters (internal rename transactions and self-writes;
+ * module-level timers replace the old App refs).
  */
 
 import { createStore } from "zustand/vanilla";
@@ -12,12 +12,6 @@ import { rebuildWikiIndex, type WikiExternalRenamePreview } from "@/lib/wiki";
 import { isWikiTargetPath } from "@/lib/wiki/target-path";
 import { notifyWikiEmbedTargets } from "@/lib/wiki-embed-refresh";
 import { normalizeTabPath } from "@/lib/workspace/tabs";
-
-export type RenameDraft = {
-	path: string;
-	currentName: string;
-	value: string;
-};
 
 export type ExternalRenameFailure = {
 	from: string;
@@ -37,10 +31,6 @@ type WikiStore = {
 	externalRenameRepairing: boolean;
 	/** A no-write preflight failure that still needs an actionable review surface. */
 	externalRenameFailure: ExternalRenameFailure | null;
-	/** App-native rename input; WebView JavaScript prompts are not portable. */
-	renameDraft: RenameDraft | null;
-	renameBusy: boolean;
-	renameError: string | null;
 };
 
 export const wikiStore = createStore<WikiStore>(() => ({
@@ -49,34 +39,10 @@ export const wikiStore = createStore<WikiStore>(() => ({
 	externalRenameVaultPath: null,
 	externalRenameRepairing: false,
 	externalRenameFailure: null,
-	renameDraft: null,
-	renameBusy: false,
-	renameError: null,
 }));
 
 export function bumpWikiIndexRevision(): void {
 	wikiStore.setState((s) => ({ wikiIndexRevision: s.wikiIndexRevision + 1 }));
-}
-
-export function setRenameDraft(
-	next:
-		| RenameDraft
-		| null
-		| ((previous: RenameDraft | null) => RenameDraft | null),
-): void {
-	if (typeof next === "function") {
-		wikiStore.setState((s) => ({ renameDraft: next(s.renameDraft) }));
-		return;
-	}
-	wikiStore.setState({ renameDraft: next });
-}
-
-export function setRenameBusy(busy: boolean): void {
-	wikiStore.setState({ renameBusy: busy });
-}
-
-export function setRenameError(error: string | null): void {
-	wikiStore.setState({ renameError: error });
 }
 
 export function setExternalRenamePreview(

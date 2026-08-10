@@ -6,7 +6,6 @@
 
 import { CommandPalette } from "@/components/dialogs/command-palette";
 import { ExternalRenameDialog } from "@/components/dialogs/external-rename-dialog";
-import { RenamePathDialog } from "@/components/dialogs/rename-path-dialog";
 import { SkillImportDialog } from "@/components/dialogs/skill-import-dialog";
 import { ZoteroMigrateDialog } from "@/components/dialogs/zotero-migrate-dialog";
 import { ZoteroSyncDialog } from "@/components/dialogs/zotero-sync-dialog";
@@ -63,7 +62,6 @@ export function AppDialogs() {
 				onConfirm={confirmSkillImport}
 			/>
 
-			<RenamePathDialog />
 			<ExternalRenameDialog />
 
 			<ImportLocalPdfDialog

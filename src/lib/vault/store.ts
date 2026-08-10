@@ -33,6 +33,13 @@ export type TreeCreateDraft = {
 	parentPath: string;
 };
 
+export type TreeRenameDraft = {
+	/** Absolute path of the file/folder/paper being renamed. */
+	path: string;
+	/** Current disk name (basename). */
+	currentName: string;
+};
+
 type VaultTreeDerived = {
 	vaultMdFiles: string[];
 	vaultWikiTargetFiles: string[];
@@ -53,6 +60,8 @@ type VaultStore = VaultTreeDerived & {
 	treeSelectedPath: string | null;
 	/** Inline new file/folder draft in the tree (IDE-style). */
 	createDraft: TreeCreateDraft | null;
+	/** Inline rename draft in the tree (replaces the rename dialog). */
+	renameDraft: TreeRenameDraft | null;
 	recentVaults: string[];
 	/** Absolute paths staged by Cut (⌘X) until pasted or cancelled. */
 	cutPaths: string[];
@@ -81,6 +90,7 @@ export const vaultStore = createStore<VaultStore>(() => ({
 	busy: false,
 	treeSelectedPath: null,
 	createDraft: null,
+	renameDraft: null,
 	recentVaults: [],
 	cutPaths: [],
 	...deriveFromTree([], null),
@@ -143,6 +153,10 @@ export function setTreeSelectedPath(
 
 export function setCreateDraft(draft: TreeCreateDraft | null): void {
 	vaultStore.setState({ createDraft: draft });
+}
+
+export function setRenameDraft(draft: TreeRenameDraft | null): void {
+	vaultStore.setState({ renameDraft: draft });
 }
 
 export function setCutPaths(paths: string[]): void {
