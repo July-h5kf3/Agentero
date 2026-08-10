@@ -1,5 +1,6 @@
 //! Magic-wand / asset import into a remote vault (stage locally → SFTP → catalog push).
 
+use super::paper_commit::{remote_paper_commit, RemotePaperCommitOptions};
 use super::session::RemoteSession;
 use crate::core::error::AppError;
 use crate::core::fs::{VaultFs, WriteOpts};
@@ -44,71 +45,29 @@ pub async fn import_by_identifier_remote(
     crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
     enrich_remote_urls(&mut meta);
 
-    let id = meta.id.clone();
-    if id.is_empty() {
-        return Err(AppError::message("resolved metadata has empty id"));
-    }
-
-    let (id, path_rel) = unique_remote_paper_path(session.fs.as_ref(), &parent_rel, &id).await?;
-    meta.id = id.clone();
-    let staging = session.work_root.join(&path_rel);
-    if staging.exists() {
-        let _ = fs::remove_dir_all(&staging);
-    }
-    fs::create_dir_all(&staging)?;
-
-    write_paper_shell(&staging, &meta).await?;
-
-    let mut assets = ensure_paper_assets(
-        &staging,
-        &id,
-        meta.arxiv_id.as_deref(),
-        meta.pdf_url.as_deref(),
-        meta.doi.as_deref(),
+    let commit = remote_paper_commit(
+        session.clone(),
+        meta,
+        RemotePaperCommitOptions {
+            parent_rel: &parent_rel,
+            task_id: args.task_id.as_deref(),
+            push_catalog: true,
+        },
     )
-    .await
-    .unwrap_or_else(|e| {
-        let mut r = AssetDownloadResult::default();
-        r.messages.push(format!("asset download error: {e}"));
-        r
-    });
-    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
+    .await?;
 
-    let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
-        &session.work_root,
-        &path_rel,
-        &staging,
-    )
-    .await;
-    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
-    assets.paper_md = parse.paper_md;
-    for m in parse.messages {
-        assets.messages.push(m);
-    }
-
-    // Upload staged tree to remote (source of truth)
-    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
-    upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
-
-    let record = paper_record_from_meta(&path_rel, &meta);
-    papers::upsert_paper(&session.work_root, &record)?;
-    {
-        let mut cat = session.catalog.lock().await;
-        cat.push(session.fs.clone()).await?;
-    }
-
-    let paper_dir = format!("remote:{}/{}", session.id, path_rel);
+    let paper_dir = format!("remote:{}/{}", session.id, commit.path);
     Ok(LookupImportResult {
         paper_dir,
-        path: path_rel,
-        id: meta.id,
-        title: meta.title,
+        path: commit.path,
+        id: commit.id,
+        title: commit.title,
         used_translator,
         translator_base_url: base,
-        pdf: assets.pdf,
-        tex: assets.tex,
-        paper_md: assets.paper_md,
-        asset_messages: assets.messages,
+        pdf: commit.pdf,
+        tex: commit.tex,
+        paper_md: commit.paper_md,
+        asset_messages: commit.asset_messages,
     })
 }
 
