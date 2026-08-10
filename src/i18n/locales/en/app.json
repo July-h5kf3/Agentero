@@ -1,7 +1,7 @@
 {
 	"labels": {
 		"agent": "Agent",
-		"backlinks": "Backlinks",
+		"graph": "Graph",
 		"notes": "Notes",
 		"untitled": "Untitled"
 	},
@@ -42,6 +42,7 @@
 		"viewFocusNotes": "Focus Notes",
 		"libraryFocus": "Show Full Library",
 		"tabClose": "Close Tab",
+		"tabSplitPane": "Split Pane Right",
 		"tabNext": "Next Tab",
 		"tabPrev": "Previous Tab",
 		"wandOpen": "Magic Wand (Import by ID)"
@@ -52,7 +53,7 @@
 		"showSidebarHint": "Show sidebar ({{shortcut}})",
 		"hideSidebarHint": "Hide sidebar ({{shortcut}})",
 		"agentPanel": "Agent panel",
-		"backlinksPanel": "Backlinks panel",
+		"graphPanel": "Graph panel",
 		"annotationsPanel": "Annotations",
 		"referencesPanel": "References",
 		"figuresPanel": "Analysis",
@@ -117,7 +118,7 @@
 		"featureDesktopOnly": "Feature windows require the desktop app.",
 		"docDesktopOnly": "Document windows require the desktop app.",
 		"titleAgent": "Agent",
-		"titleBacklinks": "Backlinks",
+		"titleGraph": "Graph",
 		"titleAnnotations": "Annotations",
 		"titleReferences": "References",
 		"titleFigures": "Analysis",

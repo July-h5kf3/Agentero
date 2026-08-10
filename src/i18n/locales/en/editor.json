@@ -205,6 +205,13 @@
 		"label": "Document statistics",
 		"backlinks_one": "{{count}} backlink",
 		"backlinks_other": "{{count}} backlinks",
+		"backlinksHoverTitle": "Incoming links ({{count}})",
+		"noBacklinks": "No incoming links",
+		"backlinkStatus": {
+			"missing": "missing",
+			"ambiguous": "ambiguous",
+			"invalidFragment": "invalid fragment"
+		},
 		"words_one": "{{count}} word",
 		"words_other": "{{count}} words",
 		"characters_one": "{{count}} character",

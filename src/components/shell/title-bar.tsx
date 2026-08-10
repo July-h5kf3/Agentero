@@ -2,8 +2,8 @@ import {
 	BookMarked,
 	Bot,
 	ImageIcon,
-	Link2,
 	MessageSquareText,
+	Network,
 	PanelLeft,
 	PanelRight,
 	Settings,
@@ -145,9 +145,9 @@ export const TitleBar = memo(function TitleBar({
 									},
 									{
 										id: "backlinks" as const,
-										aria: t("titlebar.backlinksPanel"),
-										tooltip: t("labels.backlinks"),
-										Icon: Link2,
+										aria: t("titlebar.graphPanel"),
+										tooltip: t("labels.graph"),
+										Icon: Network,
 									},
 									{
 										id: "annotations" as const,

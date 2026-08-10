@@ -1,7 +1,7 @@
 {
 	"labels": {
 		"agent": "Agent",
-		"backlinks": "反向链接",
+		"graph": "图谱",
 		"notes": "笔记",
 		"untitled": "未命名"
 	},
@@ -42,6 +42,7 @@
 		"viewFocusNotes": "聚焦 Notes",
 		"libraryFocus": "显示全库",
 		"tabClose": "关闭标签",
+		"tabSplitPane": "向右分栏",
 		"tabNext": "下一标签",
 		"tabPrev": "上一标签",
 		"wandOpen": "魔棒（按标识符入库）"
@@ -52,7 +53,7 @@
 		"showSidebarHint": "显示侧边栏 ({{shortcut}})",
 		"hideSidebarHint": "隐藏侧边栏 ({{shortcut}})",
 		"agentPanel": "Agent 面板",
-		"backlinksPanel": "反向链接面板",
+		"graphPanel": "图谱面板",
 		"annotationsPanel": "批注",
 		"referencesPanel": "参考文献",
 		"figuresPanel": "解析",
@@ -117,7 +118,7 @@
 		"featureDesktopOnly": "功能窗口需要桌面应用。",
 		"docDesktopOnly": "文档窗口需要桌面应用。",
 		"titleAgent": "Agent",
-		"titleBacklinks": "反向链接",
+		"titleGraph": "图谱",
 		"titleAnnotations": "批注",
 		"titleReferences": "参考文献",
 		"titleFigures": "解析",

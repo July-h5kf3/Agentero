@@ -1,6 +1,6 @@
 /**
- * Right rail: Agent chat, Backlinks + Graph, PDF annotations, References,
- * and Figures (layout-detected images/tables). Subscribes to stores directly.
+ * Right rail: Agent chat, Graph, PDF annotations, References, and Figures
+ * (layout-detected images/tables). Subscribes to stores directly.
  */
 
 import {
@@ -22,7 +22,6 @@ import {
 	ReferencesPanel,
 	type VisualTraceRow,
 } from "@/components/viewer";
-import { BacklinksPanel } from "@/components/wiki/backlinks-panel";
 import { GraphPanel } from "@/components/wiki/graph-panel";
 import {
 	useAnnotationsStore,
@@ -58,11 +57,7 @@ import { listPdfAskThreads } from "@/lib/pdf/ask/io";
 import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
-import {
-	navigateWiki,
-	openGraphPath,
-	openPaper,
-} from "@/lib/workspace/actions";
+import { openGraphPath, openPaper } from "@/lib/workspace/actions";
 import { getActiveTabId } from "@/lib/workspace/store";
 
 // The Agent panel is lazy-loaded: it isn't mounted until the agent sidebar is
@@ -516,29 +511,13 @@ export function RightSidebar() {
 			{rightSidebarOpen &&
 			!backlinksInWindow &&
 			rightSidebarTab === "backlinks" ? (
-				<div className="flex h-full min-h-0 flex-col overflow-hidden">
-					<BacklinksPanel
-						vaultPath={vaultPath}
-						selectedPath={selectedPath}
-						onNavigate={(link) =>
-							void navigateWiki({
-								targetRaw: link.occurrence.targetRaw,
-								path: link.targetPath ?? null,
-								status: link.status,
-								fragment: link.occurrence.fragment,
-							})
-						}
-						className="min-h-0 basis-[42%] border-b"
-						wikiIndexRevision={wikiIndexRevision}
-					/>
-					<GraphPanel
-						vaultPath={vaultPath}
-						selectedPath={selectedPath}
-						onOpenPath={openGraphPath}
-						className="min-h-0 flex-1"
-						wikiIndexRevision={wikiIndexRevision}
-					/>
-				</div>
+				<GraphPanel
+					vaultPath={vaultPath}
+					selectedPath={selectedPath}
+					onOpenPath={openGraphPath}
+					className="h-full min-h-0 flex-1"
+					wikiIndexRevision={wikiIndexRevision}
+				/>
 			) : null}
 			{rightSidebarOpen &&
 			!annotationsInWindow &&

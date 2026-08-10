@@ -59,7 +59,7 @@ export type AgentSessionOpenRequest = {
 
 type UiStore = {
 	sidebarCollapsed: boolean;
-	/** Right sidebar (⌘L): Agent (default) or Backlinks with Graph below. */
+	/** Right sidebar (⌘L): Agent (default), Graph, Annotations, References, or Figures. */
 	rightSidebarOpen: boolean;
 	rightSidebarTab: RightSidebarTab;
 	/** Keep AgentPanel mounted when switching right-rail tabs. */

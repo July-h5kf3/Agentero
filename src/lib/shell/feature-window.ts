@@ -35,7 +35,7 @@ function featureWindowTitle(view: FeatureViewType): string {
 		case "agent":
 			return i18n.t("app:windows.titleAgent");
 		case "backlinks":
-			return i18n.t("app:windows.titleBacklinks");
+			return i18n.t("app:labels.graph");
 		case "annotations":
 			return i18n.t("app:windows.titleAnnotations");
 		case "references":

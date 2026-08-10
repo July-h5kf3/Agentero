@@ -13,7 +13,6 @@ import {
 	ReferencesPanel,
 	type VisualTraceRow,
 } from "@/components/viewer";
-import { BacklinksPanel } from "@/components/wiki/backlinks-panel";
 import { GraphPanel } from "@/components/wiki/graph-panel";
 import {
 	useLibraryStore,
@@ -63,7 +62,7 @@ import { joinVaultPath } from "@/lib/vault";
 import { openRecentVault } from "@/lib/vault/actions";
 import { initVaultStore, refreshTree } from "@/lib/vault/store";
 import { rebuildWikiAndNotify } from "@/lib/wiki/store";
-import { navigateWiki, openGraphPath } from "@/lib/workspace/actions";
+import { openGraphPath } from "@/lib/workspace/actions";
 import { initWorkspaceStore } from "@/lib/workspace/store";
 
 const AgentPanel = lazy(() =>
@@ -105,7 +104,7 @@ function viewTitleKey(
 	view: FeatureViewType,
 ):
 	| "labels.agent"
-	| "labels.backlinks"
+	| "labels.graph"
 	| "titlebar.annotationsPanel"
 	| "titlebar.referencesPanel"
 	| "titlebar.figuresPanel" {
@@ -113,7 +112,7 @@ function viewTitleKey(
 		case "agent":
 			return "labels.agent";
 		case "backlinks":
-			return "labels.backlinks";
+			return "labels.graph";
 		case "annotations":
 			return "titlebar.annotationsPanel";
 		case "references":
@@ -454,29 +453,13 @@ export function FeatureWindowRoot() {
 						/>
 					</Suspense>
 				) : view === "backlinks" ? (
-					<div className="flex h-full min-h-0 flex-col overflow-hidden">
-						<BacklinksPanel
-							vaultPath={vaultPath}
-							selectedPath={selectedPath}
-							onNavigate={(link) =>
-								void navigateWiki({
-									targetRaw: link.occurrence.targetRaw,
-									path: link.targetPath ?? null,
-									status: link.status,
-									fragment: link.occurrence.fragment,
-								})
-							}
-							className="min-h-0 basis-[42%] border-b"
-							wikiIndexRevision={wikiIndexRevision}
-						/>
-						<GraphPanel
-							vaultPath={vaultPath}
-							selectedPath={selectedPath}
-							onOpenPath={openGraphPath}
-							className="min-h-0 flex-1"
-							wikiIndexRevision={wikiIndexRevision}
-						/>
-					</div>
+					<GraphPanel
+						vaultPath={vaultPath}
+						selectedPath={selectedPath}
+						onOpenPath={openGraphPath}
+						className="h-full min-h-0 flex-1"
+						wikiIndexRevision={wikiIndexRevision}
+					/>
 				) : view === "annotations" ? (
 					<FeatureAnnotations
 						selectedPath={selectedPath}

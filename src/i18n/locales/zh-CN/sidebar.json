@@ -227,21 +227,6 @@
 		"skillImportSelectNone": "全不选",
 		"skillCandidatesFound": "找到 {{count}} 个 Skill 候选，请选择要安装的项目。"
 	},
-	"backlinks": {
-		"openNote": "打开一篇笔记以查看反向链接",
-		"loadFailed": "无法加载双链关系",
-		"none": "暂无反向链接",
-		"incoming": "入链（{{count}}）",
-		"outgoing": "出链（{{count}}）",
-		"noneIncoming": "暂无入链",
-		"noneOutgoing": "暂无出链",
-		"status": {
-			"missing": "目标缺失",
-			"ambiguous": "目标不明确",
-			"invalidFragment": "片段无效"
-		},
-		"title": "反向链接"
-	},
 	"graph": {
 		"near": "邻近",
 		"all": "全部",
