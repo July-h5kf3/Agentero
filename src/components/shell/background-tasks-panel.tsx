@@ -62,8 +62,6 @@ function kindIcon(kind: BackgroundTaskKind | undefined) {
 			return <BookOpen className={cls} aria-hidden />;
 		case "connector":
 			return <Plug className={cls} aria-hidden />;
-		case "agentLifecycle":
-			return <Package className={cls} aria-hidden />;
 		default:
 			return <ListOrdered className={cls} aria-hidden />;
 	}

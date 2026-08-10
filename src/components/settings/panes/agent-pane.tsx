@@ -1,3 +1,4 @@
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
 	ArrowUpCircle,
 	Check,
@@ -47,6 +48,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
 	Select,
 	SelectContent,
@@ -75,10 +77,6 @@ import {
 	USER_AGENT_PRESETS,
 	upsertAgent,
 } from "@/lib/agent";
-import {
-	enqueueBackgroundTask,
-	isBackgroundTaskCancelledError,
-} from "@/lib/core/background-tasks";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
@@ -88,6 +86,17 @@ import {
 	remoteAgentProbe,
 	remoteAgentScan,
 } from "@/lib/vault/remote/remote-vault";
+
+type LifecycleProgressEvent = {
+	taskId: string;
+	phase: string;
+	progress: number | null;
+};
+
+type LifecycleProgressState = {
+	progress: number | null;
+	detail: string;
+};
 
 export function AgentPane({
 	settings,
@@ -103,6 +112,9 @@ export function AgentPane({
 	const [installingIds, setInstallingIds] = useState<Set<string>>(
 		() => new Set(),
 	);
+	const [lifecycleProgress, setLifecycleProgress] = useState<
+		Record<string, LifecycleProgressState>
+	>({});
 	const [savingDefaultValue, setSavingDefaultValue] = useState<string | null>(
 		null,
 	);
@@ -348,11 +360,48 @@ export function AgentPane({
 		}
 	};
 
+	const patchLifecycleProgress = useCallback(
+		(templateId: string, patch: Partial<LifecycleProgressState>) => {
+			setLifecycleProgress((prev) => {
+				const current = prev[templateId] ?? {
+					progress: null,
+					detail: t("agent.lifecycleInstalling"),
+				};
+				return {
+					...prev,
+					[templateId]: { ...current, ...patch },
+				};
+			});
+		},
+		[t],
+	);
+
+	const clearLifecycleProgress = useCallback((templateId: string) => {
+		setLifecycleProgress((prev) => {
+			if (!(templateId in prev)) return prev;
+			const next = { ...prev };
+			delete next[templateId];
+			return next;
+		});
+	}, []);
+
+	const lifecyclePhaseLabel = useCallback(
+		(phase: string) => {
+			if (phase === "agent-lifecycle-waiting") {
+				return t("agent.lifecycleWaiting");
+			}
+			if (phase === "agent-lifecycle-install") {
+				return t("agent.lifecycleInstalling");
+			}
+			return t("agent.lifecycleInstalling");
+		},
+		[t],
+	);
+
 	/** Silent install/update: Host scopes Agent vs ACP from PATH (no free-form shell). */
 	const onToolLifecycle = async (
 		entry: CatalogEntry,
 		action: ToolLifecycleAction,
-		target: "agent" | "adapter",
 	) => {
 		if (!isTauri()) return;
 		setInstallingIds((prev) => {
@@ -360,36 +409,36 @@ export function AgentPane({
 			next.add(entry.templateId);
 			return next;
 		});
+		const taskId = `agent-lifecycle-${entry.templateId}-${Date.now().toString(36)}`;
+		let unlisten: UnlistenFn | null = null;
 		try {
-			await enqueueBackgroundTask(
-				{
-					kind: "agentLifecycle",
-					title: t(
-						action === "update"
-							? "agent.updateTask"
-							: target === "adapter"
-								? "agent.installAdapterTask"
-								: "agent.installAgentTask",
-						{ name: entry.name },
-					),
-					detail: t("agent.lifecycleInstalling"),
+			patchLifecycleProgress(entry.templateId, {
+				progress: 5,
+				detail: t("agent.lifecycleInstalling"),
+			});
+			unlisten = await listen<LifecycleProgressEvent>(
+				"agent-lifecycle:progress",
+				(event) => {
+					if (event.payload.taskId !== taskId) return;
+					patchLifecycleProgress(entry.templateId, {
+						progress: event.payload.progress,
+						detail: lifecyclePhaseLabel(event.payload.phase),
+					});
 				},
-				async ({ id, signal, setDetail, setProgress }) => {
-					setProgress(5);
-					await runToolLifecycle(entry.templateId, action, id);
-					if (signal.aborted) return;
-					setProgress(70);
-					setDetail(t("agent.lifecycleScanning"));
-					const scan = await scanOnce();
-					if (scan) {
-						if (signal.aborted) return;
-						setProgress(85);
-						setDetail(t("agent.lifecycleProbing"));
-						await probeInstalled(scan, true);
-					}
-				},
-				{ concurrency: 1 },
 			);
+			await runToolLifecycle(entry.templateId, action, taskId);
+			patchLifecycleProgress(entry.templateId, {
+				progress: 70,
+				detail: t("agent.lifecycleScanning"),
+			});
+			const scan = await scanOnce();
+			if (scan) {
+				patchLifecycleProgress(entry.templateId, {
+					progress: 85,
+					detail: t("agent.lifecycleProbing"),
+				});
+				await probeInstalled(scan, true);
+			}
 			notifySuccess(
 				t(
 					action === "update" ? "agent.updateSuccess" : "agent.installSuccess",
@@ -397,9 +446,10 @@ export function AgentPane({
 				),
 			);
 		} catch (e) {
-			if (isBackgroundTaskCancelledError(e)) return;
 			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
+			unlisten?.();
+			clearLifecycleProgress(entry.templateId);
 			setInstallingIds((prev) => {
 				const next = new Set(prev);
 				next.delete(entry.templateId);
@@ -543,6 +593,7 @@ export function AgentPane({
 					const hasLifecycleAction = needsInstall || updateAgent;
 					const notInstalled = !entry.binaryAvailable;
 					const rowInstalling = installingIds.has(entry.templateId);
+					const rowLifecycle = lifecycleProgress[entry.templateId];
 					// Mid-probe or host-cleared not-probed while a batch is running.
 					const isProbing =
 						probingKeys.has(catalogProbeKey(entry.templateId)) ||
@@ -552,151 +603,165 @@ export function AgentPane({
 					return (
 						<div
 							key={entry.templateId}
-							className="flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0"
+							className="flex flex-col gap-2 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0"
 						>
-							<div className="flex min-w-0 flex-1 items-center gap-4">
-								<div className="flex w-32 shrink-0 items-center gap-2">
-									<AgentLogo template={entry.templateId} />
-									<span
-										className={cn(
-											"min-w-0 truncate font-medium text-[13px]",
-											// Dim label only — never the Install button (looks disabled).
-											notInstalled &&
-												!hasLifecycleAction &&
-												"text-muted-foreground opacity-50",
-											notInstalled &&
-												hasLifecycleAction &&
-												"text-muted-foreground",
+							<div className="flex items-center justify-between gap-3">
+								<div className="flex min-w-0 flex-1 items-center gap-4">
+									<div className="flex w-32 shrink-0 items-center gap-2">
+										<AgentLogo template={entry.templateId} />
+										<span
+											className={cn(
+												"min-w-0 truncate font-medium text-[13px]",
+												// Dim label only — never the Install button (looks disabled).
+												notInstalled &&
+													!hasLifecycleAction &&
+													"text-muted-foreground opacity-50",
+												notInstalled &&
+													hasLifecycleAction &&
+													"text-muted-foreground",
+											)}
+										>
+											{entry.name}
+										</span>
+									</div>
+									<div className="flex min-w-0 flex-wrap items-center gap-1.5">
+										{entry.isDefault ? (
+											<StatusBadge tone="primary">
+												{t("agent.badges.default")}
+											</StatusBadge>
+										) : null}
+										{/* Layer 1: Agent host CLI */}
+										{entry.binaryAvailable ? (
+											<StatusBadge
+												tone="ok"
+												title={entry.resolvedPath ?? undefined}
+											>
+												{t("agent.badges.agentInstalled")}
+											</StatusBadge>
+										) : (
+											<StatusBadge tone="muted">
+												{t("agent.badges.agentMissing")}
+											</StatusBadge>
 										)}
-									>
-										{entry.name}
+										{/* Layer 2: ACP entrypoint / probe */}
+										{!entry.acpCommandAvailable ? (
+											<StatusBadge
+												tone={entry.binaryAvailable ? "warn" : "muted"}
+												title={
+													entry.lastProbeError ?? entry.installHint ?? undefined
+												}
+											>
+												{t("agent.badges.acpMissing")}
+											</StatusBadge>
+										) : isProbing ? (
+											<ProbingBadge label={t("agent.probing")} />
+										) : (
+											<StatusBadge
+												tone={catalogStatusTone(
+													entry.acpStatus,
+													entry.lastProbeError,
+												)}
+												title={
+													entry.lastProbeError ??
+													entry.acpAgentName ??
+													undefined
+												}
+											>
+												{acpStatusLabel(entry.acpStatus, entry.lastProbeError)}
+											</StatusBadge>
+										)}
+									</div>
+								</div>
+								{/* Fixed action slot so icon-only rows align with “Use default” */}
+								<div
+									className={cn(
+										"flex h-7 shrink-0 items-center justify-center gap-1",
+										hasLifecycleAction ? "min-w-0" : "w-8",
+									)}
+								>
+									{installAgent ? (
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											className="h-7 gap-1 px-2 text-xs"
+											aria-label={t("agent.installAgentAria", {
+												name: entry.name,
+											})}
+											title={t("agent.installAgentTitle")}
+											// Do not gate on global `busy` (catalog scan/ACP probe of
+											// other agents) — that left Install looking dead for minutes.
+											disabled={rowInstalling || !isTauri()}
+											onClick={() => void onToolLifecycle(entry, "install")}
+										>
+											{rowInstalling ? (
+												<Loader2 className="size-3 animate-spin" />
+											) : (
+												<Terminal className="size-3" />
+											)}
+											{t("agent.installAgent")}
+										</Button>
+									) : null}
+									{installAcp ? (
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											className="h-7 gap-1 px-2 text-xs"
+											aria-label={t("agent.installAdapterAria", {
+												name: entry.name,
+											})}
+											title={t("agent.installAdapterTitle")}
+											disabled={rowInstalling || !isTauri()}
+											onClick={() => void onToolLifecycle(entry, "install")}
+										>
+											{rowInstalling ? (
+												<Loader2 className="size-3 animate-spin" />
+											) : (
+												<Terminal className="size-3" />
+											)}
+											{t("agent.installAdapter")}
+										</Button>
+									) : null}
+									{updateAgent ? (
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											className="h-7 gap-1 px-2 text-xs"
+											aria-label={t("agent.updateAgentAria", {
+												name: entry.name,
+											})}
+											title={t("agent.updateAgentTitle")}
+											disabled={rowInstalling || !isTauri()}
+											onClick={() => void onToolLifecycle(entry, "update")}
+										>
+											{rowInstalling ? (
+												<Loader2 className="size-3 animate-spin" />
+											) : (
+												<ArrowUpCircle className="size-3" />
+											)}
+											{t("agent.updateAgent")}
+										</Button>
+									) : null}
+								</div>
+							</div>
+							{rowLifecycle ? (
+								<div className="grid grid-cols-[8rem_minmax(0,1fr)_2.5rem] items-center gap-3 pr-2">
+									<span className="truncate text-[11px] text-muted-foreground">
+										{rowLifecycle.detail}
+									</span>
+									<Progress
+										value={rowLifecycle.progress ?? 0}
+										className="h-1"
+									/>
+									<span className="text-right font-mono text-[10px] text-muted-foreground tabular-nums">
+										{rowLifecycle.progress == null
+											? ""
+											: `${Math.round(rowLifecycle.progress)}%`}
 									</span>
 								</div>
-								<div className="flex min-w-0 flex-wrap items-center gap-1.5">
-									{entry.isDefault ? (
-										<StatusBadge tone="primary">
-											{t("agent.badges.default")}
-										</StatusBadge>
-									) : null}
-									{/* Layer 1: Agent host CLI */}
-									{entry.binaryAvailable ? (
-										<StatusBadge
-											tone="ok"
-											title={entry.resolvedPath ?? undefined}
-										>
-											{t("agent.badges.agentInstalled")}
-										</StatusBadge>
-									) : (
-										<StatusBadge tone="muted">
-											{t("agent.badges.agentMissing")}
-										</StatusBadge>
-									)}
-									{/* Layer 2: ACP entrypoint / probe */}
-									{!entry.acpCommandAvailable ? (
-										<StatusBadge
-											tone={entry.binaryAvailable ? "warn" : "muted"}
-											title={
-												entry.lastProbeError ?? entry.installHint ?? undefined
-											}
-										>
-											{t("agent.badges.acpMissing")}
-										</StatusBadge>
-									) : isProbing ? (
-										<ProbingBadge label={t("agent.probing")} />
-									) : (
-										<StatusBadge
-											tone={catalogStatusTone(
-												entry.acpStatus,
-												entry.lastProbeError,
-											)}
-											title={
-												entry.lastProbeError ?? entry.acpAgentName ?? undefined
-											}
-										>
-											{acpStatusLabel(entry.acpStatus, entry.lastProbeError)}
-										</StatusBadge>
-									)}
-								</div>
-							</div>
-							{/* Fixed action slot so icon-only rows align with “Use default” */}
-							<div
-								className={cn(
-									"flex h-7 shrink-0 items-center justify-center gap-1",
-									hasLifecycleAction ? "min-w-0" : "w-8",
-								)}
-							>
-								{installAgent ? (
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										className="h-7 gap-1 px-2 text-xs"
-										aria-label={t("agent.installAgentAria", {
-											name: entry.name,
-										})}
-										title={t("agent.installAgentTitle")}
-										// Do not gate on global `busy` (catalog scan/ACP probe of
-										// other agents) — that left Install looking dead for minutes.
-										disabled={rowInstalling || !isTauri()}
-										onClick={() =>
-											void onToolLifecycle(entry, "install", "agent")
-										}
-									>
-										{rowInstalling ? (
-											<Loader2 className="size-3 animate-spin" />
-										) : (
-											<Terminal className="size-3" />
-										)}
-										{t("agent.installAgent")}
-									</Button>
-								) : null}
-								{installAcp ? (
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										className="h-7 gap-1 px-2 text-xs"
-										aria-label={t("agent.installAdapterAria", {
-											name: entry.name,
-										})}
-										title={t("agent.installAdapterTitle")}
-										disabled={rowInstalling || !isTauri()}
-										onClick={() =>
-											void onToolLifecycle(entry, "install", "adapter")
-										}
-									>
-										{rowInstalling ? (
-											<Loader2 className="size-3 animate-spin" />
-										) : (
-											<Terminal className="size-3" />
-										)}
-										{t("agent.installAdapter")}
-									</Button>
-								) : null}
-								{updateAgent ? (
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										className="h-7 gap-1 px-2 text-xs"
-										aria-label={t("agent.updateAgentAria", {
-											name: entry.name,
-										})}
-										title={t("agent.updateAgentTitle")}
-										disabled={rowInstalling || !isTauri()}
-										onClick={() =>
-											void onToolLifecycle(entry, "update", "agent")
-										}
-									>
-										{rowInstalling ? (
-											<Loader2 className="size-3 animate-spin" />
-										) : (
-											<ArrowUpCircle className="size-3" />
-										)}
-										{t("agent.updateAgent")}
-									</Button>
-								) : null}
-							</div>
+							) : null}
 						</div>
 					);
 				})}

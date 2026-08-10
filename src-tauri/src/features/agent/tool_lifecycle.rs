@@ -558,7 +558,7 @@ fn emit_lifecycle_progress(
         return;
     };
     let _ = app.emit(
-        "background-task:progress",
+        "agent-lifecycle:progress",
         ToolLifecycleProgress {
             task_id: task_id.to_string(),
             phase: phase.to_string(),
