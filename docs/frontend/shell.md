@@ -30,7 +30,7 @@
 
 ## 后台任务条
 
-- 左下角：下载、入库、导入导出、paper-reader、版面解析等。
+- 左下角：下载、入库、导入导出、Agent CLI/ACP 安装升级、paper-reader、版面解析等。
 - **折叠 = 进度圆环**；**悬停约 400ms 或点击圆环 → 详情列表**；**指针离开即收回圆环**（不常驻详情 Toast）。
 - 圆环使用不透明 `bg-background` 圆盘 + `ring-1 ring-border`（不用 border，避免内容区缩小导致圆环与底盘错位）+ 轨道（`muted-foreground/30`）与进度弧（`primary` / 失败 destructive / 完成 emerald）；中心图标用 `foreground`。避免浅色模式下底层内容透出或轨道过浅。
 - 新任务 / 打开页面不自动展开。任务失败时短暂展开详情，未悬停约 5s 后收回；进行中可取消，可清除已完成。

@@ -217,6 +217,7 @@ pub async fn agent_probe(
 pub async fn agent_run_tool_lifecycle(
     template_id: String,
     action: String,
+    task_id: Option<String>,
 ) -> Result<ApiResult<serde_json::Value>, String> {
     use crate::features::agent::tool_lifecycle::{run_template_lifecycle, ToolLifecycleAction};
 
@@ -226,9 +227,15 @@ pub async fn agent_run_tool_lifecycle(
         Err(e) => return Ok(map_err(AppError::message(e))),
     };
     let template_id_for_log = template_id.clone();
-    let result = tokio::task::spawn_blocking(move || run_template_lifecycle(&template_id, action))
-        .await
-        .map_err(|e| format!("tool lifecycle task join error: {e}"))?;
+    let task_id_for_worker = task_id.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        run_template_lifecycle(&template_id, action, task_id_for_worker.as_deref())
+    })
+    .await
+    .map_err(|e| format!("tool lifecycle task join error: {e}"))?;
+    if let Some(task_id) = task_id.as_deref() {
+        crate::features::agent::background_tasks::finish(task_id);
+    }
 
     match result {
         Ok(()) => {

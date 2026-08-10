@@ -207,6 +207,12 @@
 		"updateAgentAria": "Update {{name}} agent CLI",
 		"updateAgentTitle": "Update agent CLI in the background",
 		"updateSuccess": "Updated {{name}}",
+		"installAgentTask": "Install {{name}}",
+		"installAdapterTask": "Install {{name}} ACP adapter",
+		"updateTask": "Update {{name}}",
+		"lifecycleInstalling": "Running installer…",
+		"lifecycleScanning": "Scanning PATH…",
+		"lifecycleProbing": "Probing ACP…",
 		"badges": {
 			"default": "default",
 			"installed": "installed",

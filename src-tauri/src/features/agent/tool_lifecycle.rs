@@ -8,8 +8,10 @@
 use crate::features::agent::discover::path_entries;
 use crate::features::agent::discover::resolve_command;
 use crate::features::agent::templates::{template_info, CLAUDE_ACP_INSTALL_COMMAND};
-use std::process::{Command, Output};
-use std::sync::{Mutex, OnceLock};
+use std::io::{self, Read};
+use std::process::{Command, Output, Stdio};
+use std::sync::{Mutex, MutexGuard, OnceLock, TryLockError};
+use std::{thread, time::Duration};
 
 #[cfg(target_os = "windows")]
 use std::fs::{self, OpenOptions};
@@ -86,7 +88,9 @@ pub fn supports_lifecycle(template_id: &str) -> bool {
 pub fn run_template_lifecycle(
     template_id: &str,
     action: ToolLifecycleAction,
+    task_id: Option<&str>,
 ) -> Result<(), String> {
+    check_lifecycle_cancelled(task_id)?;
     if !supports_lifecycle(template_id) {
         return Err(format!(
             "no silent install support for template: {template_id}"
@@ -150,7 +154,7 @@ pub fn run_template_lifecycle(
         action,
         command.len()
     );
-    run_tool_lifecycle_silently(&command)
+    run_tool_lifecycle_silently(&command, task_id)
 }
 
 fn update_command(
@@ -405,11 +409,9 @@ npm i -g openclaw@latest
     }
 }
 
-fn run_tool_lifecycle_silently(command_line: &str) -> Result<(), String> {
-    let _guard = TOOL_LIFECYCLE_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .map_err(|_| "failed to acquire lifecycle lock".to_string())?;
+fn run_tool_lifecycle_silently(command_line: &str, task_id: Option<&str>) -> Result<(), String> {
+    let _guard = acquire_lifecycle_lock(task_id)?;
+    check_lifecycle_cancelled(task_id)?;
 
     #[cfg(not(target_os = "windows"))]
     {
@@ -420,9 +422,9 @@ fn run_tool_lifecycle_silently(command_line: &str) -> Result<(), String> {
             let inherited = std::env::var("PATH").unwrap_or_default();
             cmd.env("PATH", merge_path_segments(&login_path, &inherited));
         }
-        let output = cmd
-            .output()
-            .map_err(|e| format!("failed to start install process: {e}"))?;
+        let output =
+            run_command_with_cancellation(cmd, task_id).map_err(format_lifecycle_process_error)?;
+        check_lifecycle_cancelled(task_id)?;
         finish_lifecycle_output(&output)
     }
 
@@ -431,17 +433,99 @@ fn run_tool_lifecycle_silently(command_line: &str) -> Result<(), String> {
         let bat_file = write_windows_batch_file(command_line)?;
         let merged_path = std::env::join_paths(path_entries())
             .map_err(|e| format!("failed to build install PATH: {e}"))?;
-        let output = Command::new("cmd")
-            .arg("/D")
+        let mut cmd = Command::new("cmd");
+        cmd.arg("/D")
             .arg("/C")
             .arg(&bat_file)
             .env("PATH", merged_path)
-            .creation_flags(CREATE_NO_WINDOW)
-            .output();
+            .creation_flags(CREATE_NO_WINDOW);
+        let output = run_command_with_cancellation(cmd, task_id);
         let _ = fs::remove_file(&bat_file);
-        finish_lifecycle_output(
-            &output.map_err(|e| format!("failed to start install process: {e}"))?,
-        )
+        check_lifecycle_cancelled(task_id)?;
+        finish_lifecycle_output(&output.map_err(format_lifecycle_process_error)?)
+    }
+}
+
+fn acquire_lifecycle_lock(task_id: Option<&str>) -> Result<MutexGuard<'static, ()>, String> {
+    let lock = TOOL_LIFECYCLE_LOCK.get_or_init(|| Mutex::new(()));
+    loop {
+        check_lifecycle_cancelled(task_id)?;
+        match lock.try_lock() {
+            Ok(guard) => return Ok(guard),
+            Err(TryLockError::WouldBlock) => thread::sleep(Duration::from_millis(100)),
+            Err(TryLockError::Poisoned(_)) => {
+                return Err("failed to acquire lifecycle lock".to_string())
+            }
+        }
+    }
+}
+
+fn check_lifecycle_cancelled(task_id: Option<&str>) -> Result<(), String> {
+    if task_id.is_some_and(crate::features::agent::background_tasks::is_cancelled) {
+        return Err("background task cancelled".to_string());
+    }
+    Ok(())
+}
+
+fn run_command_with_cancellation(
+    mut command: Command,
+    task_id: Option<&str>,
+) -> io::Result<Output> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let mut stdout = child
+        .stdout
+        .take()
+        .map(|mut pipe| thread::spawn(move || read_pipe_to_end(&mut pipe)));
+    let mut stderr = child
+        .stderr
+        .take()
+        .map(|mut pipe| thread::spawn(move || read_pipe_to_end(&mut pipe)));
+
+    loop {
+        if task_id.is_some_and(crate::features::agent::background_tasks::is_cancelled) {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = join_pipe_reader(stdout.take());
+            let _ = join_pipe_reader(stderr.take());
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "background task cancelled",
+            ));
+        }
+        if let Some(status) = child.try_wait()? {
+            return Ok(Output {
+                status,
+                stdout: join_pipe_reader(stdout.take())?,
+                stderr: join_pipe_reader(stderr.take())?,
+            });
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn read_pipe_to_end<R: Read>(pipe: &mut R) -> io::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    pipe.read_to_end(&mut buf)?;
+    Ok(buf)
+}
+
+fn join_pipe_reader(
+    handle: Option<thread::JoinHandle<io::Result<Vec<u8>>>>,
+) -> io::Result<Vec<u8>> {
+    match handle {
+        Some(handle) => handle
+            .join()
+            .map_err(|_| io::Error::other("failed to join lifecycle output reader"))?,
+        None => Ok(Vec::new()),
+    }
+}
+
+fn format_lifecycle_process_error(error: io::Error) -> String {
+    if error.kind() == io::ErrorKind::Interrupted {
+        "background task cancelled".to_string()
+    } else {
+        format!("failed to start install process: {error}")
     }
 }
 

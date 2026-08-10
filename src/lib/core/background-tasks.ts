@@ -20,6 +20,7 @@ export type BackgroundTaskKind =
 	| "parse"
 	| "paperRead"
 	| "connector"
+	| "agentLifecycle"
 	| "other";
 
 export type BackgroundTaskStatus =

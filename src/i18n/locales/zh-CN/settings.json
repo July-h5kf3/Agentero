@@ -200,6 +200,12 @@
 		"updateAgentAria": "升级 {{name}} Agent CLI",
 		"updateAgentTitle": "后台升级 Agent CLI",
 		"updateSuccess": "已升级 {{name}}",
+		"installAgentTask": "安装 {{name}}",
+		"installAdapterTask": "安装 {{name}} ACP 适配器",
+		"updateTask": "升级 {{name}}",
+		"lifecycleInstalling": "正在运行安装器…",
+		"lifecycleScanning": "正在扫描 PATH…",
+		"lifecycleProbing": "正在探测 ACP…",
 		"badges": {
 			"default": "默认",
 			"installed": "已安装",

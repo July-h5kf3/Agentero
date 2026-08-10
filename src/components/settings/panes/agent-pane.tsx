@@ -75,6 +75,10 @@ import {
 	USER_AGENT_PRESETS,
 	upsertAgent,
 } from "@/lib/agent";
+import {
+	enqueueBackgroundTask,
+	isBackgroundTaskCancelledError,
+} from "@/lib/core/background-tasks";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
@@ -348,6 +352,7 @@ export function AgentPane({
 	const onToolLifecycle = async (
 		entry: CatalogEntry,
 		action: ToolLifecycleAction,
+		target: "agent" | "adapter",
 	) => {
 		if (!isTauri()) return;
 		setInstallingIds((prev) => {
@@ -356,16 +361,43 @@ export function AgentPane({
 			return next;
 		});
 		try {
-			await runToolLifecycle(entry.templateId, action);
+			await enqueueBackgroundTask(
+				{
+					kind: "agentLifecycle",
+					title: t(
+						action === "update"
+							? "agent.updateTask"
+							: target === "adapter"
+								? "agent.installAdapterTask"
+								: "agent.installAgentTask",
+						{ name: entry.name },
+					),
+					detail: t("agent.lifecycleInstalling"),
+				},
+				async ({ id, signal, setDetail, setProgress }) => {
+					setProgress(5);
+					await runToolLifecycle(entry.templateId, action, id);
+					if (signal.aborted) return;
+					setProgress(70);
+					setDetail(t("agent.lifecycleScanning"));
+					const scan = await scanOnce();
+					if (scan) {
+						if (signal.aborted) return;
+						setProgress(85);
+						setDetail(t("agent.lifecycleProbing"));
+						await probeInstalled(scan, true);
+					}
+				},
+				{ concurrency: 1 },
+			);
 			notifySuccess(
 				t(
 					action === "update" ? "agent.updateSuccess" : "agent.installSuccess",
 					{ name: entry.name },
 				),
 			);
-			const scan = await scanOnce();
-			if (scan) await probeInstalled(scan, true);
 		} catch (e) {
+			if (isBackgroundTaskCancelledError(e)) return;
 			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setInstallingIds((prev) => {
@@ -606,7 +638,9 @@ export function AgentPane({
 										// Do not gate on global `busy` (catalog scan/ACP probe of
 										// other agents) — that left Install looking dead for minutes.
 										disabled={rowInstalling || !isTauri()}
-										onClick={() => void onToolLifecycle(entry, "install")}
+										onClick={() =>
+											void onToolLifecycle(entry, "install", "agent")
+										}
 									>
 										{rowInstalling ? (
 											<Loader2 className="size-3 animate-spin" />
@@ -627,7 +661,9 @@ export function AgentPane({
 										})}
 										title={t("agent.installAdapterTitle")}
 										disabled={rowInstalling || !isTauri()}
-										onClick={() => void onToolLifecycle(entry, "install")}
+										onClick={() =>
+											void onToolLifecycle(entry, "install", "adapter")
+										}
 									>
 										{rowInstalling ? (
 											<Loader2 className="size-3 animate-spin" />
@@ -648,7 +684,9 @@ export function AgentPane({
 										})}
 										title={t("agent.updateAgentTitle")}
 										disabled={rowInstalling || !isTauri()}
-										onClick={() => void onToolLifecycle(entry, "update")}
+										onClick={() =>
+											void onToolLifecycle(entry, "update", "agent")
+										}
 									>
 										{rowInstalling ? (
 											<Loader2 className="size-3 animate-spin" />

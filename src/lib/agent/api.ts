@@ -441,8 +441,13 @@ export type ToolLifecycleAction = "install" | "update";
 export async function runToolLifecycle(
 	templateId: string,
 	action: ToolLifecycleAction,
+	taskId?: string,
 ): Promise<void> {
-	await invokeAgentApi("agent_run_tool_lifecycle", { templateId, action });
+	await invokeAgentApi("agent_run_tool_lifecycle", {
+		templateId,
+		action,
+		taskId,
+	});
 }
 
 /** Whether silent install/update is available for this catalog template. */
