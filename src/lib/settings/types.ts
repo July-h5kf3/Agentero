@@ -24,6 +24,27 @@ export type ThemePreference = "system" | "light" | "dark";
 
 export type LocalePreference = "system" | "en" | "zh-CN";
 
+/**
+ * Markdown editor body font preset.
+ * `default` keeps the app theme stack (Geist / --font-sans); others override
+ * editor content only (not chrome UI).
+ */
+export const EDITOR_FONT_FAMILIES = [
+	"default",
+	"system",
+	"serif",
+	"mono",
+] as const;
+
+export type EditorFontFamily = (typeof EDITOR_FONT_FAMILIES)[number];
+
+export function isEditorFontFamily(v: unknown): v is EditorFontFamily {
+	return (
+		typeof v === "string" &&
+		(EDITOR_FONT_FAMILIES as readonly string[]).includes(v)
+	);
+}
+
 /** Sortable / customizable columns in the papers Library table. */
 export type LibraryColumnKey =
 	| "title"
@@ -139,6 +160,16 @@ export type AppSettings = {
 	uiTheme: string;
 	locale: LocalePreference;
 	editorFontSize: number;
+	/**
+	 * Markdown editor body font preset. Orthogonal to {@link uiScale} and to the
+	 * app chrome font; code blocks stay mono regardless of this value.
+	 */
+	editorFontFamily: EditorFontFamily;
+	/**
+	 * Markdown editor body line-height (unitless multiplier). Orthogonal to
+	 * {@link uiScale}. Typical range 1.4–2.0; default 1.6.
+	 */
+	editorLineHeight: number;
 	/**
 	 * Global UI scale multiplier. Affects font-size, spacing, and the title bar,
 	 * so toolbar buttons grow together with the rest of the interface.

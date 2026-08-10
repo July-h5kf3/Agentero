@@ -6,6 +6,7 @@ import {
 	isPaperTreeSortMode,
 } from "@/lib/paper/tree-modes";
 import {
+	clampEditorLineHeight,
 	DEFAULT_PDF_ASK_SETTINGS,
 	DEFAULT_SETTINGS,
 	DEFAULT_TRANSLATOR_BASE_URL,
@@ -14,6 +15,7 @@ import {
 import {
 	type AppSettings,
 	DEFAULT_LIBRARY_COLUMNS,
+	isEditorFontFamily,
 	LIBRARY_COLUMN_KEYS,
 	type LibraryColumnKey,
 	type LibraryColumnPref,
@@ -357,6 +359,10 @@ function normalizePartial(
 	) {
 		merged.locale = DEFAULT_SETTINGS.locale;
 	}
+	if (!isEditorFontFamily(merged.editorFontFamily)) {
+		merged.editorFontFamily = DEFAULT_SETTINGS.editorFontFamily;
+	}
+	merged.editorLineHeight = clampEditorLineHeight(merged.editorLineHeight);
 	if (
 		merged.agentPermissionMode !== "restricted" &&
 		merged.agentPermissionMode !== "ask" &&

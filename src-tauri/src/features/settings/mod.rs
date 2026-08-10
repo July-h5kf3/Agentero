@@ -63,6 +63,12 @@ pub struct AppSettings {
     pub locale: String,
     #[serde(default = "default_editor_font_size")]
     pub editor_font_size: u32,
+    /// Markdown editor body font preset (`default` | `system` | `serif` | `mono`).
+    #[serde(default = "default_editor_font_family")]
+    pub editor_font_family: String,
+    /// Markdown editor body line-height (unitless), typical range 1.4–2.0.
+    #[serde(default = "default_editor_line_height")]
+    pub editor_line_height: f64,
     #[serde(default = "default_ui_scale")]
     pub ui_scale: f64,
     #[serde(default = "default_true")]
@@ -167,6 +173,8 @@ impl Default for AppSettings {
             ui_theme: default_ui_theme(),
             locale: default_locale(),
             editor_font_size: default_editor_font_size(),
+            editor_font_family: default_editor_font_family(),
+            editor_line_height: default_editor_line_height(),
             ui_scale: default_ui_scale(),
             show_editor_toolbar: true,
             agent_permission_mode: default_permission_mode(),
@@ -223,6 +231,12 @@ fn default_locale() -> String {
 }
 fn default_editor_font_size() -> u32 {
     14
+}
+fn default_editor_font_family() -> String {
+    "default".into()
+}
+fn default_editor_line_height() -> f64 {
+    1.6
 }
 fn default_ui_scale() -> f64 {
     1.0
@@ -500,6 +514,17 @@ fn normalize(s: &mut AppSettings) {
     }
     if s.editor_font_size < 10 || s.editor_font_size > 32 {
         s.editor_font_size = default_editor_font_size();
+    }
+    const EDITOR_FONT_FAMILIES: &[&str] = &["default", "system", "serif", "mono"];
+    if !EDITOR_FONT_FAMILIES.contains(&s.editor_font_family.as_str()) {
+        s.editor_font_family = default_editor_font_family();
+    }
+    if !s.editor_line_height.is_finite() || s.editor_line_height < 1.4 || s.editor_line_height > 2.0
+    {
+        s.editor_line_height = default_editor_line_height();
+    } else {
+        // Snap to 0.1 steps to match the frontend slider.
+        s.editor_line_height = (s.editor_line_height * 10.0).round() / 10.0;
     }
     const UI_SCALE_PRESETS: &[f64] = &[0.8, 0.9, 1.0, 1.25, 1.5];
     if !s.ui_scale.is_finite() {
