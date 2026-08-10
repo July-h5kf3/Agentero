@@ -114,6 +114,149 @@ describe("Markdown inline math input", () => {
 		]);
 	});
 
+	it("preserves inline math when typing before existing following text", () => {
+		const before = "第一段";
+		const after = " 第三段";
+		const editor = createInlineMathEditor(`${before}${after}`);
+		const offset = before.length;
+
+		editor.tf.select({
+			anchor: { path: [0, 0], offset },
+			focus: { path: [0, 0], offset },
+		});
+
+		for (const character of "$x_0$") editor.tf.insertText(character);
+
+		expect(editor.children).toMatchObject([
+			{
+				type: "p",
+				children: [
+					{ text: before },
+					{ type: "inline_equation", texExpression: "x_0" },
+					{ text: after },
+				],
+			},
+		]);
+
+		for (const character of "补充") editor.tf.insertText(character);
+
+		expect(editor.children).toMatchObject([
+			{
+				type: "p",
+				children: [
+					{ text: before },
+					{ type: "inline_equation", texExpression: "x_0" },
+					{ text: "补充 第三段" },
+				],
+			},
+		]);
+	});
+
+	it("recognizes inline math immediately before following text", () => {
+		const before = "第一段";
+		const after = "第三段";
+		const editor = createInlineMathEditor(`${before}${after}`);
+		const offset = before.length;
+
+		editor.tf.select({
+			anchor: { path: [0, 0], offset },
+			focus: { path: [0, 0], offset },
+		});
+
+		for (const character of "$x_0$") editor.tf.insertText(character);
+
+		expect(editor.children).toMatchObject([
+			{
+				type: "p",
+				children: [
+					{ text: before },
+					{ type: "inline_equation", texExpression: "x_0" },
+					{ text: after },
+				],
+			},
+		]);
+		expect(editor.selection).toEqual({
+			anchor: { path: [0, 2], offset: 0 },
+			focus: { path: [0, 2], offset: 0 },
+		});
+	});
+
+	it("round-trips inline math followed immediately by text", () => {
+		const editor = createMarkdownPasteEditor();
+		editor.children = [
+			{
+				type: "p",
+				children: [
+					{ text: "第一段" },
+					{
+						type: "inline_equation",
+						texExpression: "x_0",
+						children: [{ text: "" }],
+					},
+					{ text: "补充 第三段" },
+				],
+			},
+		];
+
+		const markdown = editor.getApi(MarkdownPlugin).markdown.serialize();
+		const reparsed = editor
+			.getApi(MarkdownPlugin)
+			.markdown.deserialize(markdown);
+
+		expect(reparsed).toMatchObject([
+			{
+				type: "p",
+				children: [
+					{ text: "第一段" },
+					{
+						type: "inline_equation",
+						texExpression: "x_0",
+						children: [{ text: "" }],
+					},
+					{ text: "补充 第三段" },
+				],
+			},
+		]);
+	});
+
+	it("round-trips inline math followed immediately by ASCII text", () => {
+		const editor = createMarkdownPasteEditor();
+		editor.children = [
+			{
+				type: "p",
+				children: [
+					{ text: "before" },
+					{
+						type: "inline_equation",
+						texExpression: "x_0",
+						children: [{ text: "" }],
+					},
+					{ text: "after" },
+				],
+			},
+		];
+
+		const markdown = editor.getApi(MarkdownPlugin).markdown.serialize();
+		const reparsed = editor
+			.getApi(MarkdownPlugin)
+			.markdown.deserialize(markdown);
+
+		expect(reparsed).toMatchObject([
+			{
+				type: "p",
+				children: [
+					{ text: "before" },
+					{
+						type: "inline_equation",
+						texExpression: "x_0",
+						children: [{ text: "" }],
+					},
+					{ text: "after" },
+				],
+			},
+		]);
+	});
+
 	it("keeps escaped dollar delimiters as ordinary text", () => {
 		const editor = typeInlineMath("\\$xxca\\$");
 

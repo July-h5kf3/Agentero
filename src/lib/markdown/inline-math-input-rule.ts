@@ -6,7 +6,7 @@ import {
 	type SlateEditor,
 } from "platejs";
 
-const INLINE_FOLLOW_RE = /[\s)\]}:;,.!?'"`]/;
+const INLINE_FOLLOW_RE = /[^$]/;
 
 function isEquationInputBlocked(editor: SlateEditor) {
 	return editor.api.some({
@@ -45,8 +45,8 @@ function isEscapedDelimiter(editor: SlateEditor, point: Point) {
 }
 
 /**
- * Converts unescaped `$expression$` while allowing the opening delimiter next
- * to text. Keep the caret in the following text node so typing can continue.
+ * Converts unescaped `$expression$` while allowing either delimiter next to
+ * text. Keep the caret in the following text node so typing can continue.
  */
 export const inlineMathInputRule = defineInputRule({
 	target: "insertText",
