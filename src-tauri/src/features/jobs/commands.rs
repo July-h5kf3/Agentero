@@ -241,6 +241,55 @@ pub async fn job_reconcile_vault(
     Ok(ApiResult::ok(enqueued))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobPapersNeedingAssetsArgs {
+    pub vault_path: String,
+}
+
+/// Vault-relative paths of papers still missing local assets, per §8.4 CapsCache
+/// (replaces the frontend `collectPapersNeedingAssetDownload` tree walk). A
+/// paper needs a download when it has no PDF, or its body is unknown (no
+/// catalog `body_source`) and it has neither TeX nor `PAPER.md`.
+#[tauri::command]
+pub async fn job_papers_needing_assets(
+    caps: State<'_, crate::features::catalog::CapsCache>,
+    args: JobPapersNeedingAssetsArgs,
+) -> Result<ApiResult<Vec<String>>, String> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return Ok(map_err(crate::core::error::AppError::message(
+            "vault path is not a directory",
+        )));
+    }
+    let caps_handle = (*caps).clone();
+    let scan_vault = vault.clone();
+    let needing = tauri::async_runtime::spawn_blocking(move || {
+        let Ok(papers) = crate::features::catalog::papers::list_all(&scan_vault) else {
+            return Vec::new();
+        };
+        papers
+            .into_iter()
+            .filter(|paper| {
+                let caps = caps_handle.caps_for(&scan_vault, &paper.path);
+                if !caps.has_pdf() {
+                    return true;
+                }
+                let body_unknown = paper
+                    .body_source
+                    .as_deref()
+                    .map(str::is_empty)
+                    .unwrap_or(true);
+                body_unknown && !caps.has_tex && !caps.has_paper_md
+            })
+            .map(|paper| paper.path)
+            .collect::<Vec<_>>()
+    })
+    .await
+    .unwrap_or_default();
+    Ok(ApiResult::ok(needing))
+}
+
 #[tauri::command]
 pub async fn job_layout_analyze_enqueue(
     app: tauri::AppHandle,

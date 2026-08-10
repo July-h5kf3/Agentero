@@ -35,6 +35,7 @@ macro_rules! common_commands {
             crate::features::jobs::commands::job_download_assets_enqueue,
             crate::features::jobs::commands::job_reconcile_paper,
             crate::features::jobs::commands::job_reconcile_vault,
+            crate::features::jobs::commands::job_papers_needing_assets,
             crate::features::jobs::commands::job_focus_paper,
             crate::features::jobs::commands::job_cancel,
             crate::features::jobs::commands::job_report,

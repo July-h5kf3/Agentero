@@ -10,7 +10,6 @@ import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import {
-	collectPapersNeedingAssetDownload,
 	detectPaperDirectory,
 	notesPathForPaper,
 	type PaperMetadata,
@@ -246,13 +245,21 @@ export async function readPaper(node: FileNode): Promise<void> {
 export async function downloadAllMissingAssets(): Promise<void> {
 	const vaultPath = getVaultPath();
 	if (!vaultPath) return;
-	const queue = collectPapersNeedingAssetDownload(vaultStore.getState().tree);
+	// CapsCache-backed query (§8.4) replaces the frontend tree walk.
+	let queue: string[] = [];
+	try {
+		queue = await invokeApi<string[]>(
+			"job_papers_needing_assets",
+			{ args: { vaultPath } },
+			{ fallback: "collect papers needing assets failed" },
+		);
+	} catch (e) {
+		notifyError(e instanceof Error ? e.message : String(e));
+		return;
+	}
 	if (!queue.length) return;
 
-	for (const paperPath of queue) {
-		const rel = toVaultRelative(vaultPath, paperPath)
-			.replace(/\\/g, "/")
-			.replace(/^\/+|\/+$/g, "");
+	for (const rel of queue) {
 		if (!rel) continue;
 		void invokeApi(
 			"job_download_assets_enqueue",
