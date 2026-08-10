@@ -174,26 +174,64 @@ async fn enqueue_parse_body_backfill(
     snapshot
 }
 
+/// Shared backfill: enqueue a `ParseRefs` job for `path` on `lane` and start it
+/// if a slot is free. Returns the enqueued snapshot.
+async fn enqueue_parse_refs_backfill(
+    app: &tauri::AppHandle,
+    center: &JobCenter,
+    vault: &std::path::Path,
+    path: &str,
+    lane: JobLane,
+) -> JobSnapshot {
+    let snapshot = center.enqueue_parse_refs(vault, path, lane, false).await;
+    emit_job_changed(app, snapshot.clone());
+    match center.try_start(&snapshot.id).await {
+        StartOutcome::Started(..) => {
+            let job_id = snapshot.id.clone();
+            let runner = center.handle();
+            let app2 = app.clone();
+            tauri::async_runtime::spawn(async move {
+                runner.run_parse_refs_job(app2, job_id).await;
+            });
+        }
+        StartOutcome::Skipped(skipped) => emit_job_changed(app, skipped),
+        StartOutcome::Waiting => {}
+    }
+    snapshot
+}
 /// Per-paper reconcile (pipeline-orchestration §7.4 入口②): backfill a
-/// `ParseBody` job when the paper has a PDF but no TeX and no `PAPER.md`.
-/// Returns `null` when nothing needs doing.
+/// `ParseBody` job when the paper has a PDF but no TeX and no `PAPER.md`, and
+/// a `ParseRefs` job when the cite sidecar is absent. Returns the enqueued
+/// jobs (empty when nothing needs doing).
 #[tauri::command]
 pub async fn job_reconcile_paper(
     app: tauri::AppHandle,
     center: State<'_, JobCenter>,
     caps: State<'_, crate::features::catalog::CapsCache>,
     args: JobReconcilePaperArgs,
-) -> Result<ApiResult<Option<JobSnapshot>>, String> {
+) -> Result<ApiResult<Vec<JobSnapshot>>, String> {
     let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
         Ok(valid) => valid,
         Err(e) => return Ok(map_err(e)),
     };
-    if !caps.caps_for(&vault, &path).needs_paper_md() {
-        return Ok(ApiResult::ok(None));
+    let paper_caps = caps.caps_for(&vault, &path);
+    let mut enqueued = Vec::new();
+    if paper_caps.needs_paper_md() {
+        enqueued.push(
+            enqueue_parse_body_backfill(&app, &center, &vault, &path, parse_lane(None)).await,
+        );
     }
-    let snapshot =
-        enqueue_parse_body_backfill(&app, &center, &vault, &path, parse_lane(None)).await;
-    Ok(ApiResult::ok(Some(snapshot)))
+    // Backfill references when the cite sidecar is absent.
+    let sidecar = vault
+        .join(&path)
+        .join("source")
+        .join(crate::features::refs::SIDECAR_FILE);
+    if !sidecar.is_file() {
+        enqueued.push(
+            enqueue_parse_refs_backfill(&app, &center, &vault, &path, parse_lane(None)).await,
+        );
+    }
+    Ok(ApiResult::ok(enqueued))
 }
 
 #[derive(Debug, Deserialize)]

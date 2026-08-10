@@ -21,7 +21,6 @@ import {
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { enqueuePaperPdfParse } from "@/lib/paper/enqueue-paper-pdf-parse";
 import { downloadPaperAssets } from "@/lib/paper/lookup";
-import { loadPaperRefsAuto } from "@/lib/paper/refs";
 import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import {
 	ensureLocalFsScope,
@@ -269,15 +268,10 @@ export async function loadTabResources(
 			paperBytes = resolved.pdfBytes;
 			didDownload = resolved.didDownload;
 		}
-		if (!didDownload) {
-			reconcilePaperOnOpen(paperDir, vaultPath);
-		}
-		if (isTauri() && vaultPath) {
-			const rel = toVaultRelative(vaultPath, paperDir)
-				.replace(/\\/g, "/")
-				.replace(/^\/+|\/+$/g, "");
-			if (rel) void loadPaperRefsAuto(vaultPath, rel).catch(() => {});
-		}
+		// Open-paper reconcile (§7.4 入口②): backfill PAPER.md (ParseBody) and
+		// references (ParseRefs) as needed. Idempotent — the JobCenter dedupes
+		// jobs, so this is safe even right after a download.
+		reconcilePaperOnOpen(paperDir, vaultPath);
 		const notesSeed = await notesSeedPromise;
 
 		const openingPaperRoot =

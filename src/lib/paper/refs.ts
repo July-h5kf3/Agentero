@@ -118,36 +118,25 @@ export async function paperRefsParse(
 	);
 }
 
-const pendingAutoParse = new Map<string, Promise<CiteSidecar | null>>();
-
-function autoParseKey(vaultPath: string, path: string): string {
-	return `${vaultPath}::${path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")}`;
-}
-
 /**
- * Load the reference sidecar for a paper, automatically parsing it in the
- * background if it does not yet exist. Concurrent calls for the same paper
- * share one parse attempt; failures are swallowed.
+ * Load the reference sidecar for a paper (read-only). When it does not yet
+ * exist, enqueue a JobCenter `ParseRefs` job to backfill it; the caller
+ * reloads on `job:changed`. Replaces the old blocking list→parse fallback
+ * (`loadPaperRefsAuto`), whose dedup is now the JobCenter's fingerprint key.
  */
-export async function loadPaperRefsAuto(
+export async function loadPaperRefsReadOnly(
 	vaultPath: string,
 	path: string,
 ): Promise<CiteSidecar | null> {
-	const k = autoParseKey(vaultPath, path);
-	const existing = pendingAutoParse.get(k);
-	if (existing) return existing;
-
-	const promise = (async () => {
-		let sidecar = await paperRefsList(vaultPath, path).catch(() => null);
-		if (!sidecar) {
-			sidecar = await paperRefsParse(vaultPath, path, false).catch(() => null);
-		}
-		return sidecar;
-	})();
-
-	pendingAutoParse.set(k, promise);
-	promise.finally(() => pendingAutoParse.delete(k));
-	return promise;
+	const sidecar = await paperRefsList(vaultPath, path).catch(() => null);
+	if (!sidecar) {
+		void invokeApi(
+			"job_parse_refs_enqueue",
+			{ args: { vaultPath, path, force: false } },
+			{ fallback: "refs parse enqueue failed" },
+		).catch(() => undefined);
+	}
+	return sidecar;
 }
 
 /** Identifier usable by magic-wand import for an unmatched citation. */
