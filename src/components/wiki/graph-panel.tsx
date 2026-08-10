@@ -88,6 +88,13 @@ function nodeFill(type: CiteGraphNodeType, colors: ThemeColors): string {
 	}
 }
 
+/** Radius for a paper node scales with incoming citation count. */
+function nodeRadius(type: CiteGraphNodeType, cited: number): number {
+	const base = type === "paper" ? 5.5 : 4;
+	if (type !== "paper") return base;
+	return base + Math.min(Math.sqrt(cited) * 1.4, 6.5);
+}
+
 export function GraphPanel({
 	vaultPath,
 	selectedPath,
@@ -199,6 +206,16 @@ export function GraphPanel({
 		};
 	}, [data]);
 
+	// Incoming citation count per node: more-cited papers get larger.
+	const citedCounts = useMemo(() => {
+		const counts = new Map<string, number>();
+		if (!data) return counts;
+		for (const edge of data.edges) {
+			counts.set(edge.target, (counts.get(edge.target) ?? 0) + 1);
+		}
+		return counts;
+	}, [data]);
+
 	const centerId = data?.center ?? null;
 
 	const openNode = useCallback(
@@ -211,7 +228,8 @@ export function GraphPanel({
 
 	const paintNode = useCallback(
 		(node: FgNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
-			const r = node.type === "paper" ? 5.5 : 4;
+			const cited = citedCounts.get(node.id) ?? 0;
+			const r = nodeRadius(node.type, cited);
 			const x = node.x ?? 0;
 			const y = node.y ?? 0;
 			const isCenter = node.id === centerId;
@@ -244,7 +262,7 @@ export function GraphPanel({
 			ctx.fillText(label, x, y + r + 2 / globalScale);
 			ctx.globalAlpha = 1;
 		},
-		[centerId, hoverId, colors],
+		[centerId, hoverId, colors, citedCounts],
 	);
 
 	const linkColor = useCallback(() => {
@@ -336,8 +354,16 @@ export function GraphPanel({
 						nodeCanvasObject={paintNode}
 						nodePointerAreaPaint={(node, color, ctx) => {
 							const n = node as FgNode;
+							const cited = citedCounts.get(n.id) ?? 0;
 							ctx.beginPath();
-							ctx.arc(n.x ?? 0, n.y ?? 0, 6, 0, 2 * Math.PI, false);
+							ctx.arc(
+								n.x ?? 0,
+								n.y ?? 0,
+								nodeRadius(n.type, cited),
+								0,
+								2 * Math.PI,
+								false,
+							);
 							ctx.fillStyle = color;
 							ctx.fill();
 						}}
