@@ -35,7 +35,6 @@ import i18n from "@/i18n";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
-import { enqueuePaperPdfParse } from "@/lib/paper/enqueue-paper-pdf-parse";
 import {
 	migrateZotero,
 	pickZoteroDir,
@@ -328,10 +327,6 @@ export function ZoteroMigrateDialog({
 			onDone();
 			setResult(res);
 			setBusy(false);
-			for (const paperPath of res.paths) {
-				const rel = paperPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-				enqueuePaperPdfParse({ vaultPath, paperRelPath: rel });
-			}
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 			setBusy(false);

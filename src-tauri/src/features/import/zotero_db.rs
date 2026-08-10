@@ -190,6 +190,7 @@ fn parse_year(date: Option<&str>) -> Option<i64> {
 pub async fn migrate_zotero(
     args: ZoteroMigrateArgs,
     progress: impl Fn(usize, usize, &str),
+    app: Option<&tauri::AppHandle>,
 ) -> Result<ZoteroMigrateResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
@@ -299,6 +300,9 @@ pub async fn migrate_zotero(
     }
 
     progress(total, total, "migrate");
+    for path in &out.paths {
+        crate::features::jobs::spawn_parse_body_after_assets(app, &vault, path, false);
+    }
     Ok(out)
 }
 
@@ -1370,6 +1374,7 @@ mod tests {
                 migrate_annotations: false,
             },
             |_c, _t, _p| {},
+            None,
         )
         .await
         .unwrap();
@@ -1439,6 +1444,7 @@ mod tests {
                 migrate_annotations: false,
             },
             |_c, _t, _p| {},
+            None,
         )
         .await
         .unwrap();
