@@ -12,10 +12,10 @@ import {
 	DEFAULT_TRANSLATOR_BASE_URL,
 	snapUiScale,
 } from "@/lib/settings/defaults";
+import { normalizeFontFamilyValue } from "@/lib/settings/fonts";
 import {
 	type AppSettings,
 	DEFAULT_LIBRARY_COLUMNS,
-	isEditorFontFamily,
 	LIBRARY_COLUMN_KEYS,
 	type LibraryColumnKey,
 	type LibraryColumnPref,
@@ -258,6 +258,8 @@ function normalizePartial(
 		agentYolo?: boolean;
 		downloadFulltextToLocal?: boolean;
 		downloadFulltextWhenNoRemotePreview?: boolean;
+		/** @deprecated pre-#242 single editor font preset */
+		editorFontFamily?: string;
 	},
 ): AppSettings {
 	const {
@@ -267,6 +269,7 @@ function normalizePartial(
 		agentYolo: _y,
 		downloadFulltextToLocal: _d1,
 		downloadFulltextWhenNoRemotePreview: _d2,
+		editorFontFamily: legacyEditorFontFamily,
 		...rest
 	} = parsed;
 	const merged = { ...DEFAULT_SETTINGS, ...rest };
@@ -359,8 +362,20 @@ function normalizePartial(
 	) {
 		merged.locale = DEFAULT_SETTINGS.locale;
 	}
-	if (!isEditorFontFamily(merged.editorFontFamily)) {
-		merged.editorFontFamily = DEFAULT_SETTINGS.editorFontFamily;
+	merged.interfaceFontFamily = normalizeFontFamilyValue(
+		merged.interfaceFontFamily,
+	);
+	merged.textFontFamily = normalizeFontFamilyValue(merged.textFontFamily);
+	merged.monoFontFamily = normalizeFontFamilyValue(merged.monoFontFamily);
+	// Migrate short-lived editorFontFamily preset → textFontFamily when the
+	// newer field was never set in storage.
+	if (
+		!parsed.textFontFamily &&
+		typeof legacyEditorFontFamily === "string" &&
+		legacyEditorFontFamily.trim() &&
+		legacyEditorFontFamily !== "default"
+	) {
+		merged.textFontFamily = normalizeFontFamilyValue(legacyEditorFontFamily);
 	}
 	merged.editorLineHeight = clampEditorLineHeight(merged.editorLineHeight);
 	if (

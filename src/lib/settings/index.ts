@@ -5,9 +5,24 @@ export {
 	EDITOR_LINE_HEIGHT_MAX,
 	EDITOR_LINE_HEIGHT_MIN,
 	EDITOR_LINE_HEIGHT_STEP,
-	editorFontFamilyCss,
 	UI_SCALE_PRESETS,
 } from "@/lib/settings/defaults";
+export {
+	applyChromeFontCss,
+	applyDocumentChrome,
+	FONT_STACK_PRESETS,
+	type FontRole,
+	type FontStackPreset,
+	fontFamilyDisplayKey,
+	invalidateSystemFontsCache,
+	isFontStackPreset,
+	listSystemFonts,
+	MONO_STACK,
+	normalizeFontFamilyValue,
+	resolveFontFamilyCss,
+	SERIF_STACK,
+	SYSTEM_SANS_STACK,
+} from "@/lib/settings/fonts";
 export {
 	ensureSettingsLoaded,
 	loadSettings,
@@ -23,7 +38,6 @@ export type {
 	AppSettings,
 	AutoUpdateInternalLinks,
 	CommercialTranslateProviderId,
-	EditorFontFamily,
 	LibraryColumnKey,
 	LibraryColumnPref,
 	LocalePreference,
@@ -35,6 +49,4 @@ export type {
 export {
 	AUTO_UPDATE_INTERNAL_LINKS,
 	DEFAULT_LIBRARY_COLUMNS,
-	EDITOR_FONT_FAMILIES,
-	isEditorFontFamily,
 } from "@/lib/settings/types";

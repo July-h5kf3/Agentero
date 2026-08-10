@@ -16,6 +16,31 @@ pub fn settings_get(store: State<'_, AppSettingsStore>) -> ApiResult<SettingsGet
     }
 }
 
+/// Return unique system font family names (sorted). Empty on mobile / failure.
+#[tauri::command]
+pub fn list_system_fonts() -> ApiResult<Vec<String>> {
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
+        return ApiResult::ok(Vec::new());
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    {
+        use std::collections::BTreeSet;
+        let mut db = fontdb::Database::new();
+        db.load_system_fonts();
+        let mut names = BTreeSet::new();
+        for face in db.faces() {
+            for (family, _) in &face.families {
+                let t = family.trim();
+                if !t.is_empty() {
+                    names.insert(t.to_string());
+                }
+            }
+        }
+        ApiResult::ok(names.into_iter().collect())
+    }
+}
+
 #[tauri::command]
 #[cfg(not(target_os = "ios"))]
 pub fn settings_set(

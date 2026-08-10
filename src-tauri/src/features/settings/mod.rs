@@ -63,8 +63,17 @@ pub struct AppSettings {
     pub locale: String,
     #[serde(default = "default_editor_font_size")]
     pub editor_font_size: u32,
-    /// Markdown editor body font preset (`default` | `system` | `serif` | `mono`).
-    #[serde(default = "default_editor_font_family")]
+    /// UI chrome font. Empty = app default. Built-ins: system/serif/mono, else family name.
+    #[serde(default)]
+    pub interface_font_family: String,
+    /// Markdown body font. Empty = inherit interface/default. Same vocabulary as interface.
+    #[serde(default)]
+    pub text_font_family: String,
+    /// Monospace font for code / font-mono. Empty = app default mono stack.
+    #[serde(default)]
+    pub mono_font_family: String,
+    /// Deprecated single editor font preset; migrated into `text_font_family` once.
+    #[serde(default, skip_serializing)]
     pub editor_font_family: String,
     /// Markdown editor body line-height (unitless), typical range 1.4–2.0.
     #[serde(default = "default_editor_line_height")]
@@ -173,7 +182,10 @@ impl Default for AppSettings {
             ui_theme: default_ui_theme(),
             locale: default_locale(),
             editor_font_size: default_editor_font_size(),
-            editor_font_family: default_editor_font_family(),
+            interface_font_family: String::new(),
+            text_font_family: String::new(),
+            mono_font_family: String::new(),
+            editor_font_family: String::new(),
             editor_line_height: default_editor_line_height(),
             ui_scale: default_ui_scale(),
             show_editor_toolbar: true,
@@ -232,11 +244,16 @@ fn default_locale() -> String {
 fn default_editor_font_size() -> u32 {
     14
 }
-fn default_editor_font_family() -> String {
-    "default".into()
-}
 fn default_editor_line_height() -> f64 {
     1.6
+}
+
+fn normalize_font_family_value(raw: &str) -> String {
+    let v = raw.trim();
+    if v.is_empty() || v == "default" {
+        return String::new();
+    }
+    v.chars().take(120).collect()
 }
 fn default_ui_scale() -> f64 {
     1.0
@@ -515,10 +532,15 @@ fn normalize(s: &mut AppSettings) {
     if s.editor_font_size < 10 || s.editor_font_size > 32 {
         s.editor_font_size = default_editor_font_size();
     }
-    const EDITOR_FONT_FAMILIES: &[&str] = &["default", "system", "serif", "mono"];
-    if !EDITOR_FONT_FAMILIES.contains(&s.editor_font_family.as_str()) {
-        s.editor_font_family = default_editor_font_family();
+    s.interface_font_family = normalize_font_family_value(&s.interface_font_family);
+    s.text_font_family = normalize_font_family_value(&s.text_font_family);
+    s.mono_font_family = normalize_font_family_value(&s.mono_font_family);
+    // Migrate deprecated editorFontFamily preset into textFontFamily once.
+    let legacy = normalize_font_family_value(&s.editor_font_family);
+    if s.text_font_family.is_empty() && !legacy.is_empty() {
+        s.text_font_family = legacy;
     }
+    s.editor_font_family.clear();
     if !s.editor_line_height.is_finite() || s.editor_line_height < 1.4 || s.editor_line_height > 2.0
     {
         s.editor_line_height = default_editor_line_height();
