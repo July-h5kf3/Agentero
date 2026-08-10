@@ -11,6 +11,7 @@ import { useVaultOpenRequest } from "@/hooks/use-vault-open-request";
 import i18n, { resolveLocale } from "@/i18n";
 import { isTauri } from "@/lib/core/tauri";
 import { refreshLibrary } from "@/lib/paper/library-store";
+import { applyDocumentChrome } from "@/lib/settings";
 import { initSettingsStore } from "@/lib/settings/react-store";
 import { setSettingsOpenState } from "@/lib/shell/ui-store";
 import { seedVaultSkills, validateRestoredVault } from "@/lib/vault/actions";
@@ -38,6 +39,8 @@ export function useAppBootstrap(): void {
 	const theme = useSettings((s) => s.theme);
 	const locale = useSettings((s) => s.locale);
 	const uiScale = useSettings((s) => s.uiScale);
+	const interfaceFontFamily = useSettings((s) => s.interfaceFontFamily);
+	const monoFontFamily = useSettings((s) => s.monoFontFamily);
 	const vaultPath = useVaultStore((s) => s.vaultPath);
 
 	useEffect(() => {
@@ -62,11 +65,13 @@ export function useAppBootstrap(): void {
 	}, [locale]);
 
 	useEffect(() => {
-		if (typeof document === "undefined") return;
-		document.documentElement.style.fontSize = `${16 * uiScale}px`;
-		// Note: macOS traffic lights are positioned at build-time; Tauri v2 does
-		// not expose a runtime setter for the main window's traffic lights.
-	}, [uiScale]);
+		// Scale + interface/mono fonts. macOS traffic lights stay build-time only.
+		applyDocumentChrome({
+			uiScale,
+			interfaceFontFamily,
+			monoFontFamily,
+		});
+	}, [uiScale, interfaceFontFamily, monoFontFamily]);
 
 	// Validate the restored local Vault before restoring its tree and tabs.
 	useEffect(() => {

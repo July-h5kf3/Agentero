@@ -9,7 +9,7 @@ import { useSettings, useVaultStore } from "@/hooks/use-app-stores";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { refreshLibrary } from "@/lib/paper/library-store";
-import { editorFontFamilyCss } from "@/lib/settings";
+import { applyDocumentChrome, resolveFontFamilyCss } from "@/lib/settings";
 import { readDocWindowParams } from "@/lib/shell/doc-window";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { openRecentVault } from "@/lib/vault/actions";
@@ -45,10 +45,21 @@ export function DocWindowRoot() {
 
 	const vaultPath = useVaultStore((s) => s.vaultPath);
 	const fontSize = useSettings((s) => s.editorFontSize);
-	const fontFamilyPreset = useSettings((s) => s.editorFontFamily);
+	const textFontFamily = useSettings((s) => s.textFontFamily);
 	const lineHeight = useSettings((s) => s.editorLineHeight);
 	const showToolbar = useSettings((s) => s.showEditorToolbar);
-	const fontFamily = editorFontFamilyCss(fontFamilyPreset);
+	const uiScale = useSettings((s) => s.uiScale);
+	const interfaceFontFamily = useSettings((s) => s.interfaceFontFamily);
+	const monoFontFamily = useSettings((s) => s.monoFontFamily);
+	const fontFamily = resolveFontFamilyCss(textFontFamily, "text");
+
+	useEffect(() => {
+		applyDocumentChrome({
+			uiScale,
+			interfaceFontFamily,
+			monoFontFamily,
+		});
+	}, [uiScale, interfaceFontFamily, monoFontFamily]);
 
 	useState(() => {
 		initVaultStore();
