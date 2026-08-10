@@ -527,14 +527,14 @@ AGENTS.md 要求「尽可能复用能力」，因此先调研了现成框架。�
 | 6 | `CatalogHandle` 进 State + 重命令改 `spawn_blocking` | 低 | 每个 catalog 命令省 5 次 `schema_version` 探测 | 未开始（需成对做 `spawn_blocking`，涉及 SQLite 连接线程模型，建议实机验证） |
 | 7 | `CapsCache` 内存能力位 + 删 `collectPapersNeedingAssetDownload` | 中 | 消灭所有目录 walk | 部分：`CapsCache` 完成（`ff5756be`）；`collectPapersNeedingAssetDownload` 删除依赖 reconcile 扫描（见 10） |
 | 8 | `paper_open_bundle` 聚合命令 | 中 | T0 从 4 IPC → 1 IPC | 完成（`ac17af96`） |
-| 9 | `JobCenter` 内存队列 + `job:changed` 事件 + `governor` 限流 | 高 | 轮询消失，队列语义统一，S2 不再 429 | 基本完成：调度器（`61938b50`）、ParseBody / ParseRefs / LayoutAnalyze executor（`2952c686`）；在线引用以 `Semaphore(2)` 限流（`online.rs`）替代 `governor` |
+| 9 | `JobCenter` 内存队列 + `job:changed` 事件 + `governor` 限流 | 高 | 轮询消失，队列语义统一，S2 不再 429 | 完成：调度器（`61938b50`）、ParseBody / ParseRefs / LayoutAnalyze executor（`2952c686`）、per-kind 并发上限 + finish 后 drain（`aab07bd4`，§7.3）；在线引用以 `Semaphore(2)` 限流（`online.rs`）替代 `governor` |
 | 10 | enqueue 点收敛到 3 入口 + `reconcile` 扫描 + 删 `downloadAllMissingAssets` / `loadPaperRefsAuto` | 高 | 重复触发消失（依赖 9） | 未开始（跨切面，需实机验证打开论文 / 引用面板 / 批量下载流程） |
 
 1–6 互相独立且全为低风险，可先行兑现收益。9 的投入较大（约 300–400 行，见 §8.5），做完 1–8 后再评估。10 必须跟在 9 之后。
 
 > 已额外兑现：§7.6 细节 3（`background-task:progress` 单一全局 listener 按 taskId 路由，`a0149774`）、§8.2（缓存命中只读——viewer 不再回写 `layout.json`，`fc943551`；配合索引未变更跳过，缓存命中零写盘）、§11「layout sidecar 轮询 → 0」（`use-pdf-layout-run.ts` 已改为 watcher 事件驱动）。
 >
-> 剩余未竟项：**6（`CatalogHandle` + `spawn_blocking`）** 与 **10（enqueue 收敛 + reconcile driver + `job:changed`→任务面板投影 + 取消收口）**。3 仅剩「原子写 + 自写抑制」，因 sidecar 读时已校验可重建、缓存命中已零写，边际收益低。上述改动会改变 SQLite 连接线程模型 / 打开论文关键路径 / 任务面板取消语义的运行时行为，单测难以覆盖，建议在 `pnpm tauri dev` 下逐项验证后提交。
+> 剩余未竟项：**6（`CatalogHandle` + `spawn_blocking`）** 与 **10（enqueue 收敛 + reconcile driver + `job:changed`→任务面板投影 + 取消收口 + 删前端 wrapper）**。§7.3 的 per-kind 并发已落入 JobCenter（`aab07bd4`），前端 wrapper 的 `{concurrency}` 门因此可安全移除，但仍须与任务面板投影 + 取消收口一并切换，避免进度/取消 UX 回退。3 仅剩「原子写 + 自写抑制」，因 sidecar 读时已校验可重建、缓存命中已零写，边际收益低。上述改动会改变 SQLite 连接线程模型 / 打开论文关键路径 / 任务面板取消语义的运行时行为，单测难以覆盖，建议在 `pnpm tauri dev` 下逐项验证后提交。
 
 ## 10. 函数审计与清理
 
