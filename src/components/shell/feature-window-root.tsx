@@ -13,12 +13,10 @@ import {
 	ReferencesPanel,
 	type VisualTraceRow,
 } from "@/components/viewer";
-import { GraphPanel } from "@/components/wiki/graph-panel";
 import {
 	useLibraryStore,
 	useSettings,
 	useVaultStore,
-	useWikiStore,
 } from "@/hooks/use-app-stores";
 import { applyAgentSessionHandoffOnce } from "@/lib/agent/agent-session-store";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
@@ -104,7 +102,6 @@ function viewTitleKey(
 	view: FeatureViewType,
 ):
 	| "labels.agent"
-	| "labels.graph"
 	| "titlebar.annotationsPanel"
 	| "titlebar.referencesPanel"
 	| "titlebar.figuresPanel" {
@@ -112,11 +109,10 @@ function viewTitleKey(
 		case "agent":
 			return "labels.agent";
 		case "backlinks":
-			return "labels.graph";
-		case "annotations":
-			return "titlebar.annotationsPanel";
 		case "references":
 			return "titlebar.referencesPanel";
+		case "annotations":
+			return "titlebar.annotationsPanel";
 		case "figures":
 			return "titlebar.figuresPanel";
 	}
@@ -300,7 +296,6 @@ export function FeatureWindowRoot() {
 	const vaultPaperPaths = useVaultStore((s) => s.vaultPaperPaths);
 	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
 	const paperTreeLabelMode = useSettings((s) => s.paperTreeLabelMode);
-	const wikiIndexRevision = useWikiStore((s) => s.wikiIndexRevision);
 
 	useState(() => {
 		initVaultStore();
@@ -452,14 +447,6 @@ export function FeatureWindowRoot() {
 							onOpenSource={handleAgentOpenSource}
 						/>
 					</Suspense>
-				) : view === "backlinks" ? (
-					<GraphPanel
-						vaultPath={vaultPath}
-						selectedPath={selectedPath}
-						onOpenPath={openGraphPath}
-						className="h-full min-h-0 flex-1"
-						wikiIndexRevision={wikiIndexRevision}
-					/>
 				) : view === "annotations" ? (
 					<FeatureAnnotations
 						selectedPath={selectedPath}
@@ -476,6 +463,7 @@ export function FeatureWindowRoot() {
 						onJump={() => {}}
 					/>
 				) : (
+					// references (+ legacy backlinks/Graph popout): list + citation graph
 					<ReferencesPanel
 						vaultPath={vaultPath}
 						paperPath={referencesPaperPath}

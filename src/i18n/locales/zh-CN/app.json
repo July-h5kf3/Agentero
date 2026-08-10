@@ -1,7 +1,7 @@
 {
 	"labels": {
 		"agent": "Agent",
-		"graph": "图谱",
+		"graph": "引用图谱",
 		"notes": "笔记",
 		"untitled": "未命名"
 	},

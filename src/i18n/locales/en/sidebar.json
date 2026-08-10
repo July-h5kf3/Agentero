@@ -226,10 +226,10 @@
 	"graph": {
 		"near": "Near",
 		"all": "All",
-		"title": "Graph",
-		"loading": "Loading graph…",
-		"selectPrompt": "Select a paper or note for neighborhood graph.",
-		"noEdges": "No wikilink edges yet."
+		"title": "Citation graph",
+		"loading": "Loading citation graph…",
+		"selectPrompt": "Select a paper for its citation neighborhood.",
+		"noEdges": "No citation links yet. Open a paper to parse references, or import more library papers."
 	},
 	"paperInfo": {
 		"info": "Info",

@@ -1,6 +1,6 @@
 /**
- * Right rail: Agent chat, Graph, PDF annotations, References, and Figures
- * (layout-detected images/tables). Subscribes to stores directly.
+ * Right rail: Agent chat, PDF annotations, References (with citation graph),
+ * and Figures (layout-detected images/tables). Subscribes to stores directly.
  */
 
 import {
@@ -22,14 +22,12 @@ import {
 	ReferencesPanel,
 	type VisualTraceRow,
 } from "@/components/viewer";
-import { GraphPanel } from "@/components/wiki/graph-panel";
 import {
 	useAnnotationsStore,
 	useLibraryStore,
 	useSettings,
 	useUiStore,
 	useVaultStore,
-	useWikiStore,
 	useWorkspaceStore,
 } from "@/hooks/use-app-stores";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
@@ -460,7 +458,6 @@ export function RightSidebar() {
 	const vaultPaperPaths = useVaultStore((s) => s.vaultPaperPaths);
 	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
 	const paperTreeLabelMode = useSettings((s) => s.paperTreeLabelMode);
-	const wikiIndexRevision = useWikiStore((s) => s.wikiIndexRevision);
 	const selectedPath = useWorkspaceStore(
 		(s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.path ?? null,
 	);
@@ -471,7 +468,6 @@ export function RightSidebar() {
 
 	// Singleton feature windows own the surface — do not also host in the rail.
 	const agentInWindow = Boolean(featurePoppedOut.agent);
-	const backlinksInWindow = Boolean(featurePoppedOut.backlinks);
 	const annotationsInWindow = Boolean(featurePoppedOut.annotations);
 	const referencesInWindow = Boolean(featurePoppedOut.references);
 	const figuresInWindow = Boolean(featurePoppedOut.figures);
@@ -509,24 +505,14 @@ export function RightSidebar() {
 					</div>
 				)}
 			{rightSidebarOpen &&
-			!backlinksInWindow &&
-			rightSidebarTab === "backlinks" ? (
-				<GraphPanel
-					vaultPath={vaultPath}
-					selectedPath={selectedPath}
-					onOpenPath={openGraphPath}
-					className="h-full min-h-0 flex-1"
-					wikiIndexRevision={wikiIndexRevision}
-				/>
-			) : null}
-			{rightSidebarOpen &&
 			!annotationsInWindow &&
 			rightSidebarTab === "annotations" ? (
 				<AnnotationsSidebar />
 			) : null}
 			{rightSidebarOpen &&
 			!referencesInWindow &&
-			rightSidebarTab === "references" ? (
+			// Legacy "backlinks" tab id → References (citation list + graph)
+			(rightSidebarTab === "references" || rightSidebarTab === "backlinks") ? (
 				<ReferencesSidebar />
 			) : null}
 			{rightSidebarOpen && !figuresInWindow && rightSidebarTab === "figures" ? (

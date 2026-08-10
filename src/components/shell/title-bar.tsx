@@ -3,7 +3,6 @@ import {
 	Bot,
 	ImageIcon,
 	MessageSquareText,
-	Network,
 	PanelLeft,
 	PanelRight,
 	Settings,
@@ -144,12 +143,6 @@ export const TitleBar = memo(function TitleBar({
 										Icon: Bot,
 									},
 									{
-										id: "backlinks" as const,
-										aria: t("titlebar.graphPanel"),
-										tooltip: t("labels.graph"),
-										Icon: Network,
-									},
-									{
 										id: "annotations" as const,
 										aria: t("titlebar.annotationsPanel"),
 										tooltip: t("annotations.title", { ns: "viewer" }),
@@ -178,9 +171,15 @@ export const TitleBar = memo(function TitleBar({
 													variant="ghost"
 													size="icon-xs"
 													aria-label={aria}
-													aria-pressed={rightSidebarTab === id}
+													aria-pressed={
+														rightSidebarTab === id ||
+														(id === "references" &&
+															rightSidebarTab === "backlinks")
+													}
 													className={cn(
-														rightSidebarTab === id &&
+														(rightSidebarTab === id ||
+															(id === "references" &&
+																rightSidebarTab === "backlinks")) &&
 															"bg-muted text-foreground",
 													)}
 													onClick={() => onOpenRightTab(id)}

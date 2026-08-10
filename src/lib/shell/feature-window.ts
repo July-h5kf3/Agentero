@@ -35,7 +35,8 @@ function featureWindowTitle(view: FeatureViewType): string {
 		case "agent":
 			return i18n.t("app:windows.titleAgent");
 		case "backlinks":
-			return i18n.t("app:labels.graph");
+			// Legacy Graph popout id — content is now References (+ citation graph).
+			return i18n.t("app:windows.titleReferences");
 		case "annotations":
 			return i18n.t("app:windows.titleAnnotations");
 		case "references":
