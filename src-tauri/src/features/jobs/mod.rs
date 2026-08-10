@@ -449,6 +449,55 @@ impl JobCenter {
         snapshot
     }
 
+    pub async fn enqueue_download_assets(
+        &self,
+        vault: impl Into<PathBuf>,
+        path: impl Into<String>,
+        lane: JobLane,
+        force: bool,
+    ) -> JobSnapshot {
+        let vault_path = normalize_vault_path(vault.into());
+        let paper_path = path.into();
+        let fingerprint = format!("downloadAssets:v1:force:{force}");
+        let key = JobKey {
+            kind: JobKind::DownloadAssets,
+            vault_path: vault_path.clone(),
+            paper_path: Some(paper_path.clone()),
+            fingerprint: fingerprint.clone(),
+        };
+
+        let mut inner = self.inner.lock().await;
+        if let Some(existing_id) = inner.active_keys.get(&key) {
+            if let Some(existing) = inner.jobs.get(existing_id) {
+                return existing.snapshot();
+            }
+        }
+
+        let id = JobId(uuid::Uuid::new_v4().to_string());
+        let job = Job {
+            id: id.clone(),
+            kind: JobKind::DownloadAssets,
+            lane,
+            vault_path,
+            paper_path: Some(paper_path),
+            fingerprint,
+            depends_on: Vec::new(),
+            dep_policy: DepPolicy::AllSucceeded,
+            attempts: 0,
+            state: JobState::Queued,
+            progress: Some(0.0),
+            phase: Some("queued".into()),
+            error: None,
+            force,
+            task_id: None,
+        };
+        let snapshot = job.snapshot();
+        inner.active_keys.insert(key, id.clone());
+        inner.lanes.push(lane, id.clone());
+        inner.jobs.insert(id, job);
+        snapshot
+    }
+
     pub async fn promote_paper(&self, vault: &Path, path: &str) -> Vec<JobSnapshot> {
         let vault = normalize_vault_path(vault.to_path_buf());
         let mut snapshots = Vec::new();
@@ -767,6 +816,94 @@ impl JobCenter {
         })
     }
 
+    /// Download PDF/TeX for a paper, then backfill `PAPER.md` + layout for the
+    /// freshly-downloaded assets. Byte-level progress flows via
+    /// `background-task:progress` (task_id defaults to the job id) to the
+    /// projected "download" row.
+    pub fn run_download_assets_job(
+        self,
+        app: tauri::AppHandle,
+        job_id: String,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+        Box::pin(async move {
+            let started = self.mark_running(&job_id).await;
+            let Some((snapshot, vault, path, _force, task_id)) = started else {
+                return;
+            };
+            emit_job_changed(&app, snapshot);
+
+            let task_id = task_id.unwrap_or_else(|| job_id.clone());
+            let cache = app.state::<crate::features::catalog::CapsCache>();
+            let args = crate::features::import::PaperDownloadAssetsArgs {
+                vault_path: vault.to_string_lossy().to_string(),
+                path: path.clone(),
+                task_id: Some(task_id),
+            };
+            let result = crate::features::import::download_paper_assets_with_progress(
+                args,
+                Some(&app),
+                Some(&cache),
+            )
+            .await;
+            // Assets changed on disk: drop the stale capability bits.
+            cache.invalidate(&vault, &path);
+
+            let snapshot = match result {
+                Ok(_) => {
+                    // Follow-ups for the freshly-downloaded PDF: PAPER.md + layout.
+                    if cache.caps_for(&vault, &path).needs_paper_md() {
+                        let snap = self
+                            .enqueue_parse_body(&vault, &path, JobLane::Normal, false, None)
+                            .await;
+                        emit_job_changed(&app, snap.clone());
+                        if let StartOutcome::Started(..) = self.try_start(&snap.id).await {
+                            let runner = self.handle();
+                            let app2 = app.clone();
+                            let dep_id = snap.id.clone();
+                            tauri::async_runtime::spawn(async move {
+                                runner.run_parse_body_job(app2, dep_id).await;
+                            });
+                        }
+                    }
+                    let lsnap = self
+                        .enqueue_layout_analyze(&vault, &path, JobLane::Normal, false)
+                        .await;
+                    emit_job_changed(&app, lsnap.clone());
+                    if let StartOutcome::Started(..) = self.try_start(&lsnap.id).await {
+                        let runner = self.handle();
+                        let app2 = app.clone();
+                        let dep_id = lsnap.id.clone();
+                        tauri::async_runtime::spawn(async move {
+                            runner.run_layout_analyze_job(app2, dep_id).await;
+                        });
+                    }
+                    self.finish(
+                        &job_id,
+                        JobState::Succeeded,
+                        Some(100.0),
+                        Some("completed"),
+                        None,
+                    )
+                    .await
+                }
+                Err(e) => {
+                    self.finish(
+                        &job_id,
+                        JobState::Failed,
+                        None,
+                        Some("failed"),
+                        Some(e.to_string()),
+                    )
+                    .await
+                }
+            };
+            if let Some(snapshot) = snapshot {
+                emit_job_changed(&app, snapshot);
+            }
+            self.wake_and_spawn_dependents(&app, &job_id).await;
+        })
+    }
+
     /// Wake `Queued` jobs depending on `finished_id` and spawn any that became
     /// runnable; emits `job:changed` for jobs that transitioned to `Skipped`.
     async fn wake_and_spawn_dependents(&self, app: &tauri::AppHandle, finished_id: &str) {
@@ -783,6 +920,9 @@ impl JobCenter {
                             JobKind::ParseBody => center2.run_parse_body_job(app2, dep_id).await,
                             JobKind::LayoutAnalyze => {
                                 center2.run_layout_analyze_job(app2, dep_id).await
+                            }
+                            JobKind::DownloadAssets => {
+                                center2.run_download_assets_job(app2, dep_id).await
                             }
                             _ => {}
                         }
@@ -840,6 +980,9 @@ impl JobCenter {
                             JobKind::ParseBody => center2.run_parse_body_job(app2, job_id).await,
                             JobKind::LayoutAnalyze => {
                                 center2.run_layout_analyze_job(app2, job_id).await
+                            }
+                            JobKind::DownloadAssets => {
+                                center2.run_download_assets_job(app2, job_id).await
                             }
                             _ => {}
                         }
@@ -1695,5 +1838,21 @@ mod tests {
             center.state_for_test(&a.id).await,
             Some(JobState::Cancelled)
         );
+    }
+
+    #[tokio::test]
+    async fn enqueue_dedupes_active_download_assets_job() {
+        let center = JobCenter::new();
+        let first = center
+            .enqueue_download_assets(vault("dedupe-dl"), "papers/a", JobLane::Normal, false)
+            .await;
+        let duplicate = center
+            .enqueue_download_assets(vault("dedupe-dl"), "papers/a", JobLane::Normal, false)
+            .await;
+
+        assert_eq!(first.id, duplicate.id);
+        assert_eq!(first.kind, JobKind::DownloadAssets);
+        assert_eq!(first.fingerprint, "downloadAssets:v1:force:false");
+        assert_eq!(center.list(None, None).await.len(), 1);
     }
 }

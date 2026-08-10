@@ -125,6 +125,7 @@ const PROJECTED_JOB_KINDS: Partial<Record<JobKind, BackgroundTaskKind>> = {
 	layoutAnalyze: "layout",
 	parseRefs: "parse",
 	parseBody: "pdfParse",
+	downloadAssets: "download",
 };
 
 function projectedTaskKind(kind: JobKind): BackgroundTaskKind | null {
@@ -137,6 +138,8 @@ function jobPanelTitle(kind: JobKind): string {
 			return i18n.t("app:tasks.parseRefs");
 		case "parseBody":
 			return i18n.t("app:tasks.pdfParse");
+		case "downloadAssets":
+			return i18n.t("app:tasks.downloadPaper");
 		default:
 			return i18n.t("app:tasks.layoutAnalysis");
 	}

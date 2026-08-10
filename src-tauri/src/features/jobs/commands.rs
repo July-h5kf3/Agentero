@@ -271,6 +271,47 @@ pub async fn job_layout_analyze_enqueue(
     Ok(ApiResult::ok(snapshot))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobDownloadAssetsEnqueueArgs {
+    pub vault_path: String,
+    pub path: String,
+    #[serde(default)]
+    pub lane: Option<JobLane>,
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[tauri::command]
+pub async fn job_download_assets_enqueue(
+    app: tauri::AppHandle,
+    center: State<'_, JobCenter>,
+    args: JobDownloadAssetsEnqueueArgs,
+) -> Result<ApiResult<JobSnapshot>, String> {
+    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
+        Ok(valid) => valid,
+        Err(e) => return Ok(map_err(e)),
+    };
+    let snapshot = center
+        .enqueue_download_assets(&vault, &path, parse_lane(args.lane), args.force)
+        .await;
+    emit_job_changed(&app, snapshot.clone());
+
+    match center.try_start(&snapshot.id).await {
+        StartOutcome::Started(..) => {
+            let job_id = snapshot.id.clone();
+            let runner = center.handle();
+            tauri::async_runtime::spawn(async move {
+                runner.run_download_assets_job(app, job_id).await;
+            });
+        }
+        StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
+        StartOutcome::Waiting => {}
+    }
+
+    Ok(ApiResult::ok(snapshot))
+}
+
 #[tauri::command]
 pub async fn job_focus_paper(
     app: tauri::AppHandle,
