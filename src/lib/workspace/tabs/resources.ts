@@ -20,6 +20,7 @@ import {
 	revokePdfViewerSource,
 } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
+import { enqueuePaperPdfParse } from "@/lib/paper/enqueue-paper-pdf-parse";
 import { downloadPaperAssets } from "@/lib/paper/lookup";
 import { loadPaperRefsAuto } from "@/lib/paper/refs";
 import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
@@ -74,24 +75,11 @@ function maybeTriggerDeferredParse(
 	if (!rel || paperParseTried.has(rel)) return;
 	paperParseTried.add(rel);
 
-	void enqueueBackgroundTask(
-		{
-			kind: "download",
-			title: i18n.t("app:tasks.downloadPaper"),
-			detail: rel,
-		},
-		async ({ id }) => {
-			await downloadPaperAssets({
-				vaultRoot: vaultPath,
-				paperPath: rel,
-				progressTaskId: id,
-			});
-			enqueuePaperLayoutAnalysis({
-				paperAbsPath: joinVaultPath(vaultPath, rel),
-				paperLabel: paperMeta?.title?.trim(),
-			});
-		},
-	).catch(() => {});
+	enqueuePaperPdfParse({
+		vaultPath,
+		paperRelPath: rel,
+		paperLabel: paperMeta?.title?.trim(),
+	});
 }
 
 /**

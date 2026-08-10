@@ -10,6 +10,7 @@ import {
 } from "@/lib/core/background-tasks";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import { collectPapersNeedingAssetDownload } from "@/lib/paper";
+import { enqueuePaperPdfParse } from "@/lib/paper/enqueue-paper-pdf-parse";
 import { currentLookupParentDir } from "@/lib/paper/library-actions";
 import {
 	libraryStore,
@@ -147,6 +148,14 @@ export async function lookupSubmit(
 							paperLabel: paper.title?.trim() || paper.path,
 						});
 					}
+					const rel = paper.path?.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+					if (rel) {
+						enqueuePaperPdfParse({
+							vaultPath,
+							paperRelPath: rel,
+							paperLabel: paper.title?.trim() || paper.path,
+						});
+					}
 				}
 
 				if (result.errors.length > 0) {
@@ -187,6 +196,10 @@ export async function lookupSubmit(
 								await refreshLibrary();
 								enqueuePaperLayoutAnalysis({
 									paperAbsPath: joinVaultPath(vaultPath, rel),
+								});
+								enqueuePaperPdfParse({
+									vaultPath,
+									paperRelPath: rel,
 								});
 							},
 							{ concurrency: settings.batchImportConcurrency },
@@ -301,6 +314,14 @@ export async function importLocalPdf(opts?: {
 				if (paper.paperDir) {
 					enqueuePaperLayoutAnalysis({
 						paperAbsPath: paper.paperDir.replace(/[\\/]+$/, ""),
+						paperLabel: paper.title?.trim() || paper.path,
+					});
+				}
+				const rel = paper.path?.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+				if (rel) {
+					enqueuePaperPdfParse({
+						vaultPath,
+						paperRelPath: rel,
 						paperLabel: paper.title?.trim() || paper.path,
 					});
 				}

@@ -18,6 +18,7 @@ export type BackgroundTaskKind =
 	| "import"
 	| "export"
 	| "parse"
+	| "pdfParse"
 	| "paperRead"
 	| "connector"
 	| "other";
