@@ -8,7 +8,6 @@
 //! the GUI binary `agentero` in `target/{debug,release}/`.
 
 use crate::core::error::AppError;
-use crate::core::install_dirs::{ABS_BIN_DIRS, HOME_BIN_DIRS};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -385,21 +384,6 @@ pub(crate) fn uninstall_shim(shim: &Path, bundled: Option<&Path>) -> Result<bool
     }
     fs::remove_file(shim)?;
     Ok(true)
-}
-
-/// Optional helper: list user bin candidates (for diagnostics).
-#[allow(dead_code)]
-pub fn user_bin_candidates() -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    if let Some(home) = dirs::home_dir() {
-        for rel in HOME_BIN_DIRS {
-            out.push(home.join(rel));
-        }
-    }
-    for abs in ABS_BIN_DIRS {
-        out.push(PathBuf::from(abs));
-    }
-    out
 }
 
 #[cfg(test)]
