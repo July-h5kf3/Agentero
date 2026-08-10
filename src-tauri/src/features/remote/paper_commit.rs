@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 
 use super::import_bridge::{unique_remote_paper_path, upload_tree};
@@ -9,9 +10,15 @@ use crate::features::import::{
     ensure_paper_assets, paper_record_from_meta, write_paper_shell, AssetDownloadResult, PaperMeta,
 };
 
+pub(crate) enum RemoteAssetsPolicy<'a> {
+    SyncDownload,
+    CopyPdf { src: &'a Path },
+}
+
 pub(crate) struct RemotePaperCommitOptions<'a> {
     pub parent_rel: &'a str,
     pub task_id: Option<&'a str>,
+    pub assets: RemoteAssetsPolicy<'a>,
     pub push_catalog: bool,
 }
 
@@ -43,21 +50,32 @@ pub(crate) async fn remote_paper_commit(
     }
     fs::create_dir_all(&staging)?;
 
+    if let RemoteAssetsPolicy::CopyPdf { src } = &opts.assets {
+        fs::copy(src, staging.join(format!("{id}.pdf")))
+            .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
+    }
+
     write_paper_shell(&staging, &meta).await?;
 
-    let mut assets = ensure_paper_assets(
-        &staging,
-        &id,
-        meta.arxiv_id.as_deref(),
-        meta.pdf_url.as_deref(),
-        meta.doi.as_deref(),
-    )
-    .await
-    .unwrap_or_else(|e| {
-        let mut r = AssetDownloadResult::default();
-        r.messages.push(format!("asset download error: {e}"));
-        r
-    });
+    let mut assets = match opts.assets {
+        RemoteAssetsPolicy::SyncDownload => ensure_paper_assets(
+            &staging,
+            &id,
+            meta.arxiv_id.as_deref(),
+            meta.pdf_url.as_deref(),
+            meta.doi.as_deref(),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            let mut r = AssetDownloadResult::default();
+            r.messages.push(format!("asset download error: {e}"));
+            r
+        }),
+        RemoteAssetsPolicy::CopyPdf { .. } => AssetDownloadResult {
+            pdf: true,
+            ..Default::default()
+        },
+    };
     crate::features::import::check_task_not_cancelled(opts.task_id)?;
 
     let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
