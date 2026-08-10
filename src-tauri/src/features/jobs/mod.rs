@@ -480,15 +480,42 @@ impl JobCenter {
         let Some(job) = inner.jobs.get_mut(&id) else {
             return false;
         };
-        if job.state != JobState::Queued {
-            return false;
+        match job.state {
+            JobState::Queued => {
+                job.state = JobState::Cancelled;
+                job.progress = None;
+                job.phase = Some("cancelled".into());
+                inner.lanes.remove(&id);
+                release_active_key(&mut inner, &id);
+                true
+            }
+            JobState::Running => {
+                job.state = JobState::Cancelled;
+                job.progress = None;
+                job.phase = Some("cancelled".into());
+                let kind = job.kind;
+                // Signal the executing worker / renderer to stop. ParseBody's
+                // liteparse worker polls this flag; the layout executor aborts
+                // on the `job:changed(cancelled)` event emitted by the caller.
+                let task_id = job.task_id.clone().unwrap_or_else(|| job.id.0.clone());
+                if let Some(n) = inner.running_by_kind.get_mut(&kind) {
+                    *n = n.saturating_sub(1);
+                }
+                crate::features::agent::background_tasks::cancel(&task_id);
+                release_active_key(&mut inner, &id);
+                true
+            }
+            _ => false,
         }
-        job.state = JobState::Cancelled;
-        job.progress = None;
-        job.phase = Some("cancelled".into());
-        inner.lanes.remove(&id);
-        release_active_key(&mut inner, &id);
-        true
+    }
+
+    /// Current snapshot for a job id, if it exists.
+    pub async fn snapshot(&self, job_id: &str) -> Option<JobSnapshot> {
+        let inner = self.inner.lock().await;
+        inner
+            .jobs
+            .get(&JobId(job_id.to_string()))
+            .map(Job::snapshot)
     }
 
     pub async fn list(&self, vault: Option<&Path>, path: Option<&str>) -> Vec<JobSnapshot> {
@@ -846,6 +873,14 @@ impl JobCenter {
         let mut inner = self.inner.lock().await;
         let id = JobId(job_id.to_string());
         let job = inner.jobs.get_mut(&id)?;
+        // Already settled (e.g. cancelled mid-run): keep the terminal state so a
+        // runner's late finish() cannot overwrite it, and don't double-free the slot.
+        if matches!(
+            job.state,
+            JobState::Succeeded | JobState::Failed | JobState::Cancelled | JobState::Skipped
+        ) {
+            return Some(job.snapshot());
+        }
         let was_running = job.state == JobState::Running;
         let kind = job.kind;
         job.state = state;
@@ -1620,5 +1655,45 @@ mod tests {
             StartOutcome::Started(..) => {}
             other => panic!("expected refs Started alongside layout, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn cancel_running_job_frees_slot_and_keeps_terminal_state() {
+        let center = JobCenter::new();
+        let a = center
+            .enqueue_layout_analyze(vault("cancel-run-a"), "papers/a", JobLane::Normal, false)
+            .await;
+        let b = center
+            .enqueue_layout_analyze(vault("cancel-run-b"), "papers/b", JobLane::Normal, false)
+            .await;
+
+        match center.try_start(&a.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected a Started, got {other:?}"),
+        }
+        match center.try_start(&b.id).await {
+            StartOutcome::Waiting => {}
+            other => panic!("expected b Waiting at cap, got {other:?}"),
+        }
+
+        // Cancel the running job: it becomes Cancelled and frees its slot.
+        assert!(center.cancel(&a.id).await);
+        assert_eq!(
+            center.state_for_test(&a.id).await,
+            Some(JobState::Cancelled)
+        );
+        match center.try_start(&b.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected b Started after cancel freed the slot, got {other:?}"),
+        }
+
+        // A late finish() from the runner must not overwrite the Cancelled state.
+        center
+            .finish(&a.id, JobState::Failed, None, Some("failed"), None)
+            .await;
+        assert_eq!(
+            center.state_for_test(&a.id).await,
+            Some(JobState::Cancelled)
+        );
     }
 }

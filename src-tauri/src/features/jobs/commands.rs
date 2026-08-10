@@ -232,10 +232,17 @@ pub async fn job_focus_paper(
 
 #[tauri::command]
 pub async fn job_cancel(
+    app: tauri::AppHandle,
     center: State<'_, JobCenter>,
     job_id: String,
 ) -> Result<ApiResult<bool>, String> {
-    Ok(ApiResult::ok(center.cancel(&job_id).await))
+    let cancelled = center.cancel(&job_id).await;
+    if cancelled {
+        if let Some(snapshot) = center.snapshot(&job_id).await {
+            emit_job_changed(&app, snapshot);
+        }
+    }
+    Ok(ApiResult::ok(cancelled))
 }
 
 #[tauri::command]
