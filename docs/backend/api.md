@@ -1497,6 +1497,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - `install`：未装 host 时走官方 installer（POSIX curl→临时文件再 bash，非 `curl|bash`）或 npm；Claude/Codex 在 host 已存在但 ACP 缺失时只装适配器；两者都缺则 host && adapter；Hermes 走官方 installer；OpenClaw 走 npm。
   - `update`：优先 `tool update` / 官方链，失败再 npm；Codex 固定 npm（避免假成功）；OpenClaw 使用 `openclaw update --yes` 后 fallback npm；Windows 上 OpenCode 不用交互式 `upgrade`。
   - 本机 lifecycle 全局串行执行，避免多个 npm 全局安装/升级任务并发抢锁或互相覆盖临时脚本；前端复用 `enqueueBackgroundTask(..., { concurrency: 1 })` 展示安装 / 扫描 / 探测阶段进度（#250）。
+  - 安装子进程运行期间，Host 以 `agent-lifecycle-*` phase 向 `background-task:progress` 推送进度 tick，避免快捷下载脚本长时间停在无进度状态。
   - 若传入 `taskId`，等待 lifecycle 锁和执行安装子进程时会检查 `background_task_cancel`；取消是尽力而为，不回滚已完成的包管理器写入。
   - macOS/Linux：注入 login shell 的 `PATH`（GUI 窄 PATH）。
   - Windows：写唯一临时 `.bat` + `CREATE_NO_WINDOW` + `call` 前缀；安装进程 PATH 合并 npm/pnpm/WinGet/Scoop shim；批处理切到 UTF-8，错误输出按 UTF-8 优先、GBK 回退解码。

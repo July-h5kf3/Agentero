@@ -8,10 +8,15 @@
 use crate::features::agent::discover::path_entries;
 use crate::features::agent::discover::resolve_command;
 use crate::features::agent::templates::{template_info, CLAUDE_ACP_INSTALL_COMMAND};
+use serde::Serialize;
 use std::io::{self, Read};
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, MutexGuard, OnceLock, TryLockError};
-use std::{thread, time::Duration};
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
+use tauri::{AppHandle, Emitter};
 
 #[cfg(target_os = "windows")]
 use std::fs::{self, OpenOptions};
@@ -42,6 +47,16 @@ pub const LIFECYCLE_TEMPLATES: &[&str] = &[
     "hermes",
     "grok-build",
 ];
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ToolLifecycleProgress {
+    task_id: String,
+    phase: String,
+    downloaded_bytes: u64,
+    total_bytes: Option<u64>,
+    progress: Option<u8>,
+}
 
 /// Official shell installers download to a temp file then exec (never `curl | bash`),
 /// so curl failures propagate under WSL/subshells without relying on pipefail.
@@ -88,6 +103,7 @@ pub fn supports_lifecycle(template_id: &str) -> bool {
 pub fn run_template_lifecycle(
     template_id: &str,
     action: ToolLifecycleAction,
+    app: Option<&AppHandle>,
     task_id: Option<&str>,
 ) -> Result<(), String> {
     check_lifecycle_cancelled(task_id)?;
@@ -154,7 +170,7 @@ pub fn run_template_lifecycle(
         action,
         command.len()
     );
-    run_tool_lifecycle_silently(&command, task_id)
+    run_tool_lifecycle_silently(&command, app, task_id)
 }
 
 fn update_command(
@@ -409,9 +425,14 @@ npm i -g openclaw@latest
     }
 }
 
-fn run_tool_lifecycle_silently(command_line: &str, task_id: Option<&str>) -> Result<(), String> {
-    let _guard = acquire_lifecycle_lock(task_id)?;
+fn run_tool_lifecycle_silently(
+    command_line: &str,
+    app: Option<&AppHandle>,
+    task_id: Option<&str>,
+) -> Result<(), String> {
+    let _guard = acquire_lifecycle_lock(app, task_id)?;
     check_lifecycle_cancelled(task_id)?;
+    emit_lifecycle_progress(app, task_id, "agent-lifecycle-install", Some(5));
 
     #[cfg(not(target_os = "windows"))]
     {
@@ -422,8 +443,8 @@ fn run_tool_lifecycle_silently(command_line: &str, task_id: Option<&str>) -> Res
             let inherited = std::env::var("PATH").unwrap_or_default();
             cmd.env("PATH", merge_path_segments(&login_path, &inherited));
         }
-        let output =
-            run_command_with_cancellation(cmd, task_id).map_err(format_lifecycle_process_error)?;
+        let output = run_command_with_cancellation(cmd, app, task_id)
+            .map_err(format_lifecycle_process_error)?;
         check_lifecycle_cancelled(task_id)?;
         finish_lifecycle_output(&output)
     }
@@ -439,20 +460,30 @@ fn run_tool_lifecycle_silently(command_line: &str, task_id: Option<&str>) -> Res
             .arg(&bat_file)
             .env("PATH", merged_path)
             .creation_flags(CREATE_NO_WINDOW);
-        let output = run_command_with_cancellation(cmd, task_id);
+        let output = run_command_with_cancellation(cmd, app, task_id);
         let _ = fs::remove_file(&bat_file);
         check_lifecycle_cancelled(task_id)?;
         finish_lifecycle_output(&output.map_err(format_lifecycle_process_error)?)
     }
 }
 
-fn acquire_lifecycle_lock(task_id: Option<&str>) -> Result<MutexGuard<'static, ()>, String> {
+fn acquire_lifecycle_lock(
+    app: Option<&AppHandle>,
+    task_id: Option<&str>,
+) -> Result<MutexGuard<'static, ()>, String> {
     let lock = TOOL_LIFECYCLE_LOCK.get_or_init(|| Mutex::new(()));
+    let mut last_emit = Instant::now() - Duration::from_secs(1);
     loop {
         check_lifecycle_cancelled(task_id)?;
         match lock.try_lock() {
             Ok(guard) => return Ok(guard),
-            Err(TryLockError::WouldBlock) => thread::sleep(Duration::from_millis(100)),
+            Err(TryLockError::WouldBlock) => {
+                if last_emit.elapsed() >= Duration::from_millis(750) {
+                    emit_lifecycle_progress(app, task_id, "agent-lifecycle-waiting", Some(1));
+                    last_emit = Instant::now();
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
             Err(TryLockError::Poisoned(_)) => {
                 return Err("failed to acquire lifecycle lock".to_string())
             }
@@ -469,6 +500,7 @@ fn check_lifecycle_cancelled(task_id: Option<&str>) -> Result<(), String> {
 
 fn run_command_with_cancellation(
     mut command: Command,
+    app: Option<&AppHandle>,
     task_id: Option<&str>,
 ) -> io::Result<Output> {
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -481,6 +513,8 @@ fn run_command_with_cancellation(
         .stderr
         .take()
         .map(|mut pipe| thread::spawn(move || read_pipe_to_end(&mut pipe)));
+    let started_at = Instant::now();
+    let mut last_emit = Instant::now() - Duration::from_secs(1);
 
     loop {
         if task_id.is_some_and(crate::features::agent::background_tasks::is_cancelled) {
@@ -500,8 +534,39 @@ fn run_command_with_cancellation(
                 stderr: join_pipe_reader(stderr.take())?,
             });
         }
+        if last_emit.elapsed() >= Duration::from_millis(750) {
+            let elapsed_secs = started_at.elapsed().as_secs().min(30) as u8;
+            emit_lifecycle_progress(
+                app,
+                task_id,
+                "agent-lifecycle-install",
+                Some((5 + elapsed_secs * 2).min(65)),
+            );
+            last_emit = Instant::now();
+        }
         thread::sleep(Duration::from_millis(100));
     }
+}
+
+fn emit_lifecycle_progress(
+    app: Option<&AppHandle>,
+    task_id: Option<&str>,
+    phase: &str,
+    progress: Option<u8>,
+) {
+    let (Some(app), Some(task_id)) = (app, task_id) else {
+        return;
+    };
+    let _ = app.emit(
+        "background-task:progress",
+        ToolLifecycleProgress {
+            task_id: task_id.to_string(),
+            phase: phase.to_string(),
+            downloaded_bytes: 0,
+            total_bytes: None,
+            progress,
+        },
+    );
 }
 
 fn read_pipe_to_end<R: Read>(pipe: &mut R) -> io::Result<Vec<u8>> {

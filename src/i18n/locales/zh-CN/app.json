@@ -217,6 +217,8 @@
 		"downloadPhaseParse": "正在解析 PDF",
 		"downloadPhaseAsset": "资源",
 		"downloadPhaseLayoutModel": "版面模型",
+		"agentLifecycleWaiting": "正在等待安装器…",
+		"agentLifecycleInstalling": "正在运行安装器…",
 		"layoutModelDownload": "下载版面模型",
 		"layoutModelDetail": "魔搭 → HuggingFace · PP-DocLayoutV3",
 		"layoutAnalysis": "解析插图、表格、文字",

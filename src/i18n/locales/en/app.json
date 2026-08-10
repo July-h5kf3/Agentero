@@ -217,6 +217,8 @@
 		"downloadPhaseParse": "Parsing PDF",
 		"downloadPhaseAsset": "Asset",
 		"downloadPhaseLayoutModel": "Layout model",
+		"agentLifecycleWaiting": "Waiting for installer…",
+		"agentLifecycleInstalling": "Running installer…",
 		"layoutModelDownload": "Download layout model",
 		"layoutModelDetail": "ModelScope → HuggingFace · PP-DocLayoutV3",
 		"layoutAnalysis": "Parse figures, tables, and text",

@@ -14,7 +14,7 @@ use crate::features::remote::{materialize_skills_to_work, resolve_remote_target,
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -215,6 +215,7 @@ pub async fn agent_probe(
 /// Blocking work runs on a worker thread so the async runtime is not stalled.
 #[tauri::command]
 pub async fn agent_run_tool_lifecycle(
+    app: AppHandle,
     template_id: String,
     action: String,
     task_id: Option<String>,
@@ -229,7 +230,12 @@ pub async fn agent_run_tool_lifecycle(
     let template_id_for_log = template_id.clone();
     let task_id_for_worker = task_id.clone();
     let result = tokio::task::spawn_blocking(move || {
-        run_template_lifecycle(&template_id, action, task_id_for_worker.as_deref())
+        run_template_lifecycle(
+            &template_id,
+            action,
+            Some(&app),
+            task_id_for_worker.as_deref(),
+        )
     })
     .await
     .map_err(|e| format!("tool lifecycle task join error: {e}"))?;

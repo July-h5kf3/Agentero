@@ -81,7 +81,15 @@ function phaseLabel(phase: string): string {
 	if (phase === "parse") return i18n.t("app:tasks.downloadPhaseParse");
 	if (phase === "layout-model")
 		return i18n.t("app:tasks.downloadPhaseLayoutModel");
+	if (phase === "agent-lifecycle-waiting")
+		return i18n.t("app:tasks.agentLifecycleWaiting");
+	if (phase === "agent-lifecycle-install")
+		return i18n.t("app:tasks.agentLifecycleInstalling");
 	return i18n.t("app:tasks.downloadPhaseAsset");
+}
+
+function isAgentLifecyclePhase(phase: string): boolean {
+	return phase.startsWith("agent-lifecycle-");
 }
 
 /**
@@ -340,6 +348,13 @@ async function attachProgressListener(id: string): Promise<UnlistenFn | null> {
 			if (event.payload.taskId !== id) return;
 			const { downloadedBytes, totalBytes, currentCount, totalCount } =
 				event.payload;
+			if (isAgentLifecyclePhase(event.payload.phase)) {
+				updateBackgroundTask(id, {
+					progress: event.payload.progress,
+					detail: phaseLabel(event.payload.phase),
+				});
+				return;
+			}
 			if (event.payload.phase === "parse") {
 				updateBackgroundTask(id, {
 					progress: mapDownloadProgress(
