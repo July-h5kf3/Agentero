@@ -388,10 +388,6 @@ pub async fn import_by_identifier_batch(
         .expect("all import futures finished")
         .into_inner();
 
-    for r in &imported {
-        crate::features::refs::spawn_parse_after_import(app, &vault, &r.path);
-    }
-
     Ok(LookupImportBatchResult {
         imported,
         skills,
