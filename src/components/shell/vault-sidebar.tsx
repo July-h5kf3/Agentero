@@ -42,6 +42,7 @@ import {
 	confirmCreate,
 	createNewVault,
 	cutSelectedPaths,
+	dropMovePaths,
 	emptyTrash,
 	movePathsTo,
 	openRecentVault,
@@ -81,6 +82,8 @@ const onDeletePath = (path: string) => void trashPathsAndNotify([path]);
 const onDeletePaths = (paths: string[]) => void trashPathsAndNotify(paths);
 const onMoveTo = (paths: string[], dest: string) =>
 	void movePathsTo(paths, dest);
+const onDropMove = (paths: string[], targetPath: string) =>
+	void dropMovePaths(paths, targetPath);
 const onEmptyTrash = () => void emptyTrash();
 const onExportLibrary = () => void libraryExport();
 
@@ -181,6 +184,7 @@ export function VaultSidebar() {
 					onDeletePaths={onDeletePaths}
 					onRenamePath={startRenamePath}
 					onMoveTo={onMoveTo}
+					onDropMove={onDropMove}
 					onCutPaths={cutSelectedPaths}
 					onPasteInto={(target) => void pasteCutPaths(target)}
 					cutPaths={cutPaths}

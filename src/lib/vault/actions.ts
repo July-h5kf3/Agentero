@@ -555,8 +555,8 @@ export function cutSelectedPaths(rawPaths: string[]): void {
 	});
 }
 
-/** Resolve the destination parent folder for a paste target. */
-function resolvePasteDestination(
+/** Resolve the destination parent folder for a paste or drop target. */
+export function resolvePasteDestination(
 	vaultPath: string,
 	tree: FileNode[],
 	targetPath: string | null | undefined,
@@ -611,6 +611,101 @@ function resolvePasteDestination(
 	};
 }
 
+type PasteDestination = {
+	abs: string;
+	rel: string;
+	isPaperLeaf: boolean;
+};
+
+/** Move a list of absolute source paths into a resolved destination parent. */
+async function movePathsToDestination(
+	vaultPath: string,
+	srcAbsPaths: string[],
+	dest: PasteDestination,
+): Promise<{ failed: string[]; blocked: string[] }> {
+	const destRel = normalizeVaultRel(dest.rel);
+	const destUnderPapers = destRel === "papers" || destRel.startsWith("papers/");
+	const rootKey = pathKey(vaultPath);
+	const failed: string[] = [];
+	const blocked: string[] = [];
+
+	for (const srcAbs of srcAbsPaths) {
+		const normSrc = srcAbs.replace(/\\/g, "/").replace(/\/+$/, "");
+		if (!normSrc || pathKey(normSrc) === rootKey) {
+			failed.push(srcAbs);
+			continue;
+		}
+		const srcRel = vaultRelativePath(vaultPath, normSrc);
+		if (!srcRel) {
+			failed.push(srcAbs);
+			continue;
+		}
+
+		// Reject moving papers/ root itself.
+		if (isPapersRoot(srcRel)) {
+			failed.push(srcAbs);
+			continue;
+		}
+
+		// Reject descendant moves (pasting into the source or its child).
+		const destAbsKey = pathKey(dest.abs);
+		const srcKey = pathKey(normSrc);
+		if (destAbsKey === srcKey || destAbsKey.startsWith(`${srcKey}/`)) {
+			failed.push(srcAbs);
+			continue;
+		}
+
+		// Keep items currently under papers/ inside papers/ to preserve catalog integrity.
+		if (isUnderPapers(srcRel) && !destUnderPapers) {
+			notifyWarning(
+				i18n.t("sidebar:fileTree.paperMoveOutsidePapers", {
+					name: basenameOf(srcRel),
+				}),
+			);
+			blocked.push(srcAbs);
+			continue;
+		}
+
+		const base = basenameOf(srcRel);
+		const toRel = destRel ? `${destRel}/${base}` : base;
+		const toAbs = joinVaultPath(vaultPath, toRel);
+		const pendingEventPaths = [normSrc, toAbs];
+		trackInternalRenamePaths(pendingEventPaths, Number.POSITIVE_INFINITY);
+
+		try {
+			if (destUnderPapers && isUnderPapers(srcRel)) {
+				const result = await movePaperFolder(
+					vaultPath,
+					srcRel,
+					destRel || "papers",
+					dirtyVaultPaths(vaultPath),
+				);
+				syncMovedPaths(
+					vaultPath,
+					normSrc,
+					toAbs,
+					srcRel,
+					result.newRel,
+					result.linkUpdate,
+				);
+			} else {
+				const result = await moveVaultPath(
+					vaultPath,
+					srcRel,
+					toRel,
+					dirtyVaultPaths(vaultPath),
+				);
+				syncMovedPaths(vaultPath, normSrc, toAbs, srcRel, toRel, result);
+			}
+		} catch {
+			trackInternalRenamePaths(pendingEventPaths, Date.now() + 2000);
+			failed.push(srcAbs);
+		}
+	}
+
+	return { failed, blocked };
+}
+
 /** Paste previously cut paths into the given target (folder, file, or vault root). */
 export async function pasteCutPaths(
 	targetPath: string | null | undefined,
@@ -639,114 +734,87 @@ export async function pasteCutPaths(
 		return;
 	}
 
-	const destRel = normalizeVaultRel(dest.rel);
-	const destUnderPapers = destRel === "papers" || destRel.startsWith("papers/");
-	const rootKey = pathKey(vaultPath);
-
 	setVaultBusy(true);
-	let failed = 0;
-	let blocked = 0;
-	const remaining: string[] = [];
 
 	try {
-		for (const srcAbs of cutPaths) {
-			const normSrc = srcAbs.replace(/\\/g, "/").replace(/\/+$/, "");
-			if (!normSrc || pathKey(normSrc) === rootKey) {
-				failed++;
-				remaining.push(srcAbs);
-				continue;
-			}
-			const srcRel = vaultRelativePath(vaultPath, normSrc);
-			if (!srcRel) {
-				failed++;
-				remaining.push(srcAbs);
-				continue;
-			}
-
-			// Reject moving papers/ root itself.
-			if (isPapersRoot(srcRel)) {
-				failed++;
-				remaining.push(srcAbs);
-				continue;
-			}
-
-			// Reject descendant moves (pasting into the source or its child).
-			const destAbsKey = pathKey(dest.abs);
-			const srcKey = pathKey(normSrc);
-			if (destAbsKey === srcKey || destAbsKey.startsWith(`${srcKey}/`)) {
-				failed++;
-				remaining.push(srcAbs);
-				continue;
-			}
-
-			// Keep items currently under papers/ inside papers/ to preserve catalog integrity.
-			if (isUnderPapers(srcRel) && !destUnderPapers) {
-				notifyWarning(
-					i18n.t("sidebar:fileTree.paperMoveOutsidePapers", {
-						name: basenameOf(srcRel),
-					}),
-				);
-				blocked++;
-				remaining.push(srcAbs);
-				continue;
-			}
-
-			const base = basenameOf(srcRel);
-			const toRel = destRel ? `${destRel}/${base}` : base;
-			const toAbs = joinVaultPath(vaultPath, toRel);
-			const pendingEventPaths = [normSrc, toAbs];
-			trackInternalRenamePaths(pendingEventPaths, Number.POSITIVE_INFINITY);
-
-			try {
-				if (destUnderPapers && isUnderPapers(srcRel)) {
-					const result = await movePaperFolder(
-						vaultPath,
-						srcRel,
-						destRel || "papers",
-						dirtyVaultPaths(vaultPath),
-					);
-					syncMovedPaths(
-						vaultPath,
-						normSrc,
-						toAbs,
-						srcRel,
-						result.newRel,
-						result.linkUpdate,
-					);
-				} else {
-					const result = await moveVaultPath(
-						vaultPath,
-						srcRel,
-						toRel,
-						dirtyVaultPaths(vaultPath),
-					);
-					syncMovedPaths(vaultPath, normSrc, toAbs, srcRel, toRel, result);
-				}
-			} catch {
-				trackInternalRenamePaths(pendingEventPaths, Date.now() + 2000);
-				failed++;
-				remaining.push(srcAbs);
-			}
-		}
-
+		const { failed, blocked } = await movePathsToDestination(
+			vaultPath,
+			cutPaths,
+			dest,
+		);
 		// Clear successfully moved items; keep failed/blocked ones staged so the
 		// user sees what did not move.
-		setCutPaths(remaining);
+		setCutPaths([...failed, ...blocked]);
 		await refreshTree(vaultPath);
 		await refreshLibrary();
 		if (!isRemoteVaultHandle(vaultPath)) {
 			await rebuildWikiAndNotify(vaultPath);
 		}
-		if (failed > 0 || blocked > 0) {
+		if (failed.length > 0 || blocked.length > 0) {
 			notifyWarning(
 				i18n.t("sidebar:fileTree.pastedWithErrors", {
-					count: failed + blocked,
+					count: failed.length + blocked.length,
 				}),
 			);
 		}
 	} catch (e) {
 		notifyError(
 			e instanceof Error ? e.message : i18n.t("sidebar:fileTree.pasteFailed"),
+		);
+	} finally {
+		setVaultBusy(false);
+	}
+}
+
+/** Move a list of paths to the destination implied by the drop target. */
+export async function dropMovePaths(
+	rawPaths: string[],
+	targetPath: string | null | undefined,
+): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath) {
+		notifyError(i18n.t("sidebar:fileTree.needsVault"));
+		return;
+	}
+	if (!isTauri()) {
+		notifyError(i18n.t("sidebar:fileTree.moveDesktopOnly"));
+		return;
+	}
+	if (isRemoteVaultHandle(vaultPath)) {
+		notifyWarning(i18n.t("sidebar:fileTree.remoteCutPasteDisabled"));
+		return;
+	}
+
+	const { tree } = vaultStore.getState();
+	const dest = resolvePasteDestination(vaultPath, tree, targetPath);
+	if (!dest) {
+		notifyError(i18n.t("sidebar:fileTree.pasteNeedsSelection"));
+		return;
+	}
+
+	setVaultBusy(true);
+
+	try {
+		const { failed, blocked } = await movePathsToDestination(
+			vaultPath,
+			rawPaths,
+			dest,
+		);
+		await refreshTree(vaultPath);
+		await refreshLibrary();
+		if (!isRemoteVaultHandle(vaultPath)) {
+			await rebuildWikiAndNotify(vaultPath);
+		}
+		if (failed.length > 0 || blocked.length > 0) {
+			notifyWarning(
+				i18n.t("sidebar:fileTree.movedWithErrors", {
+					count: failed.length + blocked.length,
+				}),
+			);
+		}
+	} catch (e) {
+		notifyError(
+			e instanceof Error ? e.message : i18n.t("sidebar:fileTree.moveFailed"),
 		);
 	} finally {
 		setVaultBusy(false);

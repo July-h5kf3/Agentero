@@ -55,7 +55,7 @@ import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { contextPathIcon } from "@/lib/agent/context-path-icon";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { notifyError } from "@/lib/core/notify";
-import { normalizePath } from "@/lib/core/path";
+import { dirnameOf, normalizePath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import {
@@ -362,6 +362,8 @@ type FileTreeProps = {
 	onRenamePath?: (path: string) => void | Promise<void>;
 	/** Move paths into a papers/ folder chosen by the inline picker. */
 	onMoveTo?: (paths: string[], destParentRel: string) => void;
+	/** Move paths to the destination implied by a drag-and-drop target. */
+	onDropMove?: (paths: string[], targetPath: string) => void;
 	onCutPaths?: (paths: string[]) => void;
 	onPasteInto?: (targetPath: string) => void;
 	/** Absolute paths currently staged by Cut (for row dimming). */
@@ -429,6 +431,7 @@ export const FileTree = memo(
 			onDeletePaths,
 			onRenamePath,
 			onMoveTo,
+			onDropMove,
 			onCutPaths,
 			onPasteInto,
 			cutPaths = [],
@@ -1078,17 +1081,19 @@ export const FileTree = memo(
 			[byPath, relPathForNode],
 		);
 
-		/** A row is a valid vault-move drop target only if it is an org folder under papers/. */
+		/** A row is a valid vault-move drop target if it is a real file/folder and not the dragged path or its descendant. */
 		const canDrop = useCallback(
 			(targetPath: string, paths: string[]): boolean => {
-				if (paths.length === 0 || !isPapersOrgFolder(targetPath)) return false;
+				if (paths.length === 0 || isVirtualTreePath(targetPath)) return false;
+				const node = byPath.get(targetPath);
+				if (!node) return false;
 				const norm = targetPath.replace(/\\/g, "/").replace(/\/+$/, "");
 				return !paths.some((d) => {
 					const dn = d.replace(/\\/g, "/").replace(/\/+$/, "");
 					return norm === dn || norm.startsWith(`${dn}/`);
 				});
 			},
-			[isPapersOrgFolder],
+			[byPath],
 		);
 
 		const handleRowDragStart = useCallback(
@@ -1116,7 +1121,14 @@ export const FileTree = memo(
 				if (dragging && canDrop(path, dragging)) {
 					e.preventDefault();
 					e.dataTransfer.dropEffect = "move";
-					if (dropTarget !== path) setDropTarget(path);
+					// Highlight the target folder itself, or the file's parent folder
+					// so the user sees where the item will land.
+					const node = byPath.get(path);
+					const highlightPath =
+						node?.kind === "directory" ? path : (dirnameOf(path) ?? path);
+					if (dropTarget !== highlightPath) {
+						setDropTarget(highlightPath);
+					}
 					return;
 				}
 				// OS PDF → import parent (only when not mid vault-move).
@@ -1134,7 +1146,14 @@ export const FileTree = memo(
 				}
 				if (dropTarget) setDropTarget(null);
 			},
-			[dragging, dropTarget, canDrop, onDropLocalPdfs, isPapersOrgFolder],
+			[
+				dragging,
+				dropTarget,
+				canDrop,
+				onDropLocalPdfs,
+				isPapersOrgFolder,
+				byPath,
+			],
 		);
 
 		const handleRowDrop = useCallback(
@@ -1145,9 +1164,8 @@ export const FileTree = memo(
 				setDropTarget(null);
 
 				if (vaultMovePaths) {
-					if (!onMoveTo || !canDrop(path, vaultMovePaths)) return;
-					const dest = relPathForNode(path) || "papers";
-					onMoveTo(vaultMovePaths, dest);
+					if (!onDropMove || !canDrop(path, vaultMovePaths)) return;
+					onDropMove(vaultMovePaths, path);
 					return;
 				}
 
@@ -1182,7 +1200,7 @@ export const FileTree = memo(
 			},
 			[
 				dragging,
-				onMoveTo,
+				onDropMove,
 				onDropLocalPdfs,
 				canDrop,
 				relPathForNode,
