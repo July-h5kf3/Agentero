@@ -241,7 +241,7 @@ function resolvePoint(
 	return null;
 }
 
-function restoreMarkdownSelectionBookmark(
+export function restoreMarkdownSelectionBookmark(
 	value: Value,
 	bookmark: MarkdownSelectionBookmark | null,
 ): TRange | null {

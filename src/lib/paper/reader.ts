@@ -71,7 +71,7 @@ function formatSkillMention(skillId: string, style: SkillMentionStyle): string {
  * locale (`i18n.language` after settings load: `en` | `zh-CN`).
  * Fixed skill section headings stay English; only the body language changes.
  */
-function paperReaderLanguageInstruction(
+export function paperReaderLanguageInstruction(
 	language: string = i18n.language,
 ): string {
 	const lang = (language || "en").toLowerCase();
@@ -85,7 +85,7 @@ function paperReaderLanguageInstruction(
  * User-facing request body. Host will additionally prefix native triggers
  * (e.g. `$paper-reader` for Codex) and inject SKILL.md by style.
  */
-function buildPaperReaderUserPrompt(
+export function buildPaperReaderUserPrompt(
 	paperRel: string,
 	style: SkillMentionStyle,
 	language: string = i18n.language,
