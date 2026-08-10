@@ -41,6 +41,7 @@ import {
 import { isLinkObject } from "@/components/viewer/pdf/layers/citation-links";
 import type { PdfViewerProps } from "@/components/viewer/pdf/types";
 import {
+	type HighlightCustom,
 	hasAnnotationsFile,
 	highlightViewFromObject,
 	isHighlightObject,
@@ -104,6 +105,12 @@ export type PdfHighlights = {
 		pageIndex: number,
 		id: string,
 		comment: string,
+	) => void;
+	/** Change the color of an existing highlight annotation. */
+	updateHighlightColor: (
+		pageIndex: number,
+		id: string,
+		color: HighlightColor,
 	) => void;
 	deleteHighlightAnnotation: (pageIndex: number, id: string) => void;
 };
@@ -282,6 +289,21 @@ export function usePdfHighlights({
 		[annotationCap, docId],
 	);
 
+	const updateHighlightColor = useCallback(
+		(pageIndex: number, id: string, color: HighlightColor) => {
+			const scope = annotationCap?.forDocument(docId);
+			if (!scope) return;
+			const obj = scope.getAnnotationById(id)?.object;
+			if (!obj || !isHighlightObject(obj)) return;
+			const custom = (obj.custom ?? {}) as HighlightCustom;
+			scope.updateAnnotation(pageIndex, id, {
+				strokeColor: HIGHLIGHT_HEX[color],
+				custom: { ...custom, paletteKey: color },
+			});
+		},
+		[annotationCap, docId],
+	);
+
 	const deleteHighlightAnnotation = useCallback(
 		(pageIndex: number, id: string) => {
 			annotationCap?.forDocument(docId).deleteAnnotation(pageIndex, id);
@@ -297,6 +319,7 @@ export function usePdfHighlights({
 		rebuildHighlights,
 		createHighlights,
 		updateHighlightComment,
+		updateHighlightColor,
 		deleteHighlightAnnotation,
 	};
 }

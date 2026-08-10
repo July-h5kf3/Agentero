@@ -30,12 +30,14 @@ import {
 } from "@/components/viewer/pdf/constants";
 import { EMBED_PAGE_ATTR } from "@/components/viewer/pdf/coords";
 import { CitationLinkLayer } from "@/components/viewer/pdf/layers/citation-links";
+import { HighlightAnnotationMenu } from "@/components/viewer/pdf/layers/highlight-annotation-menu";
 import { LayoutTranslateOverlay } from "@/components/viewer/pdf/layers/layout-translate-overlay";
 import { PdfRegionSelectLayer } from "@/components/viewer/pdf/layers/region-select-layer";
 import { SelectionGutter } from "@/components/viewer/pdf/layers/selection-gutter";
 import { cn } from "@/lib/core/utils";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
+import type { HighlightColor } from "@/lib/pdf/highlight/palette";
 import {
 	isFormulaLayoutKind,
 	type LayoutTranslateItem,
@@ -108,6 +110,16 @@ export type PdfPageHandlers = {
 	onLayoutHoverLeave: (regionId: string) => void;
 	onDraftHoverEnter: () => void;
 	onDraftHoverLeave: () => void;
+	/** Delete a highlight annotation directly from its on-page selection menu. */
+	onDeleteHighlightAnnotation: (pageIndex: number, id: string) => void;
+	/** Open the note editor for a highlight from its on-page selection menu. */
+	onEditHighlightAnnotation: (id: string) => void;
+	/** Change the color of a highlight annotation from its on-page selection menu. */
+	onChangeHighlightColor: (
+		pageIndex: number,
+		id: string,
+		color: HighlightColor,
+	) => void;
 };
 
 export type PdfPageLayersProps = {
@@ -218,7 +230,18 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				{mode.regionSelecting ? null : (
 					<SelectionLayer documentId={docId} pageIndex={pageIndex} />
 				)}
-				<AnnotationLayer documentId={docId} pageIndex={pageIndex} />
+				<AnnotationLayer
+					documentId={docId}
+					pageIndex={pageIndex}
+					selectionMenu={(menuProps) => (
+						<HighlightAnnotationMenu
+							{...menuProps}
+							onEdit={handlers.onEditHighlightAnnotation}
+							onDelete={handlers.onDeleteHighlightAnnotation}
+							onChangeColor={handlers.onChangeHighlightColor}
+						/>
+					)}
+				/>
 				<CitationLinkLayer
 					links={marks.citationLinks.get(pageIndex) ?? EMPTY_CITATION_LINKS}
 					pageWidthPt={width / zoomRef.current}

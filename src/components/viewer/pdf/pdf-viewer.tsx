@@ -399,6 +399,7 @@ function PdfViewerInner({
 		citationLinks,
 		createHighlights,
 		updateHighlightComment,
+		updateHighlightColor,
 		deleteHighlightAnnotation,
 	} = usePdfHighlights({
 		annotationCap,
@@ -873,7 +874,12 @@ function PdfViewerInner({
 		layoutTranslateActive,
 		layoutTranslateLabel,
 		toggleLayoutTranslate,
-	} = usePdfLayoutTranslate({ docId, layoutRawRegions });
+	} = usePdfLayoutTranslate({
+		docId,
+		layoutRawRegions,
+		paperKey,
+		vaultPath,
+	});
 
 	const visualDraftRegion = useMemo(
 		() =>
@@ -1106,6 +1112,30 @@ function PdfViewerInner({
 		translateSelection,
 	]);
 
+	// ---- In-PDF highlight selection menu ----
+
+	const handleEditHighlightAnnotation = useCallback(
+		(id: string) => {
+			annotationCap?.forDocument(docId).deselectAnnotation();
+			openEditorForAnnotation(id);
+		},
+		[annotationCap, docId, openEditorForAnnotation],
+	);
+
+	const handleDeleteHighlightAnnotation = useCallback(
+		(pageIndex: number, id: string) => {
+			deleteHighlightAnnotation(pageIndex, id);
+		},
+		[deleteHighlightAnnotation],
+	);
+
+	const handleChangeHighlightColor = useCallback(
+		(pageIndex: number, id: string, color: HighlightColor) => {
+			updateHighlightColor(pageIndex, id, color);
+		},
+		[updateHighlightColor],
+	);
+
 	// Re-anchor the active pin modal on scroll + zoom. zoomLevel forces
 	// re-placement after zoom. Use scrollReady (boolean) — not `scroll` —
 	// because EmbedPDF returns a new scope object every render; depending on
@@ -1226,6 +1256,9 @@ function PdfViewerInner({
 			onLayoutHoverLeave: handleLayoutHoverLeave,
 			onDraftHoverEnter: markLayoutDraftHoverEnter,
 			onDraftHoverLeave: scheduleLayoutDraftHide,
+			onDeleteHighlightAnnotation: handleDeleteHighlightAnnotation,
+			onEditHighlightAnnotation: handleEditHighlightAnnotation,
+			onChangeHighlightColor: handleChangeHighlightColor,
 		}),
 		[
 			handleOpenPin,
@@ -1238,6 +1271,9 @@ function PdfViewerInner({
 			handleLayoutHoverLeave,
 			markLayoutDraftHoverEnter,
 			scheduleLayoutDraftHide,
+			handleDeleteHighlightAnnotation,
+			handleEditHighlightAnnotation,
+			handleChangeHighlightColor,
 		],
 	);
 
