@@ -4,7 +4,7 @@
 
 - **左栏**：文件树 + Paper Info（显示最近选中的论文；切换到非论文文档时保持不消失；无卡片容器、常驻 collapsible；上边缘可拖拽调整高度，`preserve-pixel-size`；arXiv 论文在资源按钮下显示魔搭论文解读与 alphaXiv 外链）。
 - **中间**：无 Vault 欢迎页；有 Vault 时为全局 Dockview（见 [workspace.md](workspace.md)）。
-- **右栏**（可选）：Agent / Backlinks / 批注 / **References** / **Figures**（同样 collapsible）。
+- **右栏**（可选）：Agent / 批注 / **References**（引用卡片 + 下方约 35% 引用图谱）/ **Figures**（同样 collapsible）。
   - References：当前激活 paper 的参考文献卡片（数据来自 `agentero-cite.json` sidecar，Host `paper_refs_list` / `paper_refs_parse`）。卡片含编号 `[n]`、标题（无标题回退 raw）、首作者 et al. · 年份 · venue、DOI/arXiv 徽标；已入库（`localMatch`）卡片点击打开库内论文，未入库 hover 出「导入文库」（复用魔棒管线，但导入后不自动打开新论文）；顶部过滤框 + header 重解析按钮。实现：`src/components/viewer/panels/references-panel.tsx`、`src/lib/paper/refs.ts`。
   - **Figures**：版面分析后的插图（image+chart）/ 表 / 算法 / 有编号公式；**分析与 bbox 叠加层按钮在侧栏 header**；固定置信度 ≥30%（无滑条）；联图与标题规则见 [pdf-layout-analysis.md](pdf-layout-analysis.md)。实现：`viewer/panels/figures-panel.tsx` + `src/lib/pdf/layout/`（raw 结果缓存到 `{paper}/source/layout.json`）。
   - **移至新窗口**：标题栏右栏功能图标 **右键** →「移动至新窗口」→ 单例 `feature-{view}` Webview；主窗右栏收起。工具视图默认 **跟随主窗当前激活文档**（`workspace:active-changed`）。
@@ -30,7 +30,7 @@
 
 ## 后台任务条
 
-- 左下角：下载、入库、导入导出、Agent CLI/ACP 安装升级、paper-reader、版面解析等。
+- 左下角：下载、入库、导入导出、paper-reader、版面解析等。
 - **折叠 = 进度圆环**；**悬停约 400ms 或点击圆环 → 详情列表**；**指针离开即收回圆环**（不常驻详情 Toast）。
 - 圆环使用不透明 `bg-background` 圆盘 + `ring-1 ring-border`（不用 border，避免内容区缩小导致圆环与底盘错位）+ 轨道（`muted-foreground/30`）与进度弧（`primary` / 失败 destructive / 完成 emerald）；中心图标用 `foreground`。避免浅色模式下底层内容透出或轨道过浅。
 - 新任务 / 打开页面不自动展开。任务失败时短暂展开详情，未悬停约 5s 后收回；进行中可取消，可清除已完成。
@@ -68,7 +68,7 @@
 | `⌘←` | 折叠当前选中文件夹 |
 | `⇧⌘←` | 折叠树到默认状态 |
 | `⌥⌘S` | 开关左侧边栏（`⌘B` 别名） |
-| `⌘L` | 开关右侧 Agent/Backlinks 面板 |
+| `⌘L` | 开关右侧 Agent/Graph 等面板 |
 
 完整快捷键绑定：`src/lib/shell/shortcuts.ts`。文案 i18n 见 [settings.md](settings.md)。
 

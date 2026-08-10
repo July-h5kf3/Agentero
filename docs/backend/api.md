@@ -1102,6 +1102,48 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 - **参数**（`args`）：`{ vaultPath: string; path: string }`
 - **返回**：`{ ok: true; data: CiteSidecar | null }`
 
+#### `paper_refs_graph`
+
+从已有引用 sidecar + catalog `localMatch` 构建**文献引用关系图**（与双链 `graph_get_graph` 分层，边语义不复用）。不解析缺失 sidecar；前端邻近模式会先 `paper_refs_parse`/`loadPaperRefsAuto` 补当前论文。
+
+- **参数**（`args`）：
+
+  ```ts
+  {
+    vaultPath: string;
+    /** 论文文件夹或其中文件；省略 / 空 = 全库库内引用边 */
+    center?: string | null;
+    /** 库内边无向 BFS 跳数；默认 1。全图时忽略 */
+    depth?: number | null;
+  }
+  ```
+
+- **返回**：`{ ok: true; data: CiteGraphResponse }`，其中：
+
+  ```ts
+  type CiteGraphResponse = {
+    nodes: Array<{
+      id: string;           // 库内 paper path，或 stub:doi:… / stub:arxiv:… / stub:title:… / stub:cite-…
+      label: string;        // catalog title 或引用标题/编号
+      type: "paper" | "stub" | "note" | "index";
+      path?: string;        // 仅 paper：Vault 相对路径
+    }>;
+    edges: Array<{
+      id: string;
+      source: string;
+      target: string;
+      targetRaw?: string;   // 引用 display / key / title 提示
+    }>;
+    center: string | null;  // 规范化 paper path；全图为 null
+    depth: number;
+  };
+  ```
+
+- **行为**
+  - **邻近**：当前论文的全部出边（含未入库 stub）+ 经 `localMatch` 的库内边无向 BFS 至多 `depth` 跳（含被引）。
+  - **全图**：仅库内 `localMatch` 边；节点为参与至少一条边的 paper；不含 stub。
+  - 中心路径可传 `papers/…/NOTES.md` 等，Host 归一到 catalog paper folder。
+
 ### 3.6 论文
 
 论文**集合与元数据**存于 `.agentero/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。
@@ -1491,13 +1533,13 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 - **参数**：`{ templateId: string, action: "install" | "update", taskId?: string }`
   - 支持的 `templateId`：`opencode` · `openclaw` · `claude-acp` · `codex-acp` · `gemini` · `hermes` · `grok-build`（不含 `qodercli` / `custom`）
-  - `taskId` 来自前端 `enqueueBackgroundTask`；用于复用左下角后台任务条并接收协作取消信号。
+  - `taskId` 来自设置页 Agent 行内安装进度条；用于匹配 Host progress tick 与接收协作取消信号。
 - **返回**：`{ ok: true; data: null }` 或错误（stderr/stdout 末尾若干行）
 - **行为**
   - `install`：未装 host 时走官方 installer（POSIX curl→临时文件再 bash，非 `curl|bash`）或 npm；Claude/Codex 在 host 已存在但 ACP 缺失时只装适配器；两者都缺则 host && adapter；Hermes 走官方 installer；OpenClaw 走 npm。
   - `update`：优先 `tool update` / 官方链，失败再 npm；Codex 固定 npm（避免假成功）；OpenClaw 使用 `openclaw update --yes` 后 fallback npm；Windows 上 OpenCode 不用交互式 `upgrade`。
-  - 本机 lifecycle 全局串行执行，避免多个 npm 全局安装/升级任务并发抢锁或互相覆盖临时脚本；前端复用 `enqueueBackgroundTask(..., { concurrency: 1 })` 展示安装 / 扫描 / 探测阶段进度（#250）。
-  - 安装子进程运行期间，Host 以 `agent-lifecycle-*` phase 向 `background-task:progress` 推送进度 tick，避免快捷下载脚本长时间停在无进度状态。
+  - 本机 lifecycle 全局串行执行，避免多个 npm 全局安装/升级任务并发抢锁或互相覆盖临时脚本；设置页在对应 Agent 卡片内展示安装 / 扫描 / 探测阶段进度（#250）。
+  - 安装子进程运行期间，Host 以 `agent-lifecycle:progress` 推送 `agent-lifecycle-*` phase tick，供设置页行内进度条消费，避免快捷下载脚本长时间停在无进度状态。
   - 若传入 `taskId`，等待 lifecycle 锁和执行安装子进程时会检查 `background_task_cancel`；取消是尽力而为，不回滚已完成的包管理器写入。
   - macOS/Linux：注入 login shell 的 `PATH`（GUI 窄 PATH）。
   - Windows：写唯一临时 `.bat` + `CREATE_NO_WINDOW` + `call` 前缀；安装进程 PATH 合并 npm/pnpm/WinGet/Scoop shim；批处理切到 UTF-8，错误输出按 UTF-8 优先、GBK 回退解码。
@@ -2147,14 +2189,14 @@ UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，
 | V0.4 | `graph:*`（双链 / 反链 / 图谱）；前端文件变更防抖 `graph_rebuild`。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
 | ≤0.5.0 | 全局 Dockview、视觉批注、版面分析、公式解析卡、阅读热力条、Zotero collection tree 迁移、Agent 自动安装/升级、自由模型选择等已发布能力见功能文档；Host 侧一般无需新 paper API。见 [`../frontend/workspace.md`](../frontend/workspace.md)。 |
-| 0.6 | 引用关系：`citation:*` 或 catalog 扩展表（cites / cited_by 缓存）、远程元数据补全、文内引用解析；与 `graph:*` 双链 API 并存。 |
+| 0.6 | 引用关系：`paper_refs_*`（含 `paper_refs_graph` 引用图谱）、可选 catalog `paper_refs` 表 / Connected Papers 邻域加深；与 `graph:*` 双链 API 并存。 |
 | V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`paper-import.md`](paper-import.md)）。 |
 
 后续扩展：
 
 - `importer:import` 统一来源入口。
 - `lookup:*` 与 PDF prepare 共用元数据管道。
-- `citation:fetch` / `citation:list_neighbors`（名称待定）：引用/被引邻域与缓存刷新（路线图 0.6）。
+- ~~`citation:list_neighbors`~~ → 已用 `paper_refs_graph`（sidecar + localMatch）；全库 cites/cited_by 持久缓存与 Connected Papers 式布局仍可加深。
 - ~~`search:full_text`~~ → 已用 walk 式 `vault_search`（命令面板）；FTS5 / PDF 正文层仍可替换增强。
 - `reader:annotations`（历史规划；划词标注现为前端 `marks/*.json`，不经 Host command）。
 - `sync:*` 多设备同步（远期）。

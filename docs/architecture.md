@@ -80,7 +80,7 @@ Plate + `@platejs/markdown`。普通文本粘贴默认按 Markdown 解析。右�
 
 ### 双链与图谱
 
-嵌套标题双链：`[[文件#外层标题#内层标题]]`。Wiki 索引 `.md` 变更防抖重建（~900ms）。Backlinks 右侧栏上方 Backlinks、下方 Graph（双链图，非文献引用图）。数据来自 Markdown 双链索引。详见 [frontend/wiki.md](frontend/wiki.md) / [backend/wiki.md](backend/wiki.md)。
+嵌套标题双链：`[[文件#外层标题#内层标题]]`。Wiki 索引 `.md` 变更防抖重建（~900ms）。反链见编辑器状态栏；**文献引用图谱**嵌在右侧 **References** 下方约 35% 高度（`agentero-cite.json` + catalog `localMatch`），入库后自动解析。与 Markdown 双链索引分层、不共用边语义。详见 [frontend/wiki.md](frontend/wiki.md) / [backend/wiki.md](backend/wiki.md) / [backend/citation-parsing.md](backend/citation-parsing.md)。
 
 ## 数据流
 
@@ -92,7 +92,8 @@ Plate + `@platejs/markdown`。普通文本粘贴默认按 Markdown 解析。右�
 | 版面分析 | 原始 layout regions / 侧栏索引 | `{paper}/source/layout.json` / `layout-index.json` |
 | 引用解析 | 参考文献元数据 | `{paper}/source/agentero-cite.json` |
 | 设置 | UI/Agent 偏好 | XDG `~/.config/agentero/settings.json` |
-| 索引 | 双链图 | 内存，可重建 |
+| 索引 | 双链图（编辑器/反链） | 内存，可重建 |
+| 引用图 | 文献 cites（sidecar + localMatch） | 按需扫描 sidecar，可重建 |
 
 ## 跨领域关注点
 

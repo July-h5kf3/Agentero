@@ -6,7 +6,7 @@
 
 - [x] Markdown 目录：标题数量阈值、中性色高亮与稳定 hover 布局（[#155](https://github.com/poco-ai/Agentero/issues/155)）
 - [x] Agent `AskUserQuestion` 工具调用转为可提交的选项回答（[#203](https://github.com/poco-ai/Agentero/issues/203)）
-- [x] 快捷安装 Agent CLI（静默 `agent_run_tool_lifecycle`，[#225](https://github.com/poco-ai/Agentero/issues/225)）；已移除本机终端确认安装，并复用后台任务条展示安装进度（[#250](https://github.com/poco-ai/Agentero/issues/250)）
+- [x] 快捷安装 Agent CLI（静默 `agent_run_tool_lifecycle`，[#225](https://github.com/poco-ai/Agentero/issues/225)）；已移除本机终端确认安装，并在 Agent 卡片内展示安装进度（[#250](https://github.com/poco-ai/Agentero/issues/250)）
 - [ ] 关键词/描述 → Agent 候选列表确认后入库
 - [x] 魔棒解析 GitHub / `npx skills` → Skill 装入 `.agents/skills/`（[#118](https://github.com/poco-ai/Agentero/issues/118)，见 [../backend/skill-import.md](../backend/skill-import.md)；首版）
 - [x] 论文导入资源阶段增加整篇 3 分钟超时，覆盖魔棒 / Connector / Bib-RIS（[#161](https://github.com/poco-ai/Agentero/issues/161)）
@@ -54,7 +54,8 @@
 - [ ] 反向联动：hover 引用卡片 → PDF 文中 anchor 高亮（需 anchors bbox）
 - [ ] 本地 PDF citation/figure sidecar + Paper Content 侧栏
 - [ ] Agent `#` 编号提及 + 引用卡片拖拽（citation-parsing M3/M5）
-- [ ] cites/cited_by 缓存 + Connected Papers 式邻域 UI
+- [x] 引用图谱 MVP：`paper_refs_graph` + Graph 面板改用引用边（非双链）；邻近含 stub / 全图库内边（[#260](https://github.com/poco-ai/Agentero/issues/260)）
+- [ ] cites/cited_by 持久缓存 + Connected Papers 式布局 / 多跳聚类
 - [ ] Agent：Explore citations / Map related work / Ingest neighborhood
 - [ ] PDF 正文层检索；搜索历史/过滤；命令注册表 + MRU
 

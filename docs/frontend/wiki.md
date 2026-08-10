@@ -1,6 +1,6 @@
 # 双链 UI
 
-右侧 **Backlinks** 栏：上方反链列表，下方 **双链 Graph**（非文献引用图）。
+编辑器状态栏展示反链数量与列表。右侧 **Graph** 栏为**文献引用图谱**（非 Markdown 双链图）；数据来自参考文献 sidecar 与库内匹配，见 [../backend/citation-parsing.md](../backend/citation-parsing.md)。
 
 ## 编辑器
 
@@ -16,19 +16,20 @@
 - `![[...]]`：嵌入 Markdown 区段、图片、PDF、批注（只读）；普通编辑不刷新无关嵌入。批注嵌入（`contentKind: annotation`）与其它 embed 共用 `max-h` 滚动壳；位置优先大纲路径否则页码。视觉批注：备注以图标 + 文字显示在裁剪图上方；仅当有 Agent 对话时才展示下方 transcript（无对话不显示空状态）；**正文不可点跳转**，仅顶栏 ExternalLink 打开 PDF。Host `wiki check` 校验 path + id 形态，不读 `marks/` 验存活。
 - **导出模式**（笔记导出 PDF/PNG）：`MarkdownExportModeProvider` 下展开 `max-h`、去掉打开源按钮；图片/批注裁剪图取消高度上限；完整 PDF 附件改为路径占位。见 [markdown.md](markdown.md)。
 
-## Graph
+## Graph（引用图谱）
 
 | 项 | 说明 |
 |---|---|
 | 库 | `react-force-graph-2d`（Canvas 力导向） |
-| 数据 | Host `graph_get_graph` → nodes / edges |
-| 节点启发 | paper / note / index / stub |
-| 壳 | 嵌在 Backlinks 下方，非独立顶层 tab |
-| 交互 | 缩放、拖拽、点击打开文件/paper |
+| 数据 | Host `paper_refs_graph` → nodes / edges（`agentero-cite.json` + `localMatch`） |
+| 节点 | `paper`（库内）/ `stub`（未入库引用） |
+| 模式 | Near：当前论文邻域（出边含 stub + 库内 BFS）；All：全库库内引用边 |
+| 壳 | **References 侧栏下方约 35% 高度**（与引用卡片同 tab；无独立 Graph 轨） |
+| 交互 | 缩放、拖拽、点击打开库内 paper；stub 不可打开 |
 
-数据必须来自 Markdown 双链索引，不能来自手工图数据库。
+入库成功（`paper_commit` Created）后 Host 后台自动 `paper_refs_parse`。打开论文 / References 时前端 `loadPaperRefsAuto` 再兜底。全图只读已有 sidecar，不批量解析。
 
-派生全文 `PAPER.md` 只作为可链接目标和标题来源，不向 Graph 贡献 outgoing edges；用户笔记中的 `NOTES.md` 和普通 Markdown 仍参与完整索引。
+与 **Markdown 双链**（`graph_get_graph` / 反链）分层；双链索引仍服务编辑器补全、嵌入与状态栏反链，不驱动关系图。
 
 ## 链接修复（前端触发）
 

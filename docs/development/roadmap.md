@@ -82,7 +82,7 @@
 | 解析 | 本地 PDF/TeX → citation/figure sidecar |
 | UI | Paper Content 侧栏；文内引用 hover → Paper Info 已实现；待补卡片到 PDF 的反向高亮 |
 | PDF Agent | 视觉批注草稿 → 多模态 Agent 会话与 trace 回跳已实现；待补自动视觉区域检测 |
-| 图 | cites / cited_by 缓存；Connected Papers 式邻域 |
+| 图 | 引用图谱 MVP（`paper_refs_graph` + Graph 面板）已落地；cites/cited_by 持久缓存与 Connected Papers 式布局加深 |
 | Agent | Explore citations / Map related work / Ingest neighborhood |
 | 检索 | PDF 正文层检索；搜索历史/过滤；命令注册表 + MRU |
 
