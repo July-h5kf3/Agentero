@@ -106,7 +106,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/lib/pdf/agent-trace/` | visual mark 契约（v2 + 读兼容 v1）/ mark 资产 IO / prompt / Open-in-Agent / 会话 pending |
 | `src/lib/pdf/highlight/` | 高亮 / 批注 |
 | `src/lib/pdf/ask/` | 划词提问 |
-| `src/lib/pdf/layout/` | EmbedPDF layout-analysis：归一化 bbox、`source/layout.json` raw sidecar、内存 UI store |
+| `src/lib/pdf/layout/` | EmbedPDF layout-analysis：归一化 bbox、`source/layout.json` raw sidecar、`source/layout-translate.json` 全文翻译缓存、内存 UI store |
 | `src/lib/pdf/region.ts` | 区域坐标归一化与 PDF rect 转换 |
 | `src/lib/pdf/translate/` | 划词翻译 IO |
 | `src/lib/pdf/zoom.ts` | 精确缩放比例解析与范围限制 |
@@ -125,7 +125,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 → **[pdf-layout-analysis.md](pdf-layout-analysis.md)**
 
-要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；Paper PDF 的初步解析结果缓存到 `{paper}/source/layout.json`，后续 merge/filter 可重复计算。
+要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；Paper PDF 的初步解析结果缓存到 `{paper}/source/layout.json`，后续 merge/filter 可重复计算。全文翻译缓存独立写入 `{paper}/source/layout-translate.json`，按 provider / 语言 / region 原文校验后复用。
 
 **Hover 视觉提问：** 指针在插图 / 表 / 算法 / 有编号公式上停留约 600ms 后，自动裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent）。中途移开取消；打开后离开源区 / 草稿卡约 1000ms 自动关闭（与 ask / 视觉 pin 卡 hide 一致，便于指针移到卡片）；框选模式或已有草稿卡时不触发。手动框选草稿不会因移开而自动关闭。
 

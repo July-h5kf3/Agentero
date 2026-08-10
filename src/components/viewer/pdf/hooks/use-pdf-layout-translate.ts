@@ -10,11 +10,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { notifyError } from "@/lib/core/notify";
 import {
+	applyLayoutTranslateSidecar,
+	currentLayoutTranslateCacheKey,
 	groupLayoutTranslateItemsByPage,
+	hasPendingLayoutTranslateItems,
 	type LayoutTranslateItem,
 	type LayoutTranslateJobStatus,
 	listTranslatableLayoutRegions,
 	type PdfLayoutRegion,
+	persistLayoutTranslateSidecarBestEffort,
+	readLayoutTranslateSidecar,
 	runLayoutRegionTranslate,
 	toLayoutTranslateItems,
 } from "@/lib/pdf/layout";
@@ -23,6 +28,8 @@ export type UsePdfLayoutTranslateOptions = {
 	docId: string;
 	/** Pre-merge regions from {@link usePdfLayoutRegions}; the translate source. */
 	layoutRawRegions: PdfLayoutRegion[] | null;
+	/** Paper folder path; when present, full-document translations cache under source/. */
+	paperAbsPath?: string | null;
 	/** Stable paper identifier for per-document Agent session reuse. */
 	paperKey?: string | null;
 	/** Vault root passed to the Agent as its cwd. */
@@ -47,6 +54,7 @@ export type PdfLayoutTranslate = {
 export function usePdfLayoutTranslate({
 	docId,
 	layoutRawRegions,
+	paperAbsPath,
 	paperKey,
 	vaultPath,
 }: UsePdfLayoutTranslateOptions): PdfLayoutTranslate {
@@ -86,28 +94,44 @@ export function usePdfLayoutTranslate({
 		layoutTranslateAbortRef.current?.abort();
 		const ac = new AbortController();
 		layoutTranslateAbortRef.current = ac;
-		const items = toLayoutTranslateItems(regions);
-		setLayoutTranslateJob({ status: "running", items });
-		void runLayoutRegionTranslate({
-			items,
-			signal: ac.signal,
-			paperKey,
-			vaultPath,
-			onUpdate: (next) => {
-				if (ac.signal.aborted) return;
-				setLayoutTranslateJob((prev) => ({
-					status: prev.status === "cancelled" ? "cancelled" : "running",
-					items: next,
-				}));
-			},
-		})
-			.then((finalItems) => {
-				if (ac.signal.aborted) {
-					setLayoutTranslateJob({ status: "cancelled", items: finalItems });
-					return;
-				}
-				setLayoutTranslateJob({ status: "done", items: finalItems });
-			})
+		const cacheKey = currentLayoutTranslateCacheKey();
+		const pendingItems = toLayoutTranslateItems(regions);
+		setLayoutTranslateJob({ status: "running", items: pendingItems });
+		void (async () => {
+			const sidecar = await readLayoutTranslateSidecar(paperAbsPath, cacheKey);
+			if (ac.signal.aborted) return;
+			const items = applyLayoutTranslateSidecar(pendingItems, sidecar);
+			const needsRun = hasPendingLayoutTranslateItems(items);
+			setLayoutTranslateJob({
+				status: needsRun ? "running" : "done",
+				items,
+			});
+			if (!needsRun) return;
+			const finalItems = await runLayoutRegionTranslate({
+				items,
+				signal: ac.signal,
+				paperKey,
+				vaultPath,
+				onUpdate: (next) => {
+					if (ac.signal.aborted) return;
+					persistLayoutTranslateSidecarBestEffort(paperAbsPath, cacheKey, next);
+					setLayoutTranslateJob((prev) => ({
+						status: prev.status === "cancelled" ? "cancelled" : "running",
+						items: next,
+					}));
+				},
+			});
+			persistLayoutTranslateSidecarBestEffort(
+				paperAbsPath,
+				cacheKey,
+				finalItems,
+			);
+			if (ac.signal.aborted) {
+				setLayoutTranslateJob({ status: "cancelled", items: finalItems });
+				return;
+			}
+			setLayoutTranslateJob({ status: "done", items: finalItems });
+		})()
 			.catch((e) => {
 				if (ac.signal.aborted) return;
 				const message = e instanceof Error ? e.message : String(e);
@@ -122,7 +146,7 @@ export function usePdfLayoutTranslate({
 					layoutTranslateAbortRef.current = null;
 				}
 			});
-	}, [layoutRawRegions, paperKey, vaultPath, t]);
+	}, [layoutRawRegions, paperAbsPath, paperKey, vaultPath, t]);
 
 	const toggleLayoutTranslate = useCallback(() => {
 		if (layoutTranslateJob.status === "running") {

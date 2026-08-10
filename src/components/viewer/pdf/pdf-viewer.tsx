@@ -879,6 +879,7 @@ function PdfViewerInner({
 	} = usePdfLayoutTranslate({
 		docId,
 		layoutRawRegions,
+		paperAbsPath,
 		paperKey,
 		vaultPath,
 	});

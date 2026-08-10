@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { fontSizeForLayoutTranslateBox } from "@/components/viewer/pdf/layers/layout-translate-overlay";
 import {
+	applyLayoutTranslateSidecar,
 	groupLayoutTranslateItemsByPage,
+	hasPendingLayoutTranslateItems,
+	type LayoutTranslateCacheKey,
 	type LayoutTranslateItem,
 	type LayoutTranslateItemStatus,
 	layoutRegionSourceText,
 	listTranslatableLayoutRegions,
+	parseLayoutTranslateSidecar,
 	toLayoutTranslateItems,
 } from "@/lib/pdf/layout/layout-translate";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
@@ -296,5 +300,110 @@ describe("groupLayoutTranslateItemsByPage", () => {
 		expect(after.get(0)).toBe(before.get(0));
 		expect(after.get(1)).not.toBe(before.get(1));
 		expect(after.get(1)?.map((it) => it.status)).toEqual(["done"]);
+	});
+});
+
+describe("layout translate sidecar cache", () => {
+	const key: LayoutTranslateCacheKey = {
+		providerId: "googleapi",
+		sourceLang: "auto",
+		targetLang: "zh-CN",
+		serviceKey: "googleapi",
+	};
+
+	function item(id: string, source = `source ${id}`): LayoutTranslateItem {
+		return {
+			id,
+			pageIndex: 0,
+			bbox: { x: 0.1, y: 0.1, w: 0.5, h: 0.05 },
+			kind: "text",
+			readingOrder: 0,
+			source,
+			status: "pending",
+		};
+	}
+
+	it("applies cached translations only when key and source text match", () => {
+		const sidecar = parseLayoutTranslateSidecar(
+			{
+				schemaVersion: 1,
+				source: {
+					mode: "pdf-layout-translate",
+					generatedAt: "2026-08-10T00:00:00.000Z",
+					providerId: "googleapi",
+					sourceLang: "auto",
+					targetLang: "zh-CN",
+					serviceKey: "googleapi",
+				},
+				items: [
+					{
+						id: "a",
+						pageIndex: 0,
+						bbox: { x: 0.1, y: 0.1, w: 0.5, h: 0.05 },
+						kind: "text",
+						readingOrder: 0,
+						source: "source a",
+						translated: "甲",
+					},
+					{
+						id: "b",
+						pageIndex: 0,
+						bbox: { x: 0.1, y: 0.2, w: 0.5, h: 0.05 },
+						kind: "text",
+						readingOrder: 1,
+						source: "old source",
+						translated: "乙",
+					},
+				],
+			},
+			key,
+		);
+		const applied = applyLayoutTranslateSidecar(
+			[item("a"), item("b")],
+			sidecar,
+		);
+
+		expect(applied[0]).toMatchObject({
+			status: "done",
+			translated: "甲",
+		});
+		expect(applied[1]?.status).toBe("pending");
+		expect(applied[1]?.translated).toBeUndefined();
+		expect(hasPendingLayoutTranslateItems(applied)).toBe(true);
+	});
+
+	it("rejects caches for a different target language", () => {
+		const sidecar = parseLayoutTranslateSidecar(
+			{
+				schemaVersion: 1,
+				source: {
+					mode: "pdf-layout-translate",
+					generatedAt: "2026-08-10T00:00:00.000Z",
+					providerId: "googleapi",
+					sourceLang: "auto",
+					targetLang: "en",
+					serviceKey: "googleapi",
+				},
+				items: [
+					{
+						id: "a",
+						pageIndex: 0,
+						bbox: { x: 0.1, y: 0.1, w: 0.5, h: 0.05 },
+						kind: "text",
+						readingOrder: 0,
+						source: "source a",
+						translated: "A",
+					},
+				],
+			},
+			key,
+		);
+
+		expect(sidecar).toBeNull();
+		expect(
+			hasPendingLayoutTranslateItems([
+				{ ...item("a"), translated: "甲", status: "done" },
+			]),
+		).toBe(false);
 	});
 });
