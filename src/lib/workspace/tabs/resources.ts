@@ -1,5 +1,6 @@
 import i18n from "@/i18n";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
+import { invokeApi } from "@/lib/core/ipc";
 import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -13,11 +14,7 @@ import {
 	localImageToViewerSource,
 	notesPathForPaper,
 	type PaperMetadata,
-	type PaperOpenBundle,
 	paperDirFromPath,
-	paperHasLocalPaperMd,
-	paperHasLocalPdf,
-	paperHasLocalTex,
 	paperRemoteAssetsFromMetadata,
 	revokePdfViewerSource,
 } from "@/lib/paper";
@@ -54,62 +51,26 @@ function findChildren(nodes: FileNode[], path: string): FileNode[] | undefined {
 
 const pdfAutoDownloadTried = new Set<string>();
 
-/** Session-scoped: vault-rel paper paths already triggered for deferred body resolve. */
-const paperParseTried = new Set<string>();
-
-function maybeTriggerDeferredParse(
+/**
+ * Open-paper reconcile (§7.4 入口②): ask the Host to backfill `PAPER.md`
+ * (ParseBody) when this paper has a PDF but no TeX and no `PAPER.md`. The
+ * CapsCache check is authoritative and the job is deduped by the JobCenter,
+ * replacing the old client-side precheck + session-set.
+ */
+function reconcilePaperOnOpen(
 	paperDir: string,
 	vaultPath: string | null,
-	treeNode: FileNode | undefined,
-	paperMeta?: PaperMetadata | null,
 ): void {
-	if (!isTauri() || !vaultPath || !treeNode) return;
-	if (
-		!paperHasLocalPdf(treeNode) ||
-		paperHasLocalTex(treeNode) ||
-		paperHasLocalPaperMd(treeNode)
-	) {
-		return;
-	}
+	if (!isTauri() || !vaultPath) return;
 	const rel = toVaultRelative(vaultPath, paperDir)
 		.replace(/\\/g, "/")
 		.replace(/^\/+|\/+$/g, "");
-	if (!rel || paperParseTried.has(rel)) return;
-	paperParseTried.add(rel);
-
-	enqueuePaperPdfParse({
-		vaultPath,
-		paperRelPath: rel,
-		paperLabel: paperMeta?.title?.trim(),
-	});
-}
-
-function maybeTriggerDeferredParseFromBundle(
-	paperDir: string,
-	vaultPath: string | null,
-	bundle: PaperOpenBundle,
-	paperMeta?: PaperMetadata | null,
-): void {
-	if (
-		!isTauri() ||
-		!vaultPath ||
-		!bundle.pdfPath ||
-		bundle.hasTex ||
-		bundle.hasPaperMd
-	) {
-		return;
-	}
-	const rel = toVaultRelative(vaultPath, paperDir)
-		.replace(/\\/g, "/")
-		.replace(/^\/+|\/+$/g, "");
-	if (!rel || paperParseTried.has(rel)) return;
-	paperParseTried.add(rel);
-
-	enqueuePaperPdfParse({
-		vaultPath,
-		paperRelPath: rel,
-		paperLabel: paperMeta?.title?.trim(),
-	});
+	if (!rel) return;
+	void invokeApi(
+		"job_reconcile_paper",
+		{ args: { vaultPath, path: rel } },
+		{ fallback: "paper reconcile failed" },
+	).catch(() => undefined);
 }
 
 /**
@@ -309,16 +270,7 @@ export async function loadTabResources(
 			didDownload = resolved.didDownload;
 		}
 		if (!didDownload) {
-			if (bundle) {
-				maybeTriggerDeferredParseFromBundle(paperDir, vaultPath, bundle, meta);
-			} else {
-				maybeTriggerDeferredParse(
-					paperDir,
-					vaultPath,
-					treeFindNode(tree, paperDir),
-					meta,
-				);
-			}
+			reconcilePaperOnOpen(paperDir, vaultPath);
 		}
 		if (isTauri() && vaultPath) {
 			const rel = toVaultRelative(vaultPath, paperDir)
