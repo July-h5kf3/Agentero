@@ -27,6 +27,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { GraphPanel } from "@/components/wiki/graph-panel";
 import { useVaultStore } from "@/hooks/use-app-stores";
 import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { notifyError } from "@/lib/core/notify";
@@ -43,7 +44,7 @@ import {
 	paperRefsParse,
 } from "@/lib/paper/refs";
 import { joinVaultPath } from "@/lib/vault/path";
-import { openPaper } from "@/lib/workspace/actions";
+import { openGraphPath, openPaper } from "@/lib/workspace/actions";
 
 type ReferencesPanelProps = {
 	vaultPath: string | null;
@@ -207,6 +208,77 @@ export function ReferencesPanel({
 		? rows.filter((row) => citationMatchesFilter(row.citation, needle))
 		: rows;
 
+	/** Bump graph when the sidecar fingerprint changes (import / reparse). */
+	const graphRevision = sidecar?.source.fingerprint
+		? hashString(sidecar.source.fingerprint)
+		: 0;
+
+	const listBody = !paperPath ? (
+		<EmptyState text={t("references.noPaper")} />
+	) : loading ? (
+		<div className="flex min-h-0 flex-1 items-center justify-center">
+			<Loader2
+				className="size-4 animate-spin text-muted-foreground"
+				aria-hidden
+			/>
+		</div>
+	) : !sidecar || citations.length === 0 ? (
+		<EmptyState
+			text={sidecar ? t("references.emptyParsed") : t("references.empty")}
+		>
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				disabled={parsing}
+				onClick={() => void runParse(Boolean(sidecar))}
+			>
+				{parsing ? (
+					<Loader2 className="size-3.5 animate-spin" aria-hidden />
+				) : null}
+				{t("references.parse")}
+			</Button>
+		</EmptyState>
+	) : (
+		<>
+			<div className="border-b px-2 py-1.5">
+				<Input
+					value={filter}
+					onChange={(e) => setFilter(e.target.value)}
+					placeholder={t("references.filterPlaceholder")}
+					className="h-7 text-xs"
+					spellCheck={false}
+				/>
+			</div>
+			<div
+				ref={listRef}
+				className="agentero-scroll min-h-0 flex-1 overflow-y-auto p-2"
+			>
+				{visible.length === 0 ? (
+					<p className="px-2 py-6 text-center text-muted-foreground text-xs">
+						{t("references.noFilterMatch")}
+					</p>
+				) : (
+					<ul className="space-y-1">
+						{visible.map(({ citation, ordinal }) => (
+							<li key={citation.id}>
+								<CitationCard
+									citation={citation}
+									ordinal={ordinal}
+									importing={importingId === citation.id}
+									folders={folders}
+									lastImportParentDir={lastImportParentDir}
+									onOpenMatched={openMatched}
+									onImport={importCitation}
+								/>
+							</li>
+						))}
+					</ul>
+				)}
+			</div>
+		</>
+	);
+
 	return (
 		<section
 			className={cn(
@@ -238,73 +310,36 @@ export function ReferencesPanel({
 				<span className="font-medium text-sm">{t("references.title")}</span>
 			</PaneHeader>
 
-			{!paperPath ? (
-				<EmptyState text={t("references.noPaper")} />
-			) : loading ? (
-				<div className="flex min-h-0 flex-1 items-center justify-center">
-					<Loader2
-						className="size-4 animate-spin text-muted-foreground"
-						aria-hidden
-					/>
+			{/* Upper ~65%: citation cards; lower ~35%: citation graph */}
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+					{listBody}
 				</div>
-			) : !sidecar || citations.length === 0 ? (
-				<EmptyState
-					text={sidecar ? t("references.emptyParsed") : t("references.empty")}
-				>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						disabled={parsing}
-						onClick={() => void runParse(Boolean(sidecar))}
-					>
-						{parsing ? (
-							<Loader2 className="size-3.5 animate-spin" aria-hidden />
-						) : null}
-						{t("references.parse")}
-					</Button>
-				</EmptyState>
-			) : (
-				<>
-					<div className="border-b px-2 py-1.5">
-						<Input
-							value={filter}
-							onChange={(e) => setFilter(e.target.value)}
-							placeholder={t("references.filterPlaceholder")}
-							className="h-7 text-xs"
-							spellCheck={false}
+				{paperPath ? (
+					<div className="h-[35%] min-h-[140px] shrink-0 overflow-hidden border-t border-border">
+						<GraphPanel
+							vaultPath={vaultPath}
+							selectedPath={paperPath}
+							onOpenPath={openGraphPath}
+							wikiIndexRevision={graphRevision}
+							embedded
+							autoParseCenter={false}
+							className="h-full min-h-0"
 						/>
 					</div>
-					<div
-						ref={listRef}
-						className="agentero-scroll min-h-0 flex-1 overflow-y-auto p-2"
-					>
-						{visible.length === 0 ? (
-							<p className="px-2 py-6 text-center text-muted-foreground text-xs">
-								{t("references.noFilterMatch")}
-							</p>
-						) : (
-							<ul className="space-y-1">
-								{visible.map(({ citation, ordinal }) => (
-									<li key={citation.id}>
-										<CitationCard
-											citation={citation}
-											ordinal={ordinal}
-											importing={importingId === citation.id}
-											folders={folders}
-											lastImportParentDir={lastImportParentDir}
-											onOpenMatched={openMatched}
-											onImport={importCitation}
-										/>
-									</li>
-								))}
-							</ul>
-						)}
-					</div>
-				</>
-			)}
+				) : null}
+			</div>
 		</section>
 	);
+}
+
+/** Stable non-crypto hash so fingerprint strings can drive a numeric revision. */
+function hashString(s: string): number {
+	let h = 0;
+	for (let i = 0; i < s.length; i++) {
+		h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+	}
+	return h === 0 ? 1 : h;
 }
 
 function EmptyState({

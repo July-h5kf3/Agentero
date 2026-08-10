@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/core/utils";
 import { paperDirFromPath } from "@/lib/paper";
 import {
-	type GraphNode,
-	type GraphNodeType,
-	type GraphResponse,
-	getGraph,
-} from "@/lib/wiki";
+	type CiteGraphNode,
+	type CiteGraphNodeType,
+	type CiteGraphResponse,
+	loadPaperRefsAuto,
+	paperRefsGraph,
+} from "@/lib/paper/refs";
 
 type GraphMode = "neighborhood" | "full";
 
@@ -22,13 +23,23 @@ type GraphPanelProps = {
 	onOpenPath: (vaultRelativePath: string) => void;
 	className?: string;
 	/**
-	 * Bumped after `graph_rebuild` so the graph reloads without a path change.
+	 * Optional revision bump to force a re-fetch (e.g. after import / reparse).
+	 * Citation graph does not depend on the wiki index.
 	 */
 	wikiIndexRevision?: number;
+	/**
+	 * Embedded under References: denser chrome, default Near mode only controls.
+	 */
+	embedded?: boolean;
+	/**
+	 * When false, skip `loadPaperRefsAuto` (parent already loads the sidecar).
+	 * Default true.
+	 */
+	autoParseCenter?: boolean;
 };
 
 /** Force-graph mutates x/y at runtime; only declare what we paint/read. */
-type FgNode = GraphNode & {
+type FgNode = CiteGraphNode & {
 	x?: number;
 	y?: number;
 };
@@ -65,7 +76,7 @@ function readThemeColors(el: HTMLElement | null): ThemeColors {
 }
 
 /** Node fill by type — only theme tokens, no decorative palette. */
-function nodeFill(type: GraphNodeType, colors: ThemeColors): string {
+function nodeFill(type: CiteGraphNodeType, colors: ThemeColors): string {
 	switch (type) {
 		case "paper":
 			return colors.foreground;
@@ -84,12 +95,14 @@ export function GraphPanel({
 	onOpenPath,
 	className,
 	wikiIndexRevision = 0,
+	embedded = false,
+	autoParseCenter = true,
 }: GraphPanelProps) {
 	const { t } = useTranslation("sidebar");
 	const wrapRef = useRef<HTMLDivElement>(null);
-	const [size, setSize] = useState({ w: 280, h: 240 });
+	const [size, setSize] = useState({ w: 280, h: 160 });
 	const [mode, setMode] = useState<GraphMode>("neighborhood");
-	const [data, setData] = useState<GraphResponse | null>(null);
+	const [data, setData] = useState<CiteGraphResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [hoverId, setHoverId] = useState<string | null>(null);
@@ -99,8 +112,8 @@ export function GraphPanel({
 
 	const centerHint = useMemo(() => {
 		if (!selectedPath) return null;
-		// Nested papers: prefer folder containing NOTES/source; fall back to path
-		return paperDirFromPath(selectedPath) ?? selectedPath;
+		// Citation graph is paper-centric: only paper folders (or files under them).
+		return paperDirFromPath(selectedPath);
 	}, [selectedPath]);
 
 	useEffect(() => {
@@ -132,7 +145,7 @@ export function GraphPanel({
 	}, []);
 
 	useEffect(() => {
-		// `wikiIndexRevision` is intentional: re-fetch after graph_rebuild.
+		// Optional external refresh signal (import / vault switch).
 		void wikiIndexRevision;
 		let cancelled = false;
 		setLoading(true);
@@ -141,13 +154,23 @@ export function GraphPanel({
 			try {
 				if (mode === "neighborhood" && !centerHint) {
 					if (!cancelled) {
-						setData({ nodes: [], edges: [], center: null, depth: 2 });
+						setData({ nodes: [], edges: [], center: null, depth: 1 });
 					}
 					return;
 				}
-				const res = await getGraph(vaultPath, {
+				// Ensure the focused paper has a sidecar before building the neighborhood.
+				if (
+					autoParseCenter &&
+					mode === "neighborhood" &&
+					vaultPath &&
+					centerHint
+				) {
+					await loadPaperRefsAuto(vaultPath, centerHint);
+				}
+				if (cancelled) return;
+				const res = await paperRefsGraph(vaultPath, {
 					center: mode === "neighborhood" ? centerHint : null,
-					depth: 2,
+					depth: mode === "neighborhood" ? 1 : null,
 				});
 				if (cancelled) return;
 				setData(res);
@@ -162,7 +185,7 @@ export function GraphPanel({
 		return () => {
 			cancelled = true;
 		};
-	}, [vaultPath, mode, centerHint, wikiIndexRevision]);
+	}, [vaultPath, mode, centerHint, wikiIndexRevision, autoParseCenter]);
 
 	const graphData = useMemo(() => {
 		if (!data) return { nodes: [] as FgNode[], links: [] as FgLink[] };
@@ -179,7 +202,7 @@ export function GraphPanel({
 	const centerId = data?.center ?? null;
 
 	const openNode = useCallback(
-		(node: GraphNode) => {
+		(node: CiteGraphNode) => {
 			if (node.type === "stub" || !node.path) return;
 			onOpenPath(node.path);
 		},
@@ -237,6 +260,7 @@ export function GraphPanel({
 			)}
 		>
 			<PaneHeader
+				className={embedded ? "h-7 min-h-7 px-2" : undefined}
 				trailing={
 					<div className="flex items-center gap-0.5">
 						<Button
@@ -270,7 +294,12 @@ export function GraphPanel({
 					className="size-3.5 shrink-0 text-muted-foreground"
 					aria-hidden
 				/>
-				<span className="min-w-0 flex-1 truncate font-medium text-sm leading-none">
+				<span
+					className={cn(
+						"min-w-0 flex-1 truncate font-medium leading-none",
+						embedded ? "text-xs" : "text-sm",
+					)}
+				>
 					{t("graph.title")}
 				</span>
 			</PaneHeader>
@@ -288,7 +317,7 @@ export function GraphPanel({
 				) : null}
 				{!loading && !error && graphData.nodes.length === 0 ? (
 					<p className="absolute inset-0 flex items-center justify-center px-3 text-center text-muted-foreground text-xs">
-						{mode === "neighborhood" && !selectedPath
+						{mode === "neighborhood" && !centerHint
 							? t("graph.selectPrompt")
 							: t("graph.noEdges")}
 					</p>
