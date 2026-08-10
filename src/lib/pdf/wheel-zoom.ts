@@ -9,9 +9,9 @@
  */
 
 /** One discrete zoom step per this much accumulated wheel deltaY. */
-export const WHEEL_ZOOM_STEP_DELTA = 100;
+const WHEEL_ZOOM_STEP_DELTA = 100;
 
-export type WheelZoomCoalescerOptions = {
+type WheelZoomCoalescerOptions = {
 	/** Wheel delta that produces one zoom step. */
 	threshold?: number;
 	onZoomIn: () => void;
@@ -20,7 +20,7 @@ export type WheelZoomCoalescerOptions = {
 	cancelFrame?: (handle: number) => void;
 };
 
-export type WheelZoomCoalescer = {
+type WheelZoomCoalescer = {
 	/** Accumulate one wheel `deltaY`; steps flush at most once per frame. */
 	addDelta(delta: number): void;
 	/** Drop pending accumulation (a new gesture starts). */
@@ -77,9 +77,9 @@ export function createWheelZoomCoalescer({
 }
 
 /** Wheel stream must be silent this long before a scroll gesture is over. */
-export const WHEEL_SCROLL_IDLE_MS = 200;
+const WHEEL_SCROLL_IDLE_MS = 200;
 
-export type WheelZoomGestureOptions = {
+type WheelZoomGestureOptions = {
 	target: Pick<HTMLElement, "addEventListener" | "removeEventListener">;
 	/** Ctrl/Cmd+wheel or trackpad pinch tick, already default-prevented when possible. */
 	onZoomWheel: (event: WheelEvent) => void;
