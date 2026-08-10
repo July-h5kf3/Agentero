@@ -3,7 +3,9 @@ use serde::Deserialize;
 use std::path::PathBuf;
 use tauri::State;
 
-use super::{emit_job_changed, parse_lane, validate_job_paper, JobCenter, JobLane, JobSnapshot};
+use super::{
+    emit_job_changed, parse_lane, validate_job_paper, JobCenter, JobLane, JobSnapshot, StartOutcome,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,11 +62,17 @@ pub async fn job_parse_refs_enqueue(
         .await;
     emit_job_changed(&app, snapshot.clone());
 
-    let job_id = snapshot.id.clone();
-    let runner = center.handle();
-    tauri::async_runtime::spawn(async move {
-        runner.run_parse_refs_job(app, job_id).await;
-    });
+    match center.try_start(&snapshot.id).await {
+        StartOutcome::Started(..) => {
+            let job_id = snapshot.id.clone();
+            let runner = center.handle();
+            tauri::async_runtime::spawn(async move {
+                runner.run_parse_refs_job(app, job_id).await;
+            });
+        }
+        StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
+        StartOutcome::Waiting => {}
+    }
 
     Ok(ApiResult::ok(snapshot))
 }
@@ -90,11 +98,17 @@ pub async fn job_parse_body_enqueue(
         .await;
     emit_job_changed(&app, snapshot.clone());
 
-    let job_id = snapshot.id.clone();
-    let runner = center.handle();
-    tauri::async_runtime::spawn(async move {
-        runner.run_parse_body_job(app, job_id).await;
-    });
+    match center.try_start(&snapshot.id).await {
+        StartOutcome::Started(..) => {
+            let job_id = snapshot.id.clone();
+            let runner = center.handle();
+            tauri::async_runtime::spawn(async move {
+                runner.run_parse_body_job(app, job_id).await;
+            });
+        }
+        StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
+        StartOutcome::Waiting => {}
+    }
 
     Ok(ApiResult::ok(snapshot))
 }

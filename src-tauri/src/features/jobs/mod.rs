@@ -76,6 +76,19 @@ pub struct JobChangedPayload {
     pub job: JobSnapshot,
 }
 
+/// Outcome of `JobCenter::try_start`: whether a `Queued` job could actually
+/// transition to `Running` given its `depends_on`/`dep_policy`.
+#[derive(Debug)]
+pub enum StartOutcome {
+    /// Dependencies satisfied; caller should spawn the matching `run_*_job`.
+    Started(JobSnapshot, PathBuf, String, bool, Option<String>),
+    /// Dependencies not yet settled; the job stays `Queued` until woken.
+    Waiting,
+    /// Dependencies settled but unsatisfiable under `DepPolicy::AllSucceeded`;
+    /// the job was transitioned to `Skipped`.
+    Skipped(JobSnapshot),
+}
+
 #[derive(Debug, Clone)]
 struct Job {
     id: JobId,
@@ -171,6 +184,74 @@ struct JobCenterInner {
     jobs: HashMap<JobId, Job>,
     active_keys: HashMap<JobKey, JobId>,
     lanes: LaneQueues,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DepsReadiness {
+    Ready,
+    Pending,
+    Unreachable,
+}
+
+fn deps_readiness(inner: &JobCenterInner, job: &Job) -> DepsReadiness {
+    if job.depends_on.is_empty() {
+        return DepsReadiness::Ready;
+    }
+    let mut states = Vec::with_capacity(job.depends_on.len());
+    for dep_id in &job.depends_on {
+        match inner.jobs.get(dep_id) {
+            Some(dep) => states.push(dep.state),
+            None => {
+                // Dependency record no longer exists (never created, or pruned):
+                // AllSettled treats a missing dep as vacuously settled; AllSucceeded
+                // can never be satisfied by a dependency that doesn't exist.
+                return match job.dep_policy {
+                    DepPolicy::AllSettled => DepsReadiness::Ready,
+                    DepPolicy::AllSucceeded => DepsReadiness::Unreachable,
+                };
+            }
+        }
+    }
+    let all_settled = states.iter().all(|s| {
+        matches!(
+            s,
+            JobState::Succeeded | JobState::Failed | JobState::Cancelled | JobState::Skipped
+        )
+    });
+    if !all_settled {
+        return DepsReadiness::Pending;
+    }
+    match job.dep_policy {
+        DepPolicy::AllSettled => DepsReadiness::Ready,
+        DepPolicy::AllSucceeded => {
+            if states.iter().all(|s| *s == JobState::Succeeded) {
+                DepsReadiness::Ready
+            } else {
+                DepsReadiness::Unreachable
+            }
+        }
+    }
+}
+
+fn mark_running_locked(
+    inner: &mut JobCenterInner,
+    id: &JobId,
+) -> Option<(JobSnapshot, PathBuf, String, bool, Option<String>)> {
+    let job = inner.jobs.get_mut(id)?;
+    if job.state != JobState::Queued {
+        return None;
+    }
+    job.state = JobState::Running;
+    job.attempts = job.attempts.saturating_add(1);
+    job.progress = None;
+    job.phase = Some("running".into());
+    let snapshot = job.snapshot();
+    let vault_path = job.vault_path.clone();
+    let paper_path = job.paper_path.clone()?;
+    let force = job.force;
+    let task_id = job.task_id.clone();
+    inner.lanes.remove(id);
+    Some((snapshot, vault_path, paper_path, force, task_id))
 }
 
 #[derive(Clone, Debug)]
@@ -344,83 +425,184 @@ impl JobCenter {
             .collect()
     }
 
-    pub async fn run_parse_refs_job(self, app: tauri::AppHandle, job_id: String) {
-        let started = self.mark_running(&job_id).await;
-        let Some((snapshot, vault, path, force, _)) = started else {
-            return;
-        };
-        emit_job_changed(&app, snapshot);
-
-        let result = crate::features::refs::parse_paper_refs(&vault, &path, true, force).await;
-        let snapshot = match result {
-            Ok(_) => {
-                self.finish(
-                    &job_id,
-                    JobState::Succeeded,
-                    Some(100.0),
-                    Some("completed"),
-                    None,
-                )
-                .await
+    pub async fn try_start(&self, job_id: &str) -> StartOutcome {
+        let mut inner = self.inner.lock().await;
+        let id = JobId(job_id.to_string());
+        let readiness = {
+            let Some(job) = inner.jobs.get(&id) else {
+                return StartOutcome::Waiting;
+            };
+            if job.state != JobState::Queued {
+                return StartOutcome::Waiting;
             }
-            Err(e) => {
-                self.finish(
-                    &job_id,
-                    JobState::Failed,
-                    None,
-                    Some("failed"),
-                    Some(e.to_string()),
-                )
-                .await
-            }
+            deps_readiness(&inner, job)
         };
-        if let Some(snapshot) = snapshot {
-            emit_job_changed(&app, snapshot);
+        match readiness {
+            DepsReadiness::Pending => StartOutcome::Waiting,
+            DepsReadiness::Unreachable => {
+                let job = inner.jobs.get_mut(&id).expect("job exists");
+                job.state = JobState::Skipped;
+                job.phase = Some("dependency failed".into());
+                let snapshot = job.snapshot();
+                inner.lanes.remove(&id);
+                release_active_key(&mut inner, &id);
+                StartOutcome::Skipped(snapshot)
+            }
+            DepsReadiness::Ready => match mark_running_locked(&mut inner, &id) {
+                Some((snapshot, vault, path, force, task_id)) => {
+                    StartOutcome::Started(snapshot, vault, path, force, task_id)
+                }
+                None => StartOutcome::Waiting,
+            },
         }
     }
 
-    pub async fn run_parse_body_job(self, app: tauri::AppHandle, job_id: String) {
-        let started = self.mark_running(&job_id).await;
-        let Some((snapshot, vault, path, force, task_id)) = started else {
-            return;
+    /// Re-evaluate every `Queued` job whose `depends_on` includes `finished_id`,
+    /// now that it has settled. Callers spawn the returned `Started` jobs and
+    /// emit `job:changed` for `Skipped` ones; `Waiting` entries are left queued.
+    async fn wake_dependents(&self, finished_id: &str) -> Vec<(JobKind, StartOutcome)> {
+        let finished = JobId(finished_id.to_string());
+        let candidate_ids: Vec<JobId> = {
+            let inner = self.inner.lock().await;
+            inner
+                .jobs
+                .values()
+                .filter(|job| job.state == JobState::Queued && job.depends_on.contains(&finished))
+                .map(|job| job.id.clone())
+                .collect()
         };
-        emit_job_changed(&app, snapshot);
+        let mut outcomes = Vec::with_capacity(candidate_ids.len());
+        for id in candidate_ids {
+            let kind = {
+                let inner = self.inner.lock().await;
+                inner.jobs.get(&id).map(|job| job.kind)
+            };
+            let Some(kind) = kind else { continue };
+            outcomes.push((kind, self.try_start(&id.0).await));
+        }
+        outcomes
+    }
 
-        let task_id = task_id.unwrap_or_else(|| job_id.clone());
-        let result = crate::features::import::pdf_parse::parse_paper_body(
-            crate::features::import::pdf_parse::PaperParseBodyArgs {
-                vault_path: vault.to_string_lossy().to_string(),
-                path,
-                force,
-                task_id: Some(task_id.clone()),
-            },
-        )
-        .await;
-        crate::features::agent::background_tasks::finish(&task_id);
-        let snapshot = match result {
-            Ok(_) => {
-                self.finish(
-                    &job_id,
-                    JobState::Succeeded,
-                    Some(100.0),
-                    Some("completed"),
-                    None,
-                )
-                .await
-            }
-            Err(e) => {
-                self.finish(
-                    &job_id,
-                    JobState::Failed,
-                    None,
-                    Some("failed"),
-                    Some(e.to_string()),
-                )
-                .await
-            }
-        };
-        if let Some(snapshot) = snapshot {
+    /// Boxed to avoid an unresolvable recursive opaque-`Future` type: this
+    /// runner calls `wake_and_spawn_dependents`, which may call back into this
+    /// same runner for a newly-ready dependent job.
+    pub fn run_parse_refs_job(
+        self,
+        app: tauri::AppHandle,
+        job_id: String,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+        Box::pin(async move {
+            let started = self.mark_running(&job_id).await;
+            let Some((snapshot, vault, path, force, _)) = started else {
+                return;
+            };
             emit_job_changed(&app, snapshot);
+
+            let result = crate::features::refs::parse_paper_refs(&vault, &path, true, force).await;
+            let snapshot = match result {
+                Ok(_) => {
+                    self.finish(
+                        &job_id,
+                        JobState::Succeeded,
+                        Some(100.0),
+                        Some("completed"),
+                        None,
+                    )
+                    .await
+                }
+                Err(e) => {
+                    self.finish(
+                        &job_id,
+                        JobState::Failed,
+                        None,
+                        Some("failed"),
+                        Some(e.to_string()),
+                    )
+                    .await
+                }
+            };
+            if let Some(snapshot) = snapshot {
+                emit_job_changed(&app, snapshot);
+            }
+            self.wake_and_spawn_dependents(&app, &job_id).await;
+        })
+    }
+
+    /// Boxed for the same reason as `run_parse_refs_job` (mutual recursion via
+    /// `wake_and_spawn_dependents`).
+    pub fn run_parse_body_job(
+        self,
+        app: tauri::AppHandle,
+        job_id: String,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+        Box::pin(async move {
+            let started = self.mark_running(&job_id).await;
+            let Some((snapshot, vault, path, force, task_id)) = started else {
+                return;
+            };
+            emit_job_changed(&app, snapshot);
+
+            let task_id = task_id.unwrap_or_else(|| job_id.clone());
+            let result = crate::features::import::pdf_parse::parse_paper_body(
+                crate::features::import::pdf_parse::PaperParseBodyArgs {
+                    vault_path: vault.to_string_lossy().to_string(),
+                    path,
+                    force,
+                    task_id: Some(task_id.clone()),
+                },
+            )
+            .await;
+            crate::features::agent::background_tasks::finish(&task_id);
+            let snapshot = match result {
+                Ok(_) => {
+                    self.finish(
+                        &job_id,
+                        JobState::Succeeded,
+                        Some(100.0),
+                        Some("completed"),
+                        None,
+                    )
+                    .await
+                }
+                Err(e) => {
+                    self.finish(
+                        &job_id,
+                        JobState::Failed,
+                        None,
+                        Some("failed"),
+                        Some(e.to_string()),
+                    )
+                    .await
+                }
+            };
+            if let Some(snapshot) = snapshot {
+                emit_job_changed(&app, snapshot);
+            }
+            self.wake_and_spawn_dependents(&app, &job_id).await;
+        })
+    }
+
+    /// Wake `Queued` jobs depending on `finished_id` and spawn any that became
+    /// runnable; emits `job:changed` for jobs that transitioned to `Skipped`.
+    async fn wake_and_spawn_dependents(&self, app: &tauri::AppHandle, finished_id: &str) {
+        for (kind, outcome) in self.wake_dependents(finished_id).await {
+            match outcome {
+                StartOutcome::Started(snapshot, ..) => {
+                    let dep_id = snapshot.id.clone();
+                    emit_job_changed(app, snapshot);
+                    let app2 = app.clone();
+                    let center2 = self.handle();
+                    tauri::async_runtime::spawn(async move {
+                        match kind {
+                            JobKind::ParseRefs => center2.run_parse_refs_job(app2, dep_id).await,
+                            JobKind::ParseBody => center2.run_parse_body_job(app2, dep_id).await,
+                            _ => {}
+                        }
+                    });
+                }
+                StartOutcome::Skipped(snapshot) => emit_job_changed(app, snapshot),
+                StartOutcome::Waiting => {}
+            }
         }
     }
 
@@ -430,21 +612,7 @@ impl JobCenter {
     ) -> Option<(JobSnapshot, PathBuf, String, bool, Option<String>)> {
         let mut inner = self.inner.lock().await;
         let id = JobId(job_id.to_string());
-        let job = inner.jobs.get_mut(&id)?;
-        if job.state != JobState::Queued {
-            return None;
-        }
-        job.state = JobState::Running;
-        job.attempts = job.attempts.saturating_add(1);
-        job.progress = None;
-        job.phase = Some("running".into());
-        let snapshot = job.snapshot();
-        let vault_path = job.vault_path.clone();
-        let paper_path = job.paper_path.clone()?;
-        let force = job.force;
-        let task_id = job.task_id.clone();
-        inner.lanes.remove(&id);
-        Some((snapshot, vault_path, paper_path, force, task_id))
+        mark_running_locked(&mut inner, &id)
     }
 
     async fn finish(
@@ -482,6 +650,45 @@ impl JobCenter {
     #[cfg(test)]
     async fn next_queued_for_test(&self) -> Option<String> {
         self.inner.lock().await.lanes.next_eligible().map(|id| id.0)
+    }
+
+    #[cfg(test)]
+    async fn enqueue_for_test(
+        &self,
+        kind: JobKind,
+        vault: PathBuf,
+        path: &str,
+        depends_on: Vec<JobId>,
+        dep_policy: DepPolicy,
+    ) -> JobId {
+        let id = JobId(uuid::Uuid::new_v4().to_string());
+        let job = Job {
+            id: id.clone(),
+            kind,
+            lane: JobLane::Normal,
+            vault_path: normalize_vault_path(vault),
+            paper_path: Some(path.to_string()),
+            fingerprint: format!("test:{}", id.0),
+            depends_on,
+            dep_policy,
+            attempts: 0,
+            state: JobState::Queued,
+            progress: Some(0.0),
+            phase: Some("queued".into()),
+            error: None,
+            force: false,
+            task_id: None,
+        };
+        let mut inner = self.inner.lock().await;
+        inner.lanes.push(JobLane::Normal, id.clone());
+        inner.jobs.insert(id.clone(), job);
+        id
+    }
+
+    #[cfg(test)]
+    async fn state_for_test(&self, job_id: &str) -> Option<JobState> {
+        let inner = self.inner.lock().await;
+        inner.jobs.get(&JobId(job_id.to_string())).map(|j| j.state)
     }
 }
 
@@ -534,7 +741,13 @@ pub fn spawn_parse_body_after_assets(
             .enqueue_parse_body(&vault, &path_rel, JobLane::Normal, force, None)
             .await;
         emit_job_changed(&app, snapshot.clone());
-        center.run_parse_body_job(app, snapshot.id).await;
+        match center.try_start(&snapshot.id).await {
+            StartOutcome::Started(..) => {
+                center.run_parse_body_job(app, snapshot.id).await;
+            }
+            StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
+            StartOutcome::Waiting => {}
+        }
     });
 }
 
@@ -672,5 +885,196 @@ mod tests {
         let succeeded = serde_json::to_value(DepPolicy::AllSucceeded).unwrap();
         assert_eq!(settled, serde_json::json!("allSettled"));
         assert_eq!(succeeded, serde_json::json!("allSucceeded"));
+    }
+
+    #[tokio::test]
+    async fn try_start_returns_ready_when_no_deps() {
+        let center = JobCenter::new();
+        let id = center
+            .enqueue_for_test(
+                JobKind::ParseRefs,
+                vault("try-start-no-deps"),
+                "papers/a",
+                Vec::new(),
+                DepPolicy::AllSucceeded,
+            )
+            .await;
+        match center.try_start(&id.0).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected Started, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn try_start_waits_when_dependency_pending() {
+        let center = JobCenter::new();
+        let vault = vault("try-start-pending");
+        let dep = center
+            .enqueue_for_test(
+                JobKind::ParseRefs,
+                vault.clone(),
+                "papers/dep",
+                Vec::new(),
+                DepPolicy::AllSucceeded,
+            )
+            .await;
+        let dependent = center
+            .enqueue_for_test(
+                JobKind::ParseBody,
+                vault,
+                "papers/a",
+                vec![dep],
+                DepPolicy::AllSucceeded,
+            )
+            .await;
+        match center.try_start(&dependent.0).await {
+            StartOutcome::Waiting => {}
+            other => panic!("expected Waiting, got {other:?}"),
+        }
+        assert_eq!(
+            center.state_for_test(&dependent.0).await,
+            Some(JobState::Queued)
+        );
+    }
+
+    #[tokio::test]
+    async fn try_start_skips_when_all_succeeded_policy_hits_failed_dependency() {
+        let center = JobCenter::new();
+        let vault = vault("try-start-unreachable");
+        let dep = center
+            .enqueue_for_test(
+                JobKind::ParseRefs,
+                vault.clone(),
+                "papers/dep",
+                Vec::new(),
+                DepPolicy::AllSucceeded,
+            )
+            .await;
+        center
+            .finish(&dep.0, JobState::Failed, None, Some("failed"), None)
+            .await;
+        let dependent = center
+            .enqueue_for_test(
+                JobKind::ParseBody,
+                vault,
+                "papers/a",
+                vec![dep],
+                DepPolicy::AllSucceeded,
+            )
+            .await;
+        match center.try_start(&dependent.0).await {
+            StartOutcome::Skipped(snapshot) => {
+                assert_eq!(snapshot.state, JobState::Skipped);
+            }
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn try_start_ready_when_all_settled_policy_hits_failed_dependency() {
+        let center = JobCenter::new();
+        let vault = vault("try-start-all-settled");
+        let dep = center
+            .enqueue_for_test(
+                JobKind::ParseRefs,
+                vault.clone(),
+                "papers/dep",
+                Vec::new(),
+                DepPolicy::AllSucceeded,
+            )
+            .await;
+        center
+            .finish(&dep.0, JobState::Failed, None, Some("failed"), None)
+            .await;
+        let dependent = center
+            .enqueue_for_test(
+                JobKind::ParseBody,
+                vault,
+                "papers/a",
+                vec![dep],
+                DepPolicy::AllSettled,
+            )
+            .await;
+        match center.try_start(&dependent.0).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected Started, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn finish_wakes_ready_dependent_job() {
+        let center = JobCenter::new();
+        let vault = vault("wake-ready");
+        let dep = center
+            .enqueue_for_test(
+                JobKind::ParseRefs,
+                vault.clone(),
+                "papers/dep",
+                Vec::new(),
+                DepPolicy::AllSucceeded,
+            )
+            .await;
+        let dependent = center
+            .enqueue_for_test(
+                JobKind::ParseBody,
+                vault,
+                "papers/a",
+                vec![dep.clone()],
+                DepPolicy::AllSucceeded,
+            )
+            .await;
+
+        center.mark_succeeded_for_test(&dep.0).await;
+        let woken = center.wake_dependents(&dep.0).await;
+
+        assert_eq!(woken.len(), 1);
+        assert_eq!(woken[0].0, JobKind::ParseBody);
+        match &woken[0].1 {
+            StartOutcome::Started(snapshot, ..) => assert_eq!(snapshot.id, dependent.0),
+            other => panic!("expected Started, got {other:?}"),
+        }
+        assert_eq!(
+            center.state_for_test(&dependent.0).await,
+            Some(JobState::Running)
+        );
+    }
+
+    #[tokio::test]
+    async fn finish_skips_dependent_when_dependency_failed_under_all_succeeded() {
+        let center = JobCenter::new();
+        let vault = vault("wake-skip");
+        let dep = center
+            .enqueue_for_test(
+                JobKind::ParseRefs,
+                vault.clone(),
+                "papers/dep",
+                Vec::new(),
+                DepPolicy::AllSucceeded,
+            )
+            .await;
+        let dependent = center
+            .enqueue_for_test(
+                JobKind::ParseBody,
+                vault,
+                "papers/a",
+                vec![dep.clone()],
+                DepPolicy::AllSucceeded,
+            )
+            .await;
+
+        center
+            .finish(&dep.0, JobState::Failed, None, Some("failed"), None)
+            .await;
+        let woken = center.wake_dependents(&dep.0).await;
+
+        assert_eq!(woken.len(), 1);
+        match &woken[0].1 {
+            StartOutcome::Skipped(snapshot) => assert_eq!(snapshot.state, JobState::Skipped),
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+        assert_eq!(
+            center.state_for_test(&dependent.0).await,
+            Some(JobState::Skipped)
+        );
     }
 }
