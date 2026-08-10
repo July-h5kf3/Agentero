@@ -340,6 +340,16 @@ async function attachProgressListener(id: string): Promise<UnlistenFn | null> {
 			if (event.payload.taskId !== id) return;
 			const { downloadedBytes, totalBytes, currentCount, totalCount } =
 				event.payload;
+			const task = getBackgroundTasksSnapshot().tasks.find(
+				(task) => task.id === id,
+			);
+			if (
+				task?.kind === "downloadAll" &&
+				currentCount == null &&
+				totalCount == null
+			) {
+				return;
+			}
 			if (event.payload.phase === "parse") {
 				updateBackgroundTask(id, {
 					progress: mapDownloadProgress(
