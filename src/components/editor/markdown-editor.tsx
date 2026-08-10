@@ -21,6 +21,7 @@ import { useEditorContextMenu } from "@/components/editor/hooks/use-editor-conte
 import { useMarkdownPersistence } from "@/components/editor/hooks/use-markdown-persistence";
 import { useSelectionContextPublish } from "@/components/editor/hooks/use-selection-context-publish";
 import { useWikilinkEditing } from "@/components/editor/hooks/use-wikilink-editing";
+import { MarkdownExportDialog } from "@/components/editor/markdown-export-dialog";
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
 import { FindReplaceBar } from "@/components/editor/overlays/find-replace-bar";
 import { FrontmatterPanel } from "@/components/editor/overlays/frontmatter-panel";
@@ -43,15 +44,28 @@ import {
 	ContextMenuShortcut,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { useLibraryStore } from "@/hooks/use-app-stores";
 import i18n from "@/i18n";
-import { errorMessage, notifyError } from "@/lib/core/notify";
+import { errorMessage, notifyError, notifySuccess } from "@/lib/core/notify";
+import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import { editorContextMenuCapabilities } from "@/lib/markdown/editor-context-menu";
+import {
+	exportDefaultName,
+	resolveExportPaperHeader,
+	runMarkdownExport,
+} from "@/lib/markdown/export";
+import type {
+	MarkdownExportOptions,
+	MarkdownExportPaperHeader,
+} from "@/lib/markdown/export/types";
 import { splitFrontmatter } from "@/lib/markdown/frontmatter";
 import { saveImageToMarkdownAssets } from "@/lib/markdown/image";
+import { loadSettings } from "@/lib/settings";
 import { formatModShortcut } from "@/lib/shell/shortcuts";
 import type { LinkFragment, WikiRenameHeadingRequest } from "@/lib/wiki";
+import { useWikiNav } from "@/lib/wiki/nav-context";
 import {
 	findWikiHeadingIndex,
 	hasWikiBlockAnchor,
@@ -140,6 +154,23 @@ export function MarkdownEditor({
 	const suppressNextEditorBreakRef = useRef(false);
 	const [findOpen, setFindOpen] = useState(false);
 	const [findFocusTick, setFindFocusTick] = useState(0);
+	const [exportOpen, setExportOpen] = useState(false);
+	const [exportBusy, setExportBusy] = useState(false);
+	const [exportPaperHeader, setExportPaperHeader] =
+		useState<MarkdownExportPaperHeader | null>(null);
+	const [exportDefaultWatermark, setExportDefaultWatermark] = useState(false);
+	/** Bumped on unmount so in-flight export does not setState after leave. */
+	const exportGenerationRef = useRef(0);
+	const exportInFlightRef = useRef(false);
+	const wikiNav = useWikiNav();
+	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
+
+	useEffect(
+		() => () => {
+			exportGenerationRef.current += 1;
+		},
+		[],
+	);
 
 	useEffect(() => {
 		if (!navigationIntent) return;
@@ -444,7 +475,64 @@ export function MarkdownEditor({
 		scheduleWikiLinkPresentationSync,
 		serialize,
 	]);
+	const openExportDialog = useCallback(() => {
+		if (!isTauri()) {
+			notifyError(i18n.t("editor:export.desktopOnly"));
+			return;
+		}
+		const header = resolveExportPaperHeader({
+			filePath: filePath ?? null,
+			vaultPath: wikiNav?.vaultPath ?? null,
+			paperMetaByRelPath,
+		});
+		setExportPaperHeader(header);
+		setExportDefaultWatermark(loadSettings().exportWatermarkEnabled);
+		setExportOpen(true);
+	}, [filePath, paperMetaByRelPath, wikiNav?.vaultPath]);
+
+	const handleExportConfirm = useCallback(
+		async (options: MarkdownExportOptions) => {
+			if (exportInFlightRef.current) return;
+			exportInFlightRef.current = true;
+			const gen = exportGenerationRef.current;
+			setExportBusy(true);
+			try {
+				const result = await runMarkdownExport({
+					markdown: serialize(),
+					filePath: filePath ?? null,
+					vaultPath: wikiNav?.vaultPath ?? null,
+					mdFiles: wikiNav?.mdFiles,
+					defaultName: exportDefaultName(filePath ?? null, exportPaperHeader),
+					options,
+					paperHeader: exportPaperHeader,
+				});
+				if (gen !== exportGenerationRef.current) return;
+				if (result.status === "cancelled") return;
+				notifySuccess(i18n.t("editor:export.success"));
+				setExportOpen(false);
+			} catch (error) {
+				if (gen !== exportGenerationRef.current) return;
+				notifyError(i18n.t("editor:export.failed"), {
+					description: errorMessage(error),
+				});
+			} finally {
+				exportInFlightRef.current = false;
+				if (gen === exportGenerationRef.current) {
+					setExportBusy(false);
+				}
+			}
+		},
+		[
+			exportPaperHeader,
+			filePath,
+			serialize,
+			wikiNav?.mdFiles,
+			wikiNav?.vaultPath,
+		],
+	);
+
 	const contextMenuCapabilities = editorContextMenuCapabilities({
+		exportAvailable: isTauri(),
 		headingRenameAvailable: Boolean(headingContext),
 		readOnly: Boolean(readOnly),
 		selectionExpanded: contextMenuSelectionExpanded,
@@ -476,6 +564,7 @@ export function MarkdownEditor({
 									setFindOpen(true);
 									setFindFocusTick((tick) => tick + 1);
 								}}
+								onExport={isTauri() ? openExportDialog : undefined}
 								propertiesPanel={
 									<FrontmatterPanel
 										value={frontmatterYaml}
@@ -599,6 +688,16 @@ export function MarkdownEditor({
 													: "editor:contextMenu.formatMarkdown",
 											)}
 										</ContextMenuItem>
+										<ContextMenuItem
+											disabled={
+												!contextMenuCapabilities.exportNote || exportBusy
+											}
+											onSelect={() => {
+												openExportDialog();
+											}}
+										>
+											{i18n.t("editor:contextMenu.exportNote")}
+										</ContextMenuItem>
 										<ContextMenuSeparator />
 										<ContextMenuItem
 											disabled={!contextMenuCapabilities.insertLink}
@@ -643,6 +742,18 @@ export function MarkdownEditor({
 							busy={headingRenameBusy}
 							onOpenChange={setHeadingRenameOpen}
 							onConfirm={confirmHeadingRename}
+						/>
+						<MarkdownExportDialog
+							open={exportOpen}
+							busy={exportBusy}
+							paperHeader={exportPaperHeader}
+							defaultWatermark={exportDefaultWatermark}
+							onCancel={() => {
+								if (!exportBusy) setExportOpen(false);
+							}}
+							onConfirm={(options) => {
+								void handleExportConfirm(options);
+							}}
 						/>
 					</div>
 				</Plate>

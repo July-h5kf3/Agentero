@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { EmbedStatus } from "@/components/editor/embeds/embed-status";
+import { useMarkdownExportMode } from "@/components/editor/markdown-export-mode-context";
 import { PdfViewer } from "@/components/viewer";
 import { createKeyedCache } from "@/lib/core/keyed-cache";
+import { cn } from "@/lib/core/utils";
 import { localFileToArrayBuffer } from "@/lib/paper/media";
 import { imageMimeFromPath } from "@/lib/workspace/viewer";
 
@@ -111,6 +113,8 @@ export function WikiAttachmentEmbed({
 	imageSize,
 }: WikiAttachmentEmbedProps) {
 	const { t } = useTranslation("editor");
+	const exportMode = useMarkdownExportMode();
+	const expandEmbeds = exportMode?.expandEmbeds === true;
 	const dimensions = parseWikiImageEmbedDimensions(imageSize);
 	const requestKey = attachmentRequestKey(kind, absoluteTarget, revision);
 	const [load, setLoad] = useState<CachedAttachmentLoad>(() => {
@@ -148,6 +152,14 @@ export function WikiAttachmentEmbed({
 			: null;
 
 	useEffect(() => {
+		// Export mode only needs a path placeholder for PDF attachments.
+		if (kind === "pdf" && exportMode) {
+			setLoad({
+				requestKey,
+				state: { kind: "ready", bytes: new ArrayBuffer(0) },
+			});
+			return;
+		}
 		let cancelled = false;
 		const cached = attachmentCache.get(requestKey);
 		if (cached) {
@@ -172,7 +184,7 @@ export function WikiAttachmentEmbed({
 		return () => {
 			cancelled = true;
 		};
-	}, [absoluteTarget, requestKey]);
+	}, [absoluteTarget, exportMode, kind, requestKey]);
 
 	useEffect(() => {
 		if (!imageResourceKey || !attachmentBytes) {
@@ -185,7 +197,7 @@ export function WikiAttachmentEmbed({
 	}, [attachmentBytes, imageResourceKey, targetPath]);
 
 	if (state.kind === "loading") {
-		return <EmbedStatus message={t("embed.loading")} />;
+		return <EmbedStatus exportPending message={t("embed.loading")} />;
 	}
 	if (state.kind === "error") {
 		return <EmbedStatus message={t("embed.error")} />;
@@ -196,21 +208,32 @@ export function WikiAttachmentEmbed({
 				<img
 					src={imageSource}
 					alt={targetPath}
-					className="max-h-96 max-w-full rounded-sm object-contain"
+					className={cn(
+						"max-w-full rounded-sm object-contain",
+						expandEmbeds ? "max-h-none" : "max-h-96",
+					)}
 					style={{
 						width: dimensions?.width,
 						height: dimensions?.height,
 					}}
-					loading="lazy"
+					loading={expandEmbeds ? "eager" : "lazy"}
 					draggable={false}
 				/>
 			</span>
 		);
 	}
 	if (kind === "image" && state.kind === "ready") {
-		return <EmbedStatus message={t("embed.loading")} />;
+		return <EmbedStatus exportPending message={t("embed.loading")} />;
 	}
 	if (state.kind !== "ready") return null;
+	// Full PDF viewer is heavy and poorly paginated for note export — show a path placeholder.
+	if (exportMode) {
+		return (
+			<span className="block px-4 py-3 text-muted-foreground text-sm">
+				{t("export.pdfEmbedPlaceholder", { path: targetPath })}
+			</span>
+		);
+	}
 	return (
 		<PdfViewer
 			source={null}

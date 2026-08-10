@@ -27,6 +27,7 @@ import {
 import { EmbedStatus } from "@/components/editor/embeds/embed-status";
 import { useWikiEmbedProjection } from "@/components/editor/embeds/projection-context";
 import { WikiAnnotationEmbed } from "@/components/editor/embeds/wiki-annotation-embed";
+import { useMarkdownExportMode } from "@/components/editor/markdown-export-mode-context";
 import { createKeyedCache } from "@/lib/core/keyed-cache";
 import { cn } from "@/lib/core/utils";
 import type { AnnotationRefKind } from "@/lib/pdf/annotation-ref";
@@ -254,8 +255,11 @@ export function WikiEmbedElement({
 	const element = props.element as unknown as WikiSlateNode;
 	const wikiNav = useWikiNav();
 	const markdownDoc = useMarkdownDoc();
+	const exportMode = useMarkdownExportMode();
 	const ancestry = useWikiEmbedAncestry();
 	const EmbeddedMarkdownProjection = useWikiEmbedProjection();
+	const expandEmbeds = exportMode?.expandEmbeds === true;
+	const hideChromeActions = exportMode?.hideChromeActions === true;
 
 	const target = element.value ?? "";
 	const targetWithFragment = element.heading
@@ -442,18 +446,26 @@ export function WikiEmbedElement({
 			<span
 				contentEditable={false}
 				className={cn(
-					"group/embed block max-h-96 overflow-auto rounded-md border border-border bg-muted/20 shadow-sm",
+					"group/embed block rounded-md border border-border bg-muted/20 shadow-sm",
+					expandEmbeds
+						? "max-h-none overflow-visible"
+						: "max-h-96 overflow-auto",
 					presentation.kind !== "ready" && "border-dashed",
 					editing && "hidden",
 				)}
 			>
 				{/* Shared chrome: type icon + title · open source on the right */}
-				<span className="sticky top-0 z-10 flex items-center gap-2 border-border border-b bg-background/95 px-3 py-1.5 backdrop-blur">
+				<span
+					className={cn(
+						"z-10 flex items-center gap-2 border-border border-b bg-background/95 px-3 py-1.5 backdrop-blur",
+						expandEmbeds ? "relative" : "sticky top-0",
+					)}
+				>
 					<EmbedTypeIcon kind={chromeKind} />
 					<span className="min-w-0 flex-1 truncate font-medium text-foreground/90 text-xs">
 						{sourceLabel || t("embed.untitled")}
 					</span>
-					{resolvedLink?.status === "resolved" ? (
+					{!hideChromeActions && resolvedLink?.status === "resolved" ? (
 						<button
 							type="button"
 							className="inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-muted-foreground text-xs hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

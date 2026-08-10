@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { MessageResponse } from "@/components/ai-elements/message";
 import { EmbedStatus } from "@/components/editor/embeds/embed-status";
+import { useMarkdownExportMode } from "@/components/editor/markdown-export-mode-context";
 import { createKeyedCache } from "@/lib/core/keyed-cache";
 import { cn } from "@/lib/core/utils";
 import { visualTraceImageAssetRelPath } from "@/lib/pdf/agent-trace/image";
@@ -126,6 +127,8 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 	className,
 }: WikiAnnotationEmbedProps) {
 	const { t } = useTranslation("editor");
+	const exportMode = useMarkdownExportMode();
+	const expandEmbeds = exportMode?.expandEmbeds === true;
 	const [marksRevision, setMarksRevision] = useState(0);
 	/** Bumped when PDF viewer fills outline cache — forces location re-read. */
 	const [outlineTick, setOutlineTick] = useState(0);
@@ -225,7 +228,12 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 
 	if (state.kind === "loading") {
 		return (
-			<EmbedStatus compact message={t("embed.loading")} className={className} />
+			<EmbedStatus
+				compact
+				exportPending
+				message={t("embed.loading")}
+				className={className}
+			/>
 		);
 	}
 
@@ -302,13 +310,14 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 				</div>
 			) : null}
 
-			{/* Visual crop — capped so conversation can still scroll below */}
+			{/* Visual crop — capped in editor so conversation can still scroll below */}
 			{hasImage ? (
 				<img
 					src={`data:${ref.image?.mimeType || "image/png"};base64,${ref.image?.data}`}
 					alt=""
 					className={cn(
-						"max-h-40 w-full rounded border border-border/60 object-contain",
+						"w-full rounded border border-border/60 object-contain",
+						expandEmbeds ? "max-h-none" : "max-h-40",
 						hasQuote || (isVisual && hasComment) ? "mt-2" : "mt-1.5",
 					)}
 				/>

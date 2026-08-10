@@ -12,6 +12,7 @@ export type EditorLinkTemplate = {
 export type EditorContextMenuCapabilities = {
 	copy: boolean;
 	cut: boolean;
+	exportNote: boolean;
 	formatMarkdown: boolean;
 	insertLink: boolean;
 	paste: boolean;
@@ -19,10 +20,13 @@ export type EditorContextMenuCapabilities = {
 };
 
 export function editorContextMenuCapabilities({
+	exportAvailable,
 	headingRenameAvailable,
 	readOnly,
 	selectionExpanded,
 }: {
+	/** Desktop note export (PDF/PNG). False in browser preview. */
+	exportAvailable: boolean;
 	headingRenameAvailable: boolean;
 	readOnly: boolean;
 	selectionExpanded: boolean;
@@ -30,6 +34,7 @@ export function editorContextMenuCapabilities({
 	return {
 		copy: selectionExpanded,
 		cut: !readOnly && selectionExpanded,
+		exportNote: exportAvailable,
 		formatMarkdown: !readOnly,
 		insertLink: !readOnly,
 		paste: !readOnly,

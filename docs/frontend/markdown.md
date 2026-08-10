@@ -28,6 +28,7 @@ Plate WYSIWYG；用于普通笔记与论文 `NOTES.md`。磁盘上始终是标�
 - **代码块操作**：编辑态悬停或聚焦代码块时，右上角依次显示语言选择与复制按钮；只读预览只显示复制按钮。选择 Mermaid 语言后，源码下方显示实时预览。
 - **内嵌图**（见下表）。
 - **双链 / 嵌入**：见 [wiki.md](wiki.md)。
+- **导出 PDF / PNG**（桌面端）：工具栏分享按钮或右键「导出为 PDF / 图片…」。离屏只读渲染当前序列化内容（含未保存改动）。页面背景贴边；正文内边距对齐编辑器 `default`（`px-16 pt-4`，底边 `pb-10`）。默认完整展开 `![[…]]` 嵌入，就绪后用 `html-to-image` 截视觉层。**PDF**（`pdf-lib`）在位图上叠 **不可见可选中文字层**（DOM 测量 + Host `export_system_cjk_font`）与 **http(s)/mailto 链接注解**，再按 A4 分页；**PNG** 仍为纯位图。可选论文页眉、每页水印（logo + `muted-foreground`）。完整 PDF 附件嵌入为路径占位。默认水印见设置 → 通用。
 - **外部改盘**：无未存改动则重载；有未存则 toast；内容相等抑制自写回声。
 - **保存冲突**：写盘前比对上次落盘内容；磁盘已被外部改则中止并警告。
 
@@ -112,8 +113,11 @@ B --> C[End]
 | 路径 | 职责 |
 |---|---|
 | `src/components/editor/` | Plate 编辑器；`index.ts` 是唯一对外出口，内部分 `nodes/` `plugins/` `hooks/` `embeds/` `toolbar/` `overlays/` |
-| `src/components/editor/markdown-editor.tsx` | 编排容器：组合各 hook、keydown 派发与整体布局 |
+| `src/components/editor/markdown-editor.tsx` | 编排容器：组合各 hook、keydown 派发、导出入口与整体布局 |
 | `src/components/editor/hooks/` | 有状态逻辑：自动保存、双链编辑语义、补全菜单、右键菜单、选区发布 |
+| `src/components/editor/markdown-export-dialog.tsx` | 导出格式与选项对话框 |
+| `src/components/editor/markdown-export-surface.tsx` | 离屏只读导出渲染（export mode） |
+| `src/lib/markdown/export/` | 论文页眉解析、就绪等待、截图 / 可检索 PDF、保存 |
 | `src/components/editor/overlays/frontmatter-panel.tsx` | 可折叠 Properties / YAML frontmatter 编辑 |
 | `src/lib/markdown/frontmatter.ts` | frontmatter 围栏拆装与属性计数 |
 | `src/components/editor/overlays/toc-sidebar.tsx` | 基于 Plate TOC hooks 的悬浮目录、当前标题跟踪与跳转 |

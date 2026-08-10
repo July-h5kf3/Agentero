@@ -120,6 +120,7 @@ describe("Markdown editor context menu", () => {
 	it("keeps copy available in read-only notes and blocks mutations", () => {
 		expect(
 			editorContextMenuCapabilities({
+				exportAvailable: true,
 				headingRenameAvailable: false,
 				readOnly: true,
 				selectionExpanded: true,
@@ -127,6 +128,7 @@ describe("Markdown editor context menu", () => {
 		).toEqual({
 			copy: true,
 			cut: false,
+			exportNote: true,
 			formatMarkdown: false,
 			insertLink: false,
 			paste: false,
@@ -137,6 +139,7 @@ describe("Markdown editor context menu", () => {
 	it("enables editing actions while keeping heading rename contextual", () => {
 		expect(
 			editorContextMenuCapabilities({
+				exportAvailable: false,
 				headingRenameAvailable: true,
 				readOnly: false,
 				selectionExpanded: false,
@@ -144,6 +147,7 @@ describe("Markdown editor context menu", () => {
 		).toEqual({
 			copy: false,
 			cut: false,
+			exportNote: false,
 			formatMarkdown: true,
 			insertLink: true,
 			paste: true,
