@@ -44,6 +44,10 @@ export type DocViewLibraryProps = {
 /** Markdown / NOTES editor props. */
 export type DocViewEditorProps = {
 	fontSize: number;
+	/** CSS font-family stack; omit/undefined keeps app theme font. */
+	fontFamily?: string;
+	/** Unitless line-height for body text. */
+	lineHeight?: number;
 	showToolbar: boolean;
 	notesPlaceholder: string;
 	markdownPlaceholder: string;
@@ -179,6 +183,8 @@ export const DocView = memo(function DocView({
 						}
 						navigationIntent={tab.navigationIntent}
 						fontSize={editor.fontSize}
+						fontFamily={editor.fontFamily}
+						lineHeight={editor.lineHeight}
 						showToolbar={editor.showToolbar}
 						placeholder={
 							isNotes ? editor.notesPlaceholder : editor.markdownPlaceholder
