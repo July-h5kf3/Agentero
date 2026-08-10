@@ -524,7 +524,7 @@ AGENTS.md 要求「尽可能复用能力」，因此先调研了现成框架。�
 | 3 | sidecar 统一写入器（debounce + 原子写 + 自写抑制） | 低 | 治 400+ 次全量写与缓存损坏风险 | 部分：layout-translate debounce 完成（`36987514`）；原子写 + 自写抑制未做（与 watcher rename 行为耦合，需联调） |
 | 4 | 缓存命中跳过 `mergeCaptionsIntoHosts` + `layout-index.json` 重写 | 低 | 每次打开省一次无意义写 | 完成（`21863560`，缓存命中零写盘；merge 仍内存执行以保留算法热更新） |
 | 5 | watcher 忽略 `catalog.sqlite*` | 低 | 掐死自回声全量 `paper_list` | 完成（`caed3e6f`） |
-| 6 | `CatalogHandle` 进 State + 重命令改 `spawn_blocking` | 低 | 每个 catalog 命令省 5 次 `schema_version` 探测 | 未开始（需成对做 `spawn_blocking`，涉及 SQLite 连接线程模型，建议实机验证） |
+| 6 | `CatalogHandle` 进 State + 重命令改 `spawn_blocking` | 低 | 每个 catalog 命令省 5 次 `schema_version` 探测 | 暂缓：共享 `Mutex<Connection>` 会串行化 catalog 访问，且 `papers::*` 若嵌套 `ensure_catalog` 会死锁（非重入锁）；会话级「跳过 migrate 探测」缓存又有「db 中途被删重建→误跳过建表」的边缘情况。两者收益（省 open + 探测）有限，需实机验证并发与边界后再做 |
 | 7 | `CapsCache` 内存能力位 + 删 `collectPapersNeedingAssetDownload` | 中 | 消灭所有目录 walk | 完成：`CapsCache`（`ff5756be`）+ `job_papers_needing_assets` 查询取代前端树走（`58f5481d`/`9489ff1a`），谓词落入 `PaperCaps::needs_asset_download` 并有单测 |
 | 8 | `paper_open_bundle` 聚合命令 | 中 | T0 从 4 IPC → 1 IPC | 完成（`ac17af96`） |
 | 9 | `JobCenter` 内存队列 + `job:changed` 事件 + `governor` 限流 | 高 | 轮询消失，队列语义统一，S2 不再 429 | 完成：调度器（`61938b50`）、ParseBody / ParseRefs / LayoutAnalyze executor（`2952c686`）、per-kind 并发上限 + finish 后 drain（`aab07bd4`，§7.3）；在线引用以 `Semaphore(2)` 限流（`online.rs`）替代 `governor` |
