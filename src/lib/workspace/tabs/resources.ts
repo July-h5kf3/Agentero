@@ -253,6 +253,10 @@ export async function loadTabResources(
 	}
 
 	if (paperDir) {
+		const notesPath = notesPathForPaper(paperDir);
+		const notesSeedPromise = readVaultFile(notesPath).catch(
+			() => NOTES_PLACEHOLDER,
+		);
 		const meta = await loadPaperMetadata(paperDir, vaultPath);
 		const { pdfUrl: remotePdf, htmlUrl } = paperRemoteAssetsFromMetadata(meta);
 		const {
@@ -274,13 +278,7 @@ export async function loadTabResources(
 				.replace(/^\/+|\/+$/g, "");
 			if (rel) void loadPaperRefsAuto(vaultPath, rel).catch(() => {});
 		}
-		const notesPath = notesPathForPaper(paperDir);
-		let notesSeed = NOTES_PLACEHOLDER;
-		try {
-			notesSeed = await readVaultFile(notesPath);
-		} catch {
-			// keep placeholder
-		}
+		const notesSeed = await notesSeedPromise;
 
 		const openingPaperRoot =
 			normalizePathKey(path) === normalizePathKey(paperDir) ||
