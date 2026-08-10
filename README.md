@@ -45,7 +45,9 @@
 
 ### 桌面应用
 
-前往 [Agentero](https://agentero.poco-ai.com) 进行下载。
+前往 [Agentero](https://agentero.poco-ai.com) 或 [Releases](https://github.com/poco-ai/agentero/releases) 下载。
+
+Linux 需 Ubuntu **22.04+**（webkit2gtk 4.1）。详见 [安装文档](docs/usage/getting-started.md)。
 
 HomeBrew
 

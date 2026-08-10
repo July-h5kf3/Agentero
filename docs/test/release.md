@@ -37,6 +37,12 @@ CLI 的 `<rust-host>` 来自发布 runner 上 `rustc -vV` 的 `host` 字段，�
 
 CLI 压缩包内部统一包含名为 `agentero`（Windows 为 `agentero.exe`）的可执行文件；外部归档名使用 `agentero-cli-` 前缀，避免与桌面安装包混淆。
 
+### Linux 支持边界
+
+- CI：`ubuntu-22.04` / `ubuntu-24.04-arm`，依赖 `libwebkit2gtk-4.1-dev`。
+- 用户侧最低：Ubuntu **22.04+**（webkit2gtk 4.1）。20.04 不支持。
+- 用户文档：[`../usage/getting-started.md`](../usage/getting-started.md)（[#253](https://github.com/poco-ai/Agentero/issues/253)）。
+
 ### 应用内更新签名
 
 Tauri Updater 的签名密钥与 Apple Developer ID 签名、公证凭据无关。应用内置的公钥位于 `src-tauri/tauri.conf.json`，私钥绝不能提交或写入本机项目配置。

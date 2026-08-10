@@ -37,6 +37,7 @@ Agentero **不**内置模型，也**不**托管模型 API Key。通过 ACP 连�
 
 ## 使用边界（当前）
 
+- 桌面平台：macOS 12.0+；Linux 需 Ubuntu **22.04+**（webkit2gtk 4.1）。详见 [安装与首次使用](getting-started.md)。
 - 远程 Vault：macOS / Linux 客户端可用；Windows 客户端暂不支持打开远程 Vault。
 - Zotero Connector 与 Zotero 桌面端不能同时占用本机 `23119` 端口。
 - Connector 支持保存条目与 PDF 附件；网页快照等能力未覆盖。

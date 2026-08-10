@@ -4,6 +4,16 @@
 
 ## 准备工作
 
+### 系统要求
+
+| 平台 | 最低要求 |
+|---|---|
+| macOS | 12.0+ |
+| Windows | 发布页 x64 安装包 |
+| Linux | Ubuntu **22.04+**（需 **webkit2gtk 4.1**，包名常见 `libwebkit2gtk-4.1-0`） |
+
+Linux 桌面包在 Ubuntu 22.04 上构建。更旧的发行版（如 Ubuntu 20.04，仅有 webkit2gtk 4.0）请先升级系统。
+
 从 [发布页](https://github.com/poco-ai/agentero/releases) 或官网下载与系统匹配的桌面版本。macOS 也可用 Homebrew：
 
 ```bash
@@ -19,6 +29,10 @@ pnpm tauri dev
 ```
 
 首次使用**不需要**先安装 Zotero 或 Agent。只有在浏览器导入或 AI 辅助阅读时，才需要继续配置对应软件。
+
+### Linux：`libwebkit2gtk-4.1-0` 无法满足
+
+安装 `.deb` 时若缺少 `libwebkit2gtk-4.1-0`（常见于 Ubuntu 20.04）：请升级到 **22.04+**，或尝试发布页的 **AppImage**。见 [#253](https://github.com/poco-ai/Agentero/issues/253)。
 
 ## 创建第一个 Vault
 
