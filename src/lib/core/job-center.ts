@@ -123,6 +123,7 @@ export type JobChangedSnapshot = {
  */
 const PROJECTED_JOB_KINDS: Partial<Record<JobKind, BackgroundTaskKind>> = {
 	layoutAnalyze: "layout",
+	parseRefs: "parse",
 };
 
 function projectedTaskKind(kind: JobKind): BackgroundTaskKind | null {
@@ -130,8 +131,12 @@ function projectedTaskKind(kind: JobKind): BackgroundTaskKind | null {
 }
 
 function jobPanelTitle(kind: JobKind): string {
-	if (kind === "layoutAnalyze") return i18n.t("app:tasks.layoutAnalysis");
-	return i18n.t("app:tasks.layoutAnalysis");
+	switch (kind) {
+		case "parseRefs":
+			return i18n.t("app:tasks.parseRefs");
+		default:
+			return i18n.t("app:tasks.layoutAnalysis");
+	}
 }
 
 let projectionUnlisten: UnlistenFn | null = null;

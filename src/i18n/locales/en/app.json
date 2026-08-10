@@ -223,6 +223,7 @@
 		"layoutAnalysisDetail": "Detecting figures, tables, and text…",
 		"pdfParse": "Parse PDF body",
 		"pdfParseDetail": "Generating readable paper text…",
+		"parseRefs": "Parse references",
 		"downloadBytes": "{{phase}} · {{downloaded}} / {{total}}",
 		"downloadBytesUnknown": "{{phase}} · {{downloaded}}",
 		"batchProgress": "{{phase}} · {{current}} / {{total}}",
