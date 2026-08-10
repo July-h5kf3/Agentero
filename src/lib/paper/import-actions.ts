@@ -8,6 +8,7 @@ import {
 	enqueueBackgroundTask,
 	isBackgroundTaskCancelledError,
 } from "@/lib/core/background-tasks";
+import { invokeApi } from "@/lib/core/ipc";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import { collectPapersNeedingAssetDownload } from "@/lib/paper";
 import { currentLookupParentDir } from "@/lib/paper/library-actions";
@@ -142,10 +143,20 @@ export async function lookupSubmit(
 									.replace(/^\/+|\/+$/g, ""),
 							);
 					if (abs) {
-						enqueuePaperLayoutAnalysis({
-							paperAbsPath: abs,
-							paperLabel: paper.title?.trim() || paper.path,
-						});
+						const rel = toVaultRelative(vaultPath, abs)
+							.replace(/\\/g, "/")
+							.replace(/^\/+|\/+$/g, "");
+						void invokeApi(
+							"job_layout_analyze_enqueue",
+							{
+								args: {
+									vaultPath,
+									path: rel,
+									force: false,
+								},
+							},
+							{ fallback: "layout analysis enqueue failed" },
+						);
 					}
 				}
 

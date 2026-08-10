@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use tauri::State;
 
 use super::{
-    emit_job_changed, parse_lane, validate_job_paper, JobCenter, JobLane, JobSnapshot, StartOutcome,
+    emit_job_changed, parse_lane, validate_job_paper, JobCenter, JobLane, JobSnapshot, JobState,
+    StartOutcome,
 };
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +46,31 @@ pub struct JobListArgs {
     pub vault_path: Option<String>,
     #[serde(default)]
     pub path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobLayoutAnalyzeEnqueueArgs {
+    pub vault_path: String,
+    pub path: String,
+    #[serde(default)]
+    pub lane: Option<JobLane>,
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobReportArgs {
+    pub job_id: String,
+    #[serde(default)]
+    pub progress: Option<f32>,
+    #[serde(default)]
+    pub phase: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+    #[serde(default)]
+    pub state: Option<JobState>,
 }
 
 #[tauri::command]
@@ -114,6 +140,36 @@ pub async fn job_parse_body_enqueue(
 }
 
 #[tauri::command]
+pub async fn job_layout_analyze_enqueue(
+    app: tauri::AppHandle,
+    center: State<'_, JobCenter>,
+    args: JobLayoutAnalyzeEnqueueArgs,
+) -> Result<ApiResult<JobSnapshot>, String> {
+    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
+        Ok(valid) => valid,
+        Err(e) => return Ok(map_err(e)),
+    };
+    let snapshot = center
+        .enqueue_layout_analyze(&vault, &path, parse_lane(args.lane), args.force)
+        .await;
+    emit_job_changed(&app, snapshot.clone());
+
+    match center.try_start(&snapshot.id).await {
+        StartOutcome::Started(..) => {
+            let job_id = snapshot.id.clone();
+            let runner = center.handle();
+            tauri::async_runtime::spawn(async move {
+                runner.run_layout_analyze_job(app, job_id).await;
+            });
+        }
+        StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
+        StartOutcome::Waiting => {}
+    }
+
+    Ok(ApiResult::ok(snapshot))
+}
+
+#[tauri::command]
 pub async fn job_focus_paper(
     app: tauri::AppHandle,
     center: State<'_, JobCenter>,
@@ -136,6 +192,32 @@ pub async fn job_cancel(
     job_id: String,
 ) -> Result<ApiResult<bool>, String> {
     Ok(ApiResult::ok(center.cancel(&job_id).await))
+}
+
+#[tauri::command]
+pub async fn job_report(
+    app: tauri::AppHandle,
+    center: State<'_, JobCenter>,
+    args: JobReportArgs,
+) -> Result<ApiResult<JobSnapshot>, String> {
+    match center
+        .job_report(
+            &args.job_id,
+            args.progress,
+            args.phase,
+            args.error,
+            args.state,
+        )
+        .await
+    {
+        Some(snapshot) => {
+            emit_job_changed(&app, snapshot.clone());
+            Ok(ApiResult::ok(snapshot))
+        }
+        None => Ok(map_err(crate::core::error::AppError::message(
+            "job not found or not running",
+        ))),
+    }
 }
 
 #[tauri::command]

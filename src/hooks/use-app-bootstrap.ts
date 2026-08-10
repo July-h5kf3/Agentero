@@ -11,6 +11,7 @@ import { useVaultOpenRequest } from "@/hooks/use-vault-open-request";
 import i18n, { resolveLocale } from "@/i18n";
 import { isTauri } from "@/lib/core/tauri";
 import { refreshLibrary } from "@/lib/paper/library-store";
+import { initJobCenterExecutors } from "@/lib/pdf/layout/enqueue-paper-layout";
 import { applyDocumentChrome } from "@/lib/settings";
 import { initSettingsStore } from "@/lib/settings/react-store";
 import { setSettingsOpenState } from "@/lib/shell/ui-store";
@@ -118,5 +119,11 @@ export function useAppBootstrap(): void {
 		return () => {
 			unbind?.();
 		};
+	}, []);
+
+	// Start listening for renderer-executed JobCenter offers.
+	useEffect(() => {
+		if (!isTauri()) return;
+		initJobCenterExecutors();
 	}, []);
 }

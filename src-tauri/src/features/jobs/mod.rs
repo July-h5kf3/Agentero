@@ -9,6 +9,19 @@ use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 pub const JOB_CHANGED_EVENT: &str = "job:changed";
+pub const JOB_OFFER_EVENT: &str = "job:offer";
+
+const LAYOUT_ANALYZE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobOfferPayload {
+    pub job_id: String,
+    pub kind: JobKind,
+    pub vault_path: String,
+    pub paper_path: Option<String>,
+    pub force: bool,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -369,6 +382,55 @@ impl JobCenter {
         snapshot
     }
 
+    pub async fn enqueue_layout_analyze(
+        &self,
+        vault: impl Into<PathBuf>,
+        path: impl Into<String>,
+        lane: JobLane,
+        force: bool,
+    ) -> JobSnapshot {
+        let vault_path = normalize_vault_path(vault.into());
+        let paper_path = path.into();
+        let fingerprint = format!("layoutAnalyze:v1:force:{force}");
+        let key = JobKey {
+            kind: JobKind::LayoutAnalyze,
+            vault_path: vault_path.clone(),
+            paper_path: Some(paper_path.clone()),
+            fingerprint: fingerprint.clone(),
+        };
+
+        let mut inner = self.inner.lock().await;
+        if let Some(existing_id) = inner.active_keys.get(&key) {
+            if let Some(existing) = inner.jobs.get(existing_id) {
+                return existing.snapshot();
+            }
+        }
+
+        let id = JobId(uuid::Uuid::new_v4().to_string());
+        let job = Job {
+            id: id.clone(),
+            kind: JobKind::LayoutAnalyze,
+            lane,
+            vault_path,
+            paper_path: Some(paper_path),
+            fingerprint,
+            depends_on: Vec::new(),
+            dep_policy: DepPolicy::AllSucceeded,
+            attempts: 0,
+            state: JobState::Queued,
+            progress: Some(0.0),
+            phase: Some("queued".into()),
+            error: None,
+            force,
+            task_id: None,
+        };
+        let snapshot = job.snapshot();
+        inner.active_keys.insert(key, id.clone());
+        inner.lanes.push(lane, id.clone());
+        inner.jobs.insert(id, job);
+        snapshot
+    }
+
     pub async fn promote_paper(&self, vault: &Path, path: &str) -> Vec<JobSnapshot> {
         let vault = normalize_vault_path(vault.to_path_buf());
         let mut snapshots = Vec::new();
@@ -584,6 +646,71 @@ impl JobCenter {
         })
     }
 
+    /// Offer a renderer-executed layout analysis job to the frontend and wait
+    /// for a terminal `job_report`. The renderer runs the ONNX model and calls
+    /// back with progress / success / failure.
+    pub fn run_layout_analyze_job(
+        self,
+        app: tauri::AppHandle,
+        job_id: String,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+        Box::pin(async move {
+            let started = self.mark_running(&job_id).await;
+            let Some((snapshot, vault_path, paper_path, force, _)) = started else {
+                return;
+            };
+            emit_job_changed(&app, snapshot);
+
+            let offer = JobOfferPayload {
+                job_id: job_id.clone(),
+                kind: JobKind::LayoutAnalyze,
+                vault_path: vault_path.to_string_lossy().to_string(),
+                paper_path: Some(paper_path),
+                force,
+            };
+            let _ = app.emit(JOB_OFFER_EVENT, offer);
+
+            let terminal = self
+                .wait_for_terminal(&job_id, LAYOUT_ANALYZE_TIMEOUT)
+                .await;
+            let snapshot = match terminal {
+                Some(JobState::Succeeded) => {
+                    self.finish(
+                        &job_id,
+                        JobState::Succeeded,
+                        Some(100.0),
+                        Some("completed"),
+                        None,
+                    )
+                    .await
+                }
+                Some(JobState::Failed) => {
+                    let error = self.take_error(&job_id).await;
+                    self.finish(&job_id, JobState::Failed, None, Some("failed"), error)
+                        .await
+                }
+                Some(JobState::Cancelled) => {
+                    self.finish(&job_id, JobState::Cancelled, None, Some("cancelled"), None)
+                        .await
+                }
+                _ => {
+                    self.finish(
+                        &job_id,
+                        JobState::Failed,
+                        None,
+                        Some("failed"),
+                        Some("layout analyze report timeout".into()),
+                    )
+                    .await
+                }
+            };
+            if let Some(snapshot) = snapshot {
+                emit_job_changed(&app, snapshot);
+            }
+            self.wake_and_spawn_dependents(&app, &job_id).await;
+        })
+    }
+
     /// Wake `Queued` jobs depending on `finished_id` and spawn any that became
     /// runnable; emits `job:changed` for jobs that transitioned to `Skipped`.
     async fn wake_and_spawn_dependents(&self, app: &tauri::AppHandle, finished_id: &str) {
@@ -598,6 +725,9 @@ impl JobCenter {
                         match kind {
                             JobKind::ParseRefs => center2.run_parse_refs_job(app2, dep_id).await,
                             JobKind::ParseBody => center2.run_parse_body_job(app2, dep_id).await,
+                            JobKind::LayoutAnalyze => {
+                                center2.run_layout_analyze_job(app2, dep_id).await
+                            }
                             _ => {}
                         }
                     });
@@ -635,6 +765,68 @@ impl JobCenter {
         let snapshot = job.snapshot();
         release_active_key(&mut inner, &id);
         Some(snapshot)
+    }
+
+    /// Apply a progress or terminal-state report from the renderer executor.
+    /// Returns the updated snapshot when the job exists and is still running.
+    pub async fn job_report(
+        &self,
+        job_id: &str,
+        progress: Option<f32>,
+        phase: Option<String>,
+        error: Option<String>,
+        state: Option<JobState>,
+    ) -> Option<JobSnapshot> {
+        let mut inner = self.inner.lock().await;
+        let id = JobId(job_id.to_string());
+        let job = inner.jobs.get_mut(&id)?;
+        if job.state != JobState::Running {
+            return None;
+        }
+        if let Some(p) = progress {
+            job.progress = Some(p);
+        }
+        if let Some(phase) = phase {
+            job.phase = Some(phase);
+        }
+        if let Some(error) = error {
+            job.error = Some(error);
+        }
+        if let Some(state) = state {
+            job.state = state;
+        }
+        Some(job.snapshot())
+    }
+
+    async fn wait_for_terminal(
+        &self,
+        job_id: &str,
+        timeout: std::time::Duration,
+    ) -> Option<JobState> {
+        let start = std::time::Instant::now();
+        loop {
+            {
+                let inner = self.inner.lock().await;
+                let id = JobId(job_id.to_string());
+                let job = inner.jobs.get(&id)?;
+                if matches!(
+                    job.state,
+                    JobState::Succeeded | JobState::Failed | JobState::Cancelled
+                ) {
+                    return Some(job.state);
+                }
+            }
+            if start.elapsed() >= timeout {
+                return None;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    }
+
+    async fn take_error(&self, job_id: &str) -> Option<String> {
+        let mut inner = self.inner.lock().await;
+        let id = JobId(job_id.to_string());
+        inner.jobs.get_mut(&id)?.error.take()
     }
 
     #[cfg(test)]
@@ -1078,5 +1270,161 @@ mod tests {
             center.state_for_test(&dependent.0).await,
             Some(JobState::Skipped)
         );
+    }
+
+    #[tokio::test]
+    async fn enqueue_dedupes_active_layout_analyze_job() {
+        let center = JobCenter::new();
+        let first = center
+            .enqueue_layout_analyze(vault("dedupe-layout"), "papers/a", JobLane::Normal, false)
+            .await;
+        let duplicate = center
+            .enqueue_layout_analyze(vault("dedupe-layout"), "papers/a", JobLane::Normal, false)
+            .await;
+
+        assert_eq!(first.id, duplicate.id);
+        assert_eq!(first.kind, JobKind::LayoutAnalyze);
+        assert_eq!(first.fingerprint, "layoutAnalyze:v1:force:false");
+        assert_eq!(center.list(None, None).await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn layout_analyze_job_report_updates_progress_and_state() {
+        let center = JobCenter::new();
+        let snapshot = center
+            .enqueue_layout_analyze(vault("layout-report"), "papers/a", JobLane::Normal, false)
+            .await;
+        match center.try_start(&snapshot.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected Started, got {other:?}"),
+        }
+
+        let reported = center
+            .job_report(
+                &snapshot.id,
+                Some(42.0),
+                Some("analyzing".into()),
+                None,
+                None,
+            )
+            .await
+            .expect("report returned snapshot");
+        assert_eq!(reported.progress, Some(42.0));
+        assert_eq!(reported.phase.as_deref(), Some("analyzing"));
+        assert_eq!(reported.state, JobState::Running);
+
+        let terminal = center
+            .job_report(
+                &snapshot.id,
+                Some(100.0),
+                Some("completed".into()),
+                None,
+                Some(JobState::Succeeded),
+            )
+            .await
+            .expect("terminal report returned snapshot");
+        assert_eq!(terminal.state, JobState::Succeeded);
+        assert_eq!(terminal.progress, Some(100.0));
+    }
+
+    #[tokio::test]
+    async fn layout_analyze_job_report_fails_and_sets_error() {
+        let center = JobCenter::new();
+        let snapshot = center
+            .enqueue_layout_analyze(vault("layout-fail"), "papers/a", JobLane::Normal, false)
+            .await;
+        center.try_start(&snapshot.id).await;
+
+        let reported = center
+            .job_report(
+                &snapshot.id,
+                None,
+                None,
+                Some("onnx failed".into()),
+                Some(JobState::Failed),
+            )
+            .await
+            .expect("failed report returned snapshot");
+        assert_eq!(reported.state, JobState::Failed);
+        assert_eq!(reported.error.as_deref(), Some("onnx failed"));
+    }
+
+    #[tokio::test]
+    async fn layout_analyze_job_report_cancelled() {
+        let center = JobCenter::new();
+        let snapshot = center
+            .enqueue_layout_analyze(vault("layout-cancel"), "papers/a", JobLane::Normal, false)
+            .await;
+        center.try_start(&snapshot.id).await;
+
+        let reported = center
+            .job_report(
+                &snapshot.id,
+                None,
+                Some("cancelled".into()),
+                None,
+                Some(JobState::Cancelled),
+            )
+            .await
+            .expect("cancelled report returned snapshot");
+        assert_eq!(reported.state, JobState::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn layout_analyze_job_report_ignored_when_not_running() {
+        let center = JobCenter::new();
+        let snapshot = center
+            .enqueue_layout_analyze(vault("layout-ignore"), "papers/a", JobLane::Normal, false)
+            .await;
+        assert!(center
+            .job_report(&snapshot.id, Some(50.0), None, None, None)
+            .await
+            .is_none());
+
+        center.try_start(&snapshot.id).await;
+        center
+            .finish(&snapshot.id, JobState::Failed, None, Some("failed"), None)
+            .await;
+        assert!(center
+            .job_report(&snapshot.id, Some(75.0), None, None, None)
+            .await
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn layout_analyze_job_waits_for_terminal_state() {
+        let center = JobCenter::new();
+        let snapshot = center
+            .enqueue_layout_analyze(vault("layout-wait"), "papers/a", JobLane::Normal, false)
+            .await;
+        center.try_start(&snapshot.id).await;
+
+        let reporter = center.handle();
+        let id = snapshot.id.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            reporter
+                .job_report(&id, None, None, None, Some(JobState::Succeeded))
+                .await;
+        });
+
+        let terminal = center
+            .wait_for_terminal(&snapshot.id, std::time::Duration::from_secs(5))
+            .await;
+        assert_eq!(terminal, Some(JobState::Succeeded));
+    }
+
+    #[tokio::test]
+    async fn layout_analyze_job_times_out_waiting_for_terminal_state() {
+        let center = JobCenter::new();
+        let snapshot = center
+            .enqueue_layout_analyze(vault("layout-timeout"), "papers/a", JobLane::Normal, false)
+            .await;
+        center.try_start(&snapshot.id).await;
+
+        let terminal = center
+            .wait_for_terminal(&snapshot.id, std::time::Duration::from_millis(100))
+            .await;
+        assert_eq!(terminal, None);
     }
 }
