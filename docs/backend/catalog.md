@@ -17,10 +17,12 @@
 - 主键：论文 `path`（Vault 相对路径）
 - 字段以 `features/catalog/schema.rs` 为准
 - `tags_json`：字符串或 `{name,color}`（Apple 8 色）
+- `paper_list` 对前端 Library 返回按 `id` 去重的视图：同一逻辑论文若因历史原因出现在多个路径，只保留一条（优先存在磁盘的路径，其次 `updated_at` 最新、路径最短/字典序最小）
 - `paper_rescan`：盘上有、库内无则补齐
 - 删除：回收站快照；恢复 upsert
 - 连接启用 WAL + `busy_timeout`，写入不阻塞列表读取
 - `pdf_page_counts`：PDF 页数缓存表（随移动/删除同步），阅读热力图不再整文件打开 PDF 数页
+- 重复行检测与修复：`catalog::papers::find_duplicates` / `repair_duplicates`，并在 Vault Doctor 中暴露
 
 ## 命令（摘要）
 

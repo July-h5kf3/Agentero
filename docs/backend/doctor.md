@@ -8,9 +8,10 @@ Doctor 聚合本地 Vault 的只读完整性检查，并为论文别名、双链
 
 1. Vault 目录结构（`papers/`、`notes/`、`plans/`、`.agentero/`）；
 2. `.agentero/catalog.sqlite` 是否存在且 schema 与当前版本一致；
-3. 与桌面导航共用 `WikiIndex::check_links` 的双链语义结果；
-4. Catalog 中每篇 `papers/**/NOTES.md` 的 frontmatter aliases；
-5. `papers/**/marks/*.json` 视觉批注格式（旧版 `agent-trace` → `visual` v2）。
+3. Catalog 中是否存在重复行：同一 `id` 出现在多条记录，或同一 `path` 出现多次（后者为 schema 完整性校验）；
+4. 与桌面导航共用 `WikiIndex::check_links` 的双链语义结果；
+5. Catalog 中每篇 `papers/**/NOTES.md` 的 frontmatter aliases；
+6. `papers/**/marks/*.json` 视觉批注格式（旧版 `agent-trace` → `visual` v2）。
 
 一次检查不会创建目录、迁移 Catalog 或修改 Markdown；Catalog 以只读 SQLite connection 打开。
 
@@ -24,6 +25,15 @@ Doctor 聚合本地 Vault 的只读完整性检查，并为论文别名、双链
 重复的正式标题只告警，不修改 Catalog；编辑标题 alias 也不会回写 Catalog。
 
 ## 安全修复
+
+### Catalog 重复行
+
+`doctor_fix_catalog_duplicates` / CLI `agentero doctor fix catalog-duplicates`：
+
+- 对每组重复 `id`，按「路径存在磁盘 > `updated_at` 最新 > 路径最短 > 字典序最小」保留一条 canonical 记录，删除其余行；
+- 对重复 `path`（schema 完整性校验），保留 `updated_at` 最新的一条；
+- 返回 `removedRows`、`removedPaths`、`keptPaths`；
+- 桌面端在 Doctor 设置页的 Catalog 区显示「去重」按钮。
 
 ### 论文 aliases
 
@@ -71,8 +81,8 @@ Doctor 聚合本地 Vault 的只读完整性检查，并为论文别名、双链
 ## 入口
 
 - 桌面：设置 → 知识库诊断；远程 Vault 当前显示不可用。
-- CLI：`agentero doctor`、`agentero doctor fix aliases`、`agentero doctor fix visual-marks`、`agentero -y doctor fix …`（CLI 诊断同样尊重 `.agentero/doctor.json` 忽略列表）。
-- Host：`doctor_check`、`doctor_apply_aliases`、`doctor_ignore_aliases`、`doctor_set_dirty_paths`、`doctor_plan_wikilinks`、`doctor_apply_wikilinks`、`doctor_apply_visual_marks`。
+- CLI：`agentero doctor`、`agentero doctor fix aliases`、`agentero doctor fix visual-marks`、`agentero doctor fix catalog-duplicates`、`agentero -y doctor fix …`（CLI 诊断同样尊重 `.agentero/doctor.json` 忽略列表）。
+- Host：`doctor_check`、`doctor_apply_aliases`、`doctor_ignore_aliases`、`doctor_set_dirty_paths`、`doctor_plan_wikilinks`、`doctor_apply_wikilinks`、`doctor_apply_visual_marks`、`doctor_fix_catalog_duplicates`。
 
 ![Vault Doctor 设置页](../assets/doctor-settings.png)
 
