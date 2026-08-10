@@ -38,7 +38,6 @@ import {
 import {
 	getVaultPath,
 	refreshTree,
-	refreshTreeQuiet,
 	setTreeSelectedPath,
 	vaultStore,
 } from "@/lib/vault/store";
@@ -309,7 +308,7 @@ export function openTab(
 
 		const vault = getVaultPath();
 		if (res.didDownloadAssets && vault) {
-			await refreshTreeQuiet(vault);
+			await refreshTree(vault, { quiet: true });
 		}
 	})();
 }
