@@ -19,6 +19,8 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
+use tokio::sync::{Mutex, Notify};
 
 pub const SIDECAR_FILE: &str = "agentero-cite.json";
 pub const SCHEMA_VERSION: u32 = 1;
@@ -106,6 +108,60 @@ pub struct RefDraft {
     pub source: &'static str,
 }
 
+struct PreparedParseRefs {
+    vault: PathBuf,
+    path_rel: String,
+    doi: Option<String>,
+    arxiv: Option<String>,
+    files: Vec<PathBuf>,
+    fingerprint: String,
+    sidecar_path: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ParseRefsKey {
+    vault: PathBuf,
+    path_rel: String,
+    online_enabled: bool,
+}
+
+type SharedParseRefsResult = Result<CiteSidecar, String>;
+
+struct ParseRefsWaiter {
+    result: Mutex<Option<SharedParseRefsResult>>,
+    notify: Notify,
+}
+
+impl ParseRefsWaiter {
+    fn new() -> Self {
+        Self {
+            result: Mutex::new(None),
+            notify: Notify::new(),
+        }
+    }
+
+    async fn wait(&self) -> SharedParseRefsResult {
+        loop {
+            let notified = self.notify.notified();
+            if let Some(result) = self.result.lock().await.clone() {
+                return result;
+            }
+            notified.await;
+        }
+    }
+}
+
+struct ParseRefsInflight {
+    entries: Mutex<HashMap<ParseRefsKey, Arc<ParseRefsWaiter>>>,
+}
+
+fn refs_inflight() -> &'static ParseRefsInflight {
+    static INFLIGHT: OnceLock<ParseRefsInflight> = OnceLock::new();
+    INFLIGHT.get_or_init(|| ParseRefsInflight {
+        entries: Mutex::new(HashMap::new()),
+    })
+}
+
 /// Parse references for one paper folder and persist the sidecar.
 /// Never fails on "no references found" — that is an empty, valid sidecar.
 pub async fn parse_paper_refs(
@@ -114,6 +170,30 @@ pub async fn parse_paper_refs(
     online_enabled: bool,
     force: bool,
 ) -> Result<CiteSidecar, AppError> {
+    let prepared = prepare_parse_refs(vault, path_raw, online_enabled)?;
+    if !force {
+        if let Some(existing) = read_sidecar(&prepared.sidecar_path) {
+            if existing.schema_version == SCHEMA_VERSION
+                && existing.source.fingerprint == prepared.fingerprint
+            {
+                return Ok(existing);
+            }
+        }
+    }
+
+    let key = ParseRefsKey {
+        vault: prepared.vault.clone(),
+        path_rel: prepared.path_rel.clone(),
+        online_enabled,
+    };
+    run_parse_refs_singleflight(key, prepared, online_enabled).await
+}
+
+fn prepare_parse_refs(
+    vault: &Path,
+    path_raw: &str,
+    online_enabled: bool,
+) -> Result<PreparedParseRefs, AppError> {
     let path_rel = crate::core::fs::sanitize_vault_rel(path_raw)
         .map_err(|_| AppError::message("invalid paper path"))?;
     let paper_dir = vault.join(&path_rel);
@@ -131,24 +211,72 @@ pub async fn parse_paper_refs(
         .filter(|s| !s.trim().is_empty());
 
     let files = collect_ref_files(&paper_dir);
-    let fp = fingerprint(doi.as_deref(), arxiv.as_deref(), online_enabled, &files);
+    let fingerprint = fingerprint(doi.as_deref(), arxiv.as_deref(), online_enabled, &files);
     let sidecar_path = paper_dir.join("source").join(SIDECAR_FILE);
-    if !force {
-        if let Some(existing) = read_sidecar(&sidecar_path) {
-            if existing.schema_version == SCHEMA_VERSION && existing.source.fingerprint == fp {
-                return Ok(existing);
-            }
+    Ok(PreparedParseRefs {
+        vault: vault.to_path_buf(),
+        path_rel,
+        doi,
+        arxiv,
+        files,
+        fingerprint,
+        sidecar_path,
+    })
+}
+
+async fn run_parse_refs_singleflight(
+    key: ParseRefsKey,
+    prepared: PreparedParseRefs,
+    online_enabled: bool,
+) -> Result<CiteSidecar, AppError> {
+    let (waiter, should_run) = {
+        let inflight = refs_inflight();
+        let mut entries = inflight.entries.lock().await;
+        if let Some(existing) = entries.get(&key) {
+            (existing.clone(), false)
+        } else {
+            let waiter = Arc::new(ParseRefsWaiter::new());
+            entries.insert(key.clone(), waiter.clone());
+            (waiter, true)
         }
+    };
+
+    if should_run {
+        let worker_waiter = waiter.clone();
+        tauri::async_runtime::spawn(async move {
+            let shared_result = parse_paper_refs_prepared(prepared, online_enabled)
+                .await
+                .map_err(|e| e.to_string());
+            *worker_waiter.result.lock().await = Some(shared_result);
+            worker_waiter.notify.notify_waiters();
+
+            let inflight = refs_inflight();
+            let mut entries = inflight.entries.lock().await;
+            if entries
+                .get(&key)
+                .is_some_and(|current| Arc::ptr_eq(current, &worker_waiter))
+            {
+                entries.remove(&key);
+            }
+        });
     }
 
+    waiter.wait().await.map_err(AppError::message)
+}
+
+async fn parse_paper_refs_prepared(
+    prepared: PreparedParseRefs,
+    online_enabled: bool,
+) -> Result<CiteSidecar, AppError> {
     let mut messages = Vec::new();
-    let (mut drafts, local_mode, numbered) = parse_local(&files, &mut messages);
+    let (mut drafts, local_mode, numbered) = parse_local(&prepared.files, &mut messages);
 
     let mut provider: Option<&'static str> = None;
     let mut enriched: Vec<usize> = Vec::new();
     let mut online_only = false;
-    if online_enabled && (doi.is_some() || arxiv.is_some()) {
-        let outcome = online::fetch_references(doi.as_deref(), arxiv.as_deref()).await;
+    if online_enabled && (prepared.doi.is_some() || prepared.arxiv.is_some()) {
+        let outcome =
+            online::fetch_references(prepared.doi.as_deref(), prepared.arxiv.as_deref()).await;
         messages.extend(outcome.messages);
         if let Some(p) = outcome.provider {
             provider = Some(p);
@@ -188,20 +316,20 @@ pub async fn parse_paper_refs(
         })
         .collect();
 
-    let catalog = papers::list_all(vault).unwrap_or_default();
-    attach_local_matches(&mut citations, &catalog, &path_rel);
+    let catalog = papers::list_all(&prepared.vault).unwrap_or_default();
+    attach_local_matches(&mut citations, &catalog, &prepared.path_rel);
 
     let sidecar = CiteSidecar {
         schema_version: SCHEMA_VERSION,
         source: CiteSource {
             mode,
             generated_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-            fingerprint: fp,
+            fingerprint: prepared.fingerprint,
         },
         citations,
         messages,
     };
-    write_sidecar(&sidecar_path, &sidecar)?;
+    write_sidecar(&prepared.sidecar_path, &sidecar)?;
     Ok(sidecar)
 }
 
