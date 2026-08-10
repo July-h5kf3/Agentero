@@ -10,20 +10,99 @@ use liteparse::config::{ImageMode, LiteParseConfig, OutputFormat};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use liteparse::LiteParse;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use std::process::Stdio;
+use std::sync::{Arc, Mutex, OnceLock};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use std::time::Duration;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 const PAPER_MD: &str = "PAPER.md";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PARSE_WORKER_ARG: &str = "--agentero-internal-pdf-parse-worker";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PARSE_TIMEOUT: Duration = Duration::from_secs(120);
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+const MAX_CONCURRENT_PDF_PARSE: usize = 2;
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[derive(Debug)]
+struct PdfParseAdmission {
+    key: PathBuf,
+    _permit: OwnedSemaphorePermit,
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+impl Drop for PdfParseAdmission {
+    fn drop(&mut self) {
+        if let Ok(mut in_flight) = pdf_parse_in_flight().lock() {
+            in_flight.remove(&self.key);
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn pdf_parse_limiter() -> &'static Arc<Semaphore> {
+    static LIMITER: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    LIMITER.get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_PDF_PARSE)))
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn pdf_parse_in_flight() -> &'static Mutex<HashSet<PathBuf>> {
+    static IN_FLIGHT: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
+    IN_FLIGHT.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn pdf_parse_key(pdf_path: &Path) -> PathBuf {
+    fs::canonicalize(pdf_path).unwrap_or_else(|_| pdf_path.to_path_buf())
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+async fn acquire_pdf_parse_permit(task_id: Option<&str>) -> Result<OwnedSemaphorePermit, AppError> {
+    loop {
+        if pdf_parse_task_is_cancelled(task_id) {
+            return Err(AppError::message("background task cancelled"));
+        }
+        match pdf_parse_limiter().clone().try_acquire_owned() {
+            Ok(permit) => return Ok(permit),
+            Err(tokio::sync::TryAcquireError::NoPermits) => {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Err(tokio::sync::TryAcquireError::Closed) => {
+                return Err(AppError::message("PDF parse limiter closed"));
+            }
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+async fn enter_pdf_parse(
+    pdf_path: &Path,
+    task_id: Option<&str>,
+) -> Result<Option<PdfParseAdmission>, AppError> {
+    let permit = acquire_pdf_parse_permit(task_id).await?;
+    if pdf_parse_task_is_cancelled(task_id) {
+        return Err(AppError::message("background task cancelled"));
+    }
+    let key = pdf_parse_key(pdf_path);
+    let mut in_flight = pdf_parse_in_flight()
+        .lock()
+        .map_err(|_| AppError::message("PDF parse in-flight set poisoned"))?;
+    if !in_flight.insert(key.clone()) {
+        return Ok(None);
+    }
+    Ok(Some(PdfParseAdmission {
+        key,
+        _permit: permit,
+    }))
+}
 
 #[derive(Debug, Default, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -119,6 +198,20 @@ async fn parse_paper_body_inner(
     let Some(pdf_path) = caps.pdf_path else {
         out.messages.push("skip: no local PDF".into());
         return out;
+    };
+
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    let _admission = match enter_pdf_parse(&pdf_path, task_id).await {
+        Ok(Some(admission)) => admission,
+        Ok(None) => {
+            out.messages
+                .push("skip: PDF parse already in flight".into());
+            return out;
+        }
+        Err(e) => {
+            out.messages.push(format!("liteparse failed: {e}"));
+            return out;
+        }
     };
 
     match run_liteparse_markdown(&pdf_path, task_id).await {
@@ -471,6 +564,36 @@ mod tests {
                 serde_json::to_value(response).unwrap()
             );
         }
+    }
+
+    #[tokio::test]
+    async fn pdf_parse_admission_rejects_duplicate_until_guard_drops() {
+        let pdf_path =
+            std::env::temp_dir().join(format!("pdf-parse-admission-{}.pdf", uuid::Uuid::new_v4()));
+
+        let first = enter_pdf_parse(&pdf_path, None)
+            .await
+            .unwrap()
+            .expect("first parse should enter admission");
+        let duplicate = enter_pdf_parse(&pdf_path, None).await.unwrap();
+
+        assert!(duplicate.is_none());
+
+        drop(first);
+
+        let next = enter_pdf_parse(&pdf_path, None).await.unwrap();
+        assert!(next.is_some());
+    }
+
+    #[tokio::test]
+    async fn cancelled_task_does_not_enter_pdf_parse_admission() {
+        let task_id = format!("pdf-parse-test-{}", uuid::Uuid::new_v4());
+        crate::features::agent::background_tasks::cancel(&task_id);
+
+        let result = enter_pdf_parse(Path::new("missing-test-input.pdf"), Some(&task_id)).await;
+
+        crate::features::agent::background_tasks::finish(&task_id);
+        assert_eq!(result.unwrap_err().to_string(), "background task cancelled");
     }
 
     #[tokio::test]
