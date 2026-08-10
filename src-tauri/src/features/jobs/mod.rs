@@ -236,6 +236,54 @@ impl JobCenter {
         snapshot
     }
 
+    pub async fn enqueue_parse_body(
+        &self,
+        vault: impl Into<PathBuf>,
+        path: impl Into<String>,
+        lane: JobLane,
+        force: bool,
+    ) -> JobSnapshot {
+        let vault_path = normalize_vault_path(vault.into());
+        let paper_path = path.into();
+        let fingerprint = format!("parseBody:v1:force:{force}");
+        let key = JobKey {
+            kind: JobKind::ParseBody,
+            vault_path: vault_path.clone(),
+            paper_path: Some(paper_path.clone()),
+            fingerprint: fingerprint.clone(),
+        };
+
+        let mut inner = self.inner.lock().await;
+        if let Some(existing_id) = inner.active_keys.get(&key) {
+            if let Some(existing) = inner.jobs.get(existing_id) {
+                return existing.snapshot();
+            }
+        }
+
+        let id = JobId(uuid::Uuid::new_v4().to_string());
+        let job = Job {
+            id: id.clone(),
+            kind: JobKind::ParseBody,
+            lane,
+            vault_path,
+            paper_path: Some(paper_path),
+            fingerprint,
+            depends_on: Vec::new(),
+            dep_policy: DepPolicy::AllSucceeded,
+            attempts: 0,
+            state: JobState::Queued,
+            progress: Some(0.0),
+            phase: Some("queued".into()),
+            error: None,
+            force,
+        };
+        let snapshot = job.snapshot();
+        inner.active_keys.insert(key, id.clone());
+        inner.lanes.push(lane, id.clone());
+        inner.jobs.insert(id, job);
+        snapshot
+    }
+
     pub async fn promote_paper(&self, vault: &Path, path: &str) -> Vec<JobSnapshot> {
         let vault = normalize_vault_path(vault.to_path_buf());
         let mut snapshots = Vec::new();
@@ -312,6 +360,51 @@ impl JobCenter {
                 .await
             }
             Err(e) => {
+                self.finish(
+                    &job_id,
+                    JobState::Failed,
+                    None,
+                    Some("failed"),
+                    Some(e.to_string()),
+                )
+                .await
+            }
+        };
+        if let Some(snapshot) = snapshot {
+            emit_job_changed(&app, snapshot);
+        }
+    }
+
+    pub async fn run_parse_body_job(self, app: tauri::AppHandle, job_id: String) {
+        let started = self.mark_running(&job_id).await;
+        let Some((snapshot, vault, path, force)) = started else {
+            return;
+        };
+        emit_job_changed(&app, snapshot);
+
+        let result = crate::features::import::pdf_parse::parse_paper_body(
+            crate::features::import::pdf_parse::PaperParseBodyArgs {
+                vault_path: vault.to_string_lossy().to_string(),
+                path,
+                force,
+                task_id: Some(job_id.clone()),
+            },
+        )
+        .await;
+        let snapshot = match result {
+            Ok(_) => {
+                crate::features::agent::background_tasks::finish(&job_id);
+                self.finish(
+                    &job_id,
+                    JobState::Succeeded,
+                    Some(100.0),
+                    Some("completed"),
+                    None,
+                )
+                .await
+            }
+            Err(e) => {
+                crate::features::agent::background_tasks::finish(&job_id);
                 self.finish(
                     &job_id,
                     JobState::Failed,
@@ -442,6 +535,22 @@ mod tests {
             .await;
 
         assert_eq!(first.id, duplicate.id);
+        assert_eq!(center.list(None, None).await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn enqueue_dedupes_active_parse_body_job() {
+        let center = JobCenter::new();
+        let first = center
+            .enqueue_parse_body(vault("dedupe-body"), "papers/a", JobLane::Normal, false)
+            .await;
+        let duplicate = center
+            .enqueue_parse_body(vault("dedupe-body"), "papers/a", JobLane::Normal, false)
+            .await;
+
+        assert_eq!(first.id, duplicate.id);
+        assert_eq!(first.kind, JobKind::ParseBody);
+        assert_eq!(first.fingerprint, "parseBody:v1:force:false");
         assert_eq!(center.list(None, None).await.len(), 1);
     }
 

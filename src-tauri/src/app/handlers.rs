@@ -30,6 +30,7 @@ macro_rules! common_commands {
             crate::features::agent::commands::agent_cancel_run,
             crate::features::agent::background_commands::background_task_cancel,
             crate::features::jobs::commands::job_parse_refs_enqueue,
+            crate::features::jobs::commands::job_parse_body_enqueue,
             crate::features::jobs::commands::job_focus_paper,
             crate::features::jobs::commands::job_cancel,
             crate::features::jobs::commands::job_list,

@@ -18,6 +18,17 @@ pub struct JobParseRefsEnqueueArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct JobParseBodyEnqueueArgs {
+    pub vault_path: String,
+    pub path: String,
+    #[serde(default)]
+    pub lane: Option<JobLane>,
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JobFocusPaperArgs {
     pub vault_path: String,
     pub path: String,
@@ -51,6 +62,30 @@ pub async fn job_parse_refs_enqueue(
     let runner = center.handle();
     tauri::async_runtime::spawn(async move {
         runner.run_parse_refs_job(app, job_id).await;
+    });
+
+    Ok(ApiResult::ok(snapshot))
+}
+
+#[tauri::command]
+pub async fn job_parse_body_enqueue(
+    app: tauri::AppHandle,
+    center: State<'_, JobCenter>,
+    args: JobParseBodyEnqueueArgs,
+) -> Result<ApiResult<JobSnapshot>, String> {
+    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
+        Ok(valid) => valid,
+        Err(e) => return Ok(map_err(e)),
+    };
+    let snapshot = center
+        .enqueue_parse_body(&vault, &path, parse_lane(args.lane), args.force)
+        .await;
+    emit_job_changed(&app, snapshot.clone());
+
+    let job_id = snapshot.id.clone();
+    let runner = center.handle();
+    tauri::async_runtime::spawn(async move {
+        runner.run_parse_body_job(app, job_id).await;
     });
 
     Ok(ApiResult::ok(snapshot))
