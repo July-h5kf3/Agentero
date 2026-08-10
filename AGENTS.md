@@ -28,14 +28,14 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - 优先做小而聚焦的改动，避免无关重构。
 - 保持 local-first：不要引入私有存储作为事实来源。
 - 高内聚、低耦合。
-- 能复用能力，避免重复造轮子。
+- 尽可能能复用能力，避免重复造轮子。
 - 未经明确确认，不要覆盖用户手写的 Vault 文件。
 - 编辑或生成 Markdown 时保留 Obsidian 兼容的双链文本（`[[...]]`）。
-- Agent 集成采用 BYOA：Agentero 只配置如何启动本机 ACP-compatible Agent，不要求用户在 Agentero 内填写模型 API Key。
 - UI 保持简约：图标按钮必须有可访问名称和 Tooltip；避免常驻解释文案。操作失败用 `notifyError` Toast，不在侧栏 header 挂常驻错误条。
 - 国际化（i18n）：所有面向用户文案必须经 `t()` 走 `react-i18next`。en 源语言 → 同步 `zh-CN`（`src/i18n/locales/`）。详见 [docs/frontend/shell.md](docs/frontend/shell.md)。
 - 修改后需同步更新相关文档，并检查 Roadmap 和 Todo。
 - 如果修改了 Template 下的 Skill，需要对应更新版本号。
+- 修改完成后，把当次相关的改动按照 commit 部分的要求提交。
 
 ## 常用命令
 
@@ -69,11 +69,6 @@ cargo test -p agentero-cli
 | **Bug 复盘** | 历史 Bug 分析（不删除） | [docs/bug_fix/](docs/bug_fix/) |
 
 约定：已实现按功能写在 `docs/frontend/` / `docs/backend/`；未实现草稿在 `docs/development/`。
-
-## 文档站与发布
-
-- 文档站使用 [MkDocs](https://www.mkdocs.org/) 与 Material for MkDocs 主题。
-- `.github/workflows/docs.yml` 仅在 `main` 的文档相关变更后构建并部署到 `gh-pages` 分支。
 
 ## Commit
 
