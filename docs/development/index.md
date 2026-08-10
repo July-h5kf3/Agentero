@@ -20,6 +20,7 @@
 | 文档 | 主题 |
 |---|---|
 | [plaza.md](plaza.md) | 广场（Cool Papers / 推荐 / 播客） |
+| [usage-analytics.md](usage-analytics.md) | \#239 使用记录总结：`.agentero/usage.sqlite` 事件与画像、Agent 习惯 context 三层接入、继续阅读 / 周回顾 / 库内推荐 |
 | [bundled-cli.md](bundled-cli.md) | 桌面安装包内置 CLI、命令行打开 Vault 与跨平台 PATH 策略 |
 | [zotero-word-integration.md](zotero-word-integration.md) | 官方 Zotero Word 插件 provider 兼容、文档迁移与平台实现评估 |
 | [mark-cli-roadmap.md](mark-cli-roadmap.md) | \#170 阅读标注**内置进 CLI**（方案/命令面/边界）+ 基础→上层→Skill；与 [bundled-cli](bundled-cli.md) 分发衔接 |
