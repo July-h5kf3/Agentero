@@ -197,6 +197,22 @@ struct JobCenterInner {
     jobs: HashMap<JobId, Job>,
     active_keys: HashMap<JobKey, JobId>,
     lanes: LaneQueues,
+    /// Number of currently `Running` jobs per kind, used to enforce the
+    /// per-kind concurrency caps from paper-pipeline-orchestration.md §7.3.
+    running_by_kind: HashMap<JobKind, usize>,
+}
+
+/// Per-kind concurrency cap (§7.3). `usize::MAX` = uncapped at the JobCenter
+/// level (the kind is either not yet scheduled here or throttled elsewhere).
+fn kind_concurrency(kind: JobKind) -> usize {
+    match kind {
+        JobKind::ParseBody => 1,
+        JobKind::LayoutAnalyze => 1,
+        JobKind::ParseRefs => 2,
+        JobKind::DownloadAssets => 3,
+        JobKind::LayoutTranslate => 2,
+        JobKind::PageCount | JobKind::WikiReindex => usize::MAX,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -263,7 +279,9 @@ fn mark_running_locked(
     let paper_path = job.paper_path.clone()?;
     let force = job.force;
     let task_id = job.task_id.clone();
+    let kind = job.kind;
     inner.lanes.remove(id);
+    *inner.running_by_kind.entry(kind).or_insert(0) += 1;
     Some((snapshot, vault_path, paper_path, force, task_id))
 }
 
@@ -510,12 +528,23 @@ impl JobCenter {
                 release_active_key(&mut inner, &id);
                 StartOutcome::Skipped(snapshot)
             }
-            DepsReadiness::Ready => match mark_running_locked(&mut inner, &id) {
-                Some((snapshot, vault, path, force, task_id)) => {
-                    StartOutcome::Started(snapshot, vault, path, force, task_id)
+            DepsReadiness::Ready => {
+                let Some(kind) = inner.jobs.get(&id).map(|job| job.kind) else {
+                    return StartOutcome::Waiting;
+                };
+                let running = inner.running_by_kind.get(&kind).copied().unwrap_or(0);
+                if running >= kind_concurrency(kind) {
+                    // Kind is at its concurrency cap; stay queued until a slot
+                    // frees and the post-finish drain re-tries this job.
+                    return StartOutcome::Waiting;
                 }
-                None => StartOutcome::Waiting,
-            },
+                match mark_running_locked(&mut inner, &id) {
+                    Some((snapshot, vault, path, force, task_id)) => {
+                        StartOutcome::Started(snapshot, vault, path, force, task_id)
+                    }
+                    None => StartOutcome::Waiting,
+                }
+            }
         }
     }
 
@@ -736,6 +765,65 @@ impl JobCenter {
                 StartOutcome::Waiting => {}
             }
         }
+        self.drain_and_spawn(app).await;
+    }
+
+    /// Start any `Queued` job whose dependencies are ready and whose kind has
+    /// a free concurrency slot, spawning its runner. Runs after every finish so
+    /// a freed slot progresses the queue (lane order: focus, normal, idle).
+    async fn drain_and_spawn(&self, app: &tauri::AppHandle) {
+        loop {
+            let candidate = {
+                let inner = self.inner.lock().await;
+                let mut found = None;
+                'outer: for queue in [&inner.lanes.focus, &inner.lanes.normal, &inner.lanes.idle] {
+                    for id in queue {
+                        let Some(job) = inner.jobs.get(id) else {
+                            continue;
+                        };
+                        if job.state != JobState::Queued {
+                            continue;
+                        }
+                        let kind = job.kind;
+                        let running = inner.running_by_kind.get(&kind).copied().unwrap_or(0);
+                        if running >= kind_concurrency(kind) {
+                            continue;
+                        }
+                        if deps_readiness(&inner, job) != DepsReadiness::Ready {
+                            continue;
+                        }
+                        found = Some((kind, id.clone()));
+                        break 'outer;
+                    }
+                }
+                found
+            };
+            let Some((kind, id)) = candidate else {
+                return;
+            };
+            match self.try_start(&id.0).await {
+                StartOutcome::Started(snapshot, ..) => {
+                    let job_id = snapshot.id.clone();
+                    emit_job_changed(app, snapshot);
+                    let app2 = app.clone();
+                    let center2 = self.handle();
+                    tauri::async_runtime::spawn(async move {
+                        match kind {
+                            JobKind::ParseRefs => center2.run_parse_refs_job(app2, job_id).await,
+                            JobKind::ParseBody => center2.run_parse_body_job(app2, job_id).await,
+                            JobKind::LayoutAnalyze => {
+                                center2.run_layout_analyze_job(app2, job_id).await
+                            }
+                            _ => {}
+                        }
+                    });
+                }
+                StartOutcome::Skipped(snapshot) => emit_job_changed(app, snapshot),
+                // Slot filled between the scan and try_start, or not startable;
+                // stop draining and let the next finish re-try.
+                StartOutcome::Waiting => return,
+            }
+        }
     }
 
     async fn mark_running(
@@ -758,12 +846,19 @@ impl JobCenter {
         let mut inner = self.inner.lock().await;
         let id = JobId(job_id.to_string());
         let job = inner.jobs.get_mut(&id)?;
+        let was_running = job.state == JobState::Running;
+        let kind = job.kind;
         job.state = state;
         job.progress = progress;
         job.phase = phase.map(str::to_string);
         job.error = error;
         let snapshot = job.snapshot();
         release_active_key(&mut inner, &id);
+        if was_running {
+            if let Some(n) = inner.running_by_kind.get_mut(&kind) {
+                *n = n.saturating_sub(1);
+            }
+        }
         Some(snapshot)
     }
 
@@ -1426,5 +1521,104 @@ mod tests {
             .wait_for_terminal(&snapshot.id, std::time::Duration::from_millis(100))
             .await;
         assert_eq!(terminal, None);
+    }
+
+    #[tokio::test]
+    async fn layout_analyze_concurrency_cap_is_one() {
+        let center = JobCenter::new();
+        let a = center
+            .enqueue_layout_analyze(vault("conc-layout-a"), "papers/a", JobLane::Normal, false)
+            .await;
+        let b = center
+            .enqueue_layout_analyze(vault("conc-layout-b"), "papers/b", JobLane::Normal, false)
+            .await;
+
+        match center.try_start(&a.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected first Started, got {other:?}"),
+        }
+        // LayoutAnalyze cap is 1: the second stays queued while the first runs.
+        match center.try_start(&b.id).await {
+            StartOutcome::Waiting => {}
+            other => panic!("expected second Waiting at cap, got {other:?}"),
+        }
+
+        center
+            .finish(
+                &a.id,
+                JobState::Succeeded,
+                Some(100.0),
+                Some("completed"),
+                None,
+            )
+            .await;
+        // Slot freed: the queued job can now start.
+        match center.try_start(&b.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected Started after slot freed, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn parse_refs_concurrency_cap_is_two() {
+        let center = JobCenter::new();
+        let a = center
+            .enqueue_parse_refs(vault("conc-refs-a"), "papers/a", JobLane::Normal, false)
+            .await;
+        let b = center
+            .enqueue_parse_refs(vault("conc-refs-b"), "papers/b", JobLane::Normal, false)
+            .await;
+        let c = center
+            .enqueue_parse_refs(vault("conc-refs-c"), "papers/c", JobLane::Normal, false)
+            .await;
+
+        match center.try_start(&a.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected a Started, got {other:?}"),
+        }
+        match center.try_start(&b.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected b Started, got {other:?}"),
+        }
+        // ParseRefs cap is 2: the third stays queued.
+        match center.try_start(&c.id).await {
+            StartOutcome::Waiting => {}
+            other => panic!("expected c Waiting at cap, got {other:?}"),
+        }
+
+        center
+            .finish(
+                &a.id,
+                JobState::Succeeded,
+                Some(100.0),
+                Some("completed"),
+                None,
+            )
+            .await;
+        match center.try_start(&c.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected c Started after slot freed, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn concurrency_slots_are_independent_per_kind() {
+        let center = JobCenter::new();
+        let layout = center
+            .enqueue_layout_analyze(vault("conc-mix"), "papers/a", JobLane::Normal, false)
+            .await;
+        let refs = center
+            .enqueue_parse_refs(vault("conc-mix"), "papers/a", JobLane::Normal, false)
+            .await;
+
+        // Different kinds do not share slots.
+        match center.try_start(&layout.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected layout Started, got {other:?}"),
+        }
+        match center.try_start(&refs.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected refs Started alongside layout, got {other:?}"),
+        }
     }
 }
