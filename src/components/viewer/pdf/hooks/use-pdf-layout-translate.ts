@@ -23,6 +23,10 @@ export type UsePdfLayoutTranslateOptions = {
 	docId: string;
 	/** Pre-merge regions from {@link usePdfLayoutRegions}; the translate source. */
 	layoutRawRegions: PdfLayoutRegion[] | null;
+	/** Stable paper identifier for per-document Agent session reuse. */
+	paperKey?: string | null;
+	/** Vault root passed to the Agent as its cwd. */
+	vaultPath?: string | null;
 };
 
 export type PdfLayoutTranslate = {
@@ -43,6 +47,8 @@ export type PdfLayoutTranslate = {
 export function usePdfLayoutTranslate({
 	docId,
 	layoutRawRegions,
+	paperKey,
+	vaultPath,
 }: UsePdfLayoutTranslateOptions): PdfLayoutTranslate {
 	const { t } = useTranslation("viewer");
 	/** Progressive layout bulk-translate overlays (body text / abstract / header). */
@@ -85,6 +91,8 @@ export function usePdfLayoutTranslate({
 		void runLayoutRegionTranslate({
 			items,
 			signal: ac.signal,
+			paperKey,
+			vaultPath,
 			onUpdate: (next) => {
 				if (ac.signal.aborted) return;
 				setLayoutTranslateJob((prev) => ({
@@ -114,7 +122,7 @@ export function usePdfLayoutTranslate({
 					layoutTranslateAbortRef.current = null;
 				}
 			});
-	}, [layoutRawRegions, t]);
+	}, [layoutRawRegions, paperKey, vaultPath, t]);
 
 	const toggleLayoutTranslate = useCallback(() => {
 		if (layoutTranslateJob.status === "running") {

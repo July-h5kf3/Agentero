@@ -50,6 +50,11 @@ import {
 	deletePdfTranslate,
 	writePdfTranslate,
 } from "@/lib/pdf/translate";
+import {
+	evictAgentTranslateSessionId,
+	getAgentTranslateSessionId,
+	setAgentTranslateSessionId,
+} from "@/lib/pdf/translate/agent-session-cache";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
 import { loadSettings } from "@/lib/settings";
 import {
@@ -225,6 +230,7 @@ export function usePdfSelectionTranslate({
 			if (!quote) return;
 			stopTranslateSession();
 			const paperPath = paperRelPath || paperAbsPath || "paper";
+			const paperKey = paperRelPath || paperAbsPath || null;
 			const rec = createTranslateRecord({
 				paperPath,
 				page: anchor.page,
@@ -264,10 +270,15 @@ export function usePdfSelectionTranslate({
 							markTranslateFailure(rec.id, msg);
 							return;
 						}
+						const agentId = resolved.agentId;
+						const modelId = resolved.modelId;
 						const accepted = await runOnce({
 							prompt,
-							agentId: resolved.agentId,
-							modelId: resolved.modelId,
+							agentId,
+							modelId,
+							sessionId:
+								getAgentTranslateSessionId(paperKey, agentId, modelId) ??
+								undefined,
 							vaultPath: vaultPath ?? undefined,
 							workflow: "free",
 							autoApprove: true,
@@ -322,12 +333,21 @@ export function usePdfSelectionTranslate({
 								upsertTranslate(next);
 								void persistTranslate(next);
 								setTranslateError(null);
+								if (ev.providerSessionId && ev.stopReason !== "cancelled") {
+									setAgentTranslateSessionId(
+										paperKey,
+										agentId,
+										modelId,
+										ev.providerSessionId,
+									);
+								}
 								cleanup();
 							}),
 						);
 						unsubs.push(
 							await listenAgentFailed((ev) => {
 								if (ev.sessionId !== sessionId) return;
+								evictAgentTranslateSessionId(paperKey, agentId, modelId);
 								const msg = ev.error || t("pdfAsk.agentFailed");
 								notifyError(msg);
 								markTranslateFailure(rec.id, msg);

@@ -34,6 +34,6 @@ Settings → **翻译**：
 |---|---|
 | 免费 MT | Host `translate_text`（腾讯交互翻译 / 火山 Web / DeepLX / Google gtx） |
 | 商用 BYOK | Host `translate_text`（DeepL / Azure / Google Cloud / OpenAI-compatible） |
-| Agent | `agent_run_once` + 翻译 prompt |
+| Agent | `agent_run_once` + 翻译 prompt；同一篇文献的多次翻译复用同一个 ACP provider session |
 
 结果可写入 `marks/`（划词）。Host 细节：[../backend/translate.md](../backend/translate.md)。

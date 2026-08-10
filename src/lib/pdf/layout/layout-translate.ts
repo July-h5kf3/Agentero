@@ -16,6 +16,11 @@ import {
 } from "@/lib/pdf/layout/labels";
 import { bboxCoveredBy } from "@/lib/pdf/layout/merge-captions";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
+import {
+	evictAgentTranslateSessionId,
+	getAgentTranslateSessionId,
+	setAgentTranslateSessionId,
+} from "@/lib/pdf/translate/agent-session-cache";
 import { loadSettings } from "@/lib/settings";
 import { runTranslate } from "@/lib/translate";
 import { resolveTranslateAgent } from "@/lib/translate/resolve-agent";
@@ -213,9 +218,10 @@ export function groupLayoutTranslateItemsByPage(
 }
 
 /** Non-streaming Agent runner for bulk layout translate (settings provider=agent). */
-async function resolveLayoutTranslateAgentOpts(): Promise<
-	TranslateRunOptions | undefined
-> {
+async function resolveLayoutTranslateAgentOpts(options: {
+	paperKey: string | null | undefined;
+	vaultPath: string | null | undefined;
+}): Promise<TranslateRunOptions | undefined> {
 	const settings = loadSettings();
 	if (settings.translate.provider !== "agent") return undefined;
 	const registry = await listAgents().catch(() => null);
@@ -225,13 +231,21 @@ async function resolveLayoutTranslateAgentOpts(): Promise<
 	}
 	const agentId = resolved.agentId;
 	const modelId = resolved.modelId;
+	const { paperKey, vaultPath } = options;
 	return {
 		agent: {
 			runOnce: async (prompt: string) => {
+				const cachedSessionId = getAgentTranslateSessionId(
+					paperKey,
+					agentId,
+					modelId,
+				);
 				const accepted = await runOnce({
 					prompt,
 					agentId,
 					modelId,
+					sessionId: cachedSessionId ?? undefined,
+					vaultPath: vaultPath ?? undefined,
 					workflow: "free",
 					autoApprove: true,
 					hideFromChatHistory: true,
@@ -245,11 +259,20 @@ async function resolveLayoutTranslateAgentOpts(): Promise<
 					void listenAgentCompleted((ev) => {
 						if (ev.sessionId !== sessionId) return;
 						cleanup();
+						if (ev.providerSessionId && ev.stopReason !== "cancelled") {
+							setAgentTranslateSessionId(
+								paperKey,
+								agentId,
+								modelId,
+								ev.providerSessionId,
+							);
+						}
 						resolve((ev.content ?? "").trim());
 					}).then((u) => unsubs.push(u));
 					void listenAgentFailed((ev) => {
 						if (ev.sessionId !== sessionId) return;
 						cleanup();
+						evictAgentTranslateSessionId(paperKey, agentId, modelId);
 						reject(new Error(ev.error || "Agent translation failed"));
 					}).then((u) => unsubs.push(u));
 				});
@@ -267,8 +290,13 @@ export async function runLayoutRegionTranslate(options: {
 	signal?: AbortSignal;
 	concurrency?: number;
 	onUpdate: (items: LayoutTranslateItem[]) => void;
+	paperKey?: string | null;
+	vaultPath?: string | null;
 }): Promise<LayoutTranslateItem[]> {
-	const agentOpts = await resolveLayoutTranslateAgentOpts();
+	const agentOpts = await resolveLayoutTranslateAgentOpts({
+		paperKey: options.paperKey,
+		vaultPath: options.vaultPath,
+	});
 	// Agent is heavy — serialize; free/commercial MT keeps a small pool.
 	const concurrency = Math.max(
 		1,
