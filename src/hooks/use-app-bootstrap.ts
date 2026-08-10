@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { useSettings, useVaultStore } from "@/hooks/use-app-stores";
 import { useVaultOpenRequest } from "@/hooks/use-vault-open-request";
 import i18n, { resolveLocale } from "@/i18n";
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
 import { refreshLibrary } from "@/lib/paper/library-store";
 import { initJobCenterExecutors } from "@/lib/pdf/layout/enqueue-paper-layout";
@@ -90,6 +91,15 @@ export function useAppBootstrap(): void {
 		void refreshTree(vaultPath);
 		void refreshLibrary();
 		seedVaultSkills(vaultPath);
+		if (isTauri()) {
+			// T2 reconcile: backfill PAPER.md for catalog papers missing it. Fire
+			// & forget; jobs are idempotent and throttled (ParseBody cap = 1).
+			void invokeApi(
+				"job_reconcile_vault",
+				{ args: { vaultPath } },
+				{ fallback: "vault reconcile failed" },
+			).catch(() => undefined);
+		}
 	}, [vaultPath]);
 
 	// Mirror the native settings window's lifecycle into the ui store.

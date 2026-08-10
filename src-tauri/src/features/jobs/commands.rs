@@ -146,6 +146,34 @@ pub struct JobReconcilePaperArgs {
     pub path: String,
 }
 
+/// Shared backfill: enqueue a `ParseBody` job for `path` on `lane` and start it
+/// if a slot is free. Returns the enqueued snapshot.
+async fn enqueue_parse_body_backfill(
+    app: &tauri::AppHandle,
+    center: &JobCenter,
+    vault: &std::path::Path,
+    path: &str,
+    lane: JobLane,
+) -> JobSnapshot {
+    let snapshot = center
+        .enqueue_parse_body(vault, path, lane, false, None)
+        .await;
+    emit_job_changed(app, snapshot.clone());
+    match center.try_start(&snapshot.id).await {
+        StartOutcome::Started(..) => {
+            let job_id = snapshot.id.clone();
+            let runner = center.handle();
+            let app2 = app.clone();
+            tauri::async_runtime::spawn(async move {
+                runner.run_parse_body_job(app2, job_id).await;
+            });
+        }
+        StartOutcome::Skipped(skipped) => emit_job_changed(app, skipped),
+        StartOutcome::Waiting => {}
+    }
+    snapshot
+}
+
 /// Per-paper reconcile (pipeline-orchestration §7.4 入口②): backfill a
 /// `ParseBody` job when the paper has a PDF but no TeX and no `PAPER.md`.
 /// Returns `null` when nothing needs doing.
@@ -163,24 +191,54 @@ pub async fn job_reconcile_paper(
     if !caps.caps_for(&vault, &path).needs_paper_md() {
         return Ok(ApiResult::ok(None));
     }
-    let snapshot = center
-        .enqueue_parse_body(&vault, &path, parse_lane(None), false, None)
-        .await;
-    emit_job_changed(&app, snapshot.clone());
-
-    match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(..) => {
-            let job_id = snapshot.id.clone();
-            let runner = center.handle();
-            tauri::async_runtime::spawn(async move {
-                runner.run_parse_body_job(app, job_id).await;
-            });
-        }
-        StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
-        StartOutcome::Waiting => {}
-    }
-
+    let snapshot =
+        enqueue_parse_body_backfill(&app, &center, &vault, &path, parse_lane(None)).await;
     Ok(ApiResult::ok(Some(snapshot)))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobReconcileVaultArgs {
+    pub vault_path: String,
+}
+
+/// Vault-wide reconcile (§7.3 T2): backfill `ParseBody` for every catalog paper
+/// that has a PDF but no TeX and no `PAPER.md`. Jobs enqueue on the idle lane;
+/// the per-kind cap (ParseBody = 1) throttles execution. Returns the count.
+#[tauri::command]
+pub async fn job_reconcile_vault(
+    app: tauri::AppHandle,
+    center: State<'_, JobCenter>,
+    caps: State<'_, crate::features::catalog::CapsCache>,
+    args: JobReconcileVaultArgs,
+) -> Result<ApiResult<u32>, String> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return Ok(map_err(crate::core::error::AppError::message(
+            "vault path is not a directory",
+        )));
+    }
+    let caps_handle = (*caps).clone();
+    let scan_vault = vault.clone();
+    let needing = tauri::async_runtime::spawn_blocking(move || {
+        let Ok(papers) = crate::features::catalog::papers::list_all(&scan_vault) else {
+            return Vec::new();
+        };
+        papers
+            .into_iter()
+            .map(|paper| paper.path)
+            .filter(|path| caps_handle.caps_for(&scan_vault, path).needs_paper_md())
+            .collect::<Vec<_>>()
+    })
+    .await
+    .unwrap_or_default();
+
+    let mut enqueued = 0u32;
+    for path in needing {
+        enqueue_parse_body_backfill(&app, &center, &vault, &path, JobLane::Idle).await;
+        enqueued += 1;
+    }
+    Ok(ApiResult::ok(enqueued))
 }
 
 #[tauri::command]

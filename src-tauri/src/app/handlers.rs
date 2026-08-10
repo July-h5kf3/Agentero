@@ -33,6 +33,7 @@ macro_rules! common_commands {
             crate::features::jobs::commands::job_parse_body_enqueue,
             crate::features::jobs::commands::job_layout_analyze_enqueue,
             crate::features::jobs::commands::job_reconcile_paper,
+            crate::features::jobs::commands::job_reconcile_vault,
             crate::features::jobs::commands::job_focus_paper,
             crate::features::jobs::commands::job_cancel,
             crate::features::jobs::commands::job_report,
