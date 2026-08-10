@@ -2,6 +2,7 @@ import { Check, LoaderCircle } from "lucide-react";
 import { useTheme } from "next-themes";
 import { memo, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FontFamilyPicker } from "@/components/settings/font-family-picker";
 import {
 	PageTitle,
 	SettingsGroup,
@@ -17,12 +18,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import type {
 	AppSettings,
-	EditorFontFamily,
 	LocalePreference,
 	ThemePreference,
 } from "@/lib/settings";
 import {
-	EDITOR_FONT_FAMILIES,
 	EDITOR_LINE_HEIGHT_MAX,
 	EDITOR_LINE_HEIGHT_MIN,
 	EDITOR_LINE_HEIGHT_STEP,
@@ -42,7 +41,9 @@ export type AppearancePaneProps = {
 	locale: LocalePreference;
 	uiScale: number;
 	editorFontSize: number;
-	editorFontFamily: EditorFontFamily;
+	interfaceFontFamily: string;
+	textFontFamily: string;
+	monoFontFamily: string;
 	editorLineHeight: number;
 	showEditorToolbar: boolean;
 	patch: (p: Partial<AppSettings>) => void;
@@ -54,7 +55,9 @@ function AppearancePaneInner({
 	locale,
 	uiScale,
 	editorFontSize,
-	editorFontFamily,
+	interfaceFontFamily,
+	textFontFamily,
+	monoFontFamily,
 	editorLineHeight,
 	showEditorToolbar,
 	patch,
@@ -62,7 +65,9 @@ function AppearancePaneInner({
 	const { t } = useTranslation("settings");
 	const { resolvedTheme, setTheme } = useTheme();
 	const fontId = useId();
-	const fontFamilyId = useId();
+	const interfaceFontId = useId();
+	const textFontId = useId();
+	const monoFontId = useId();
 	const lineHeightId = useId();
 	const uiScaleId = useId();
 	const [themeDefs, setThemeDefs] = useState<UiThemeDef[]>([]);
@@ -282,6 +287,48 @@ function AppearancePaneInner({
 			</SettingsGroup>
 
 			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+				{t("appearance.fonts.section")}
+			</p>
+			<SettingsGroup>
+				<SettingsRow
+					label={t("appearance.fonts.interface")}
+					description={t("appearance.fonts.interfaceHint")}
+					htmlFor={interfaceFontId}
+				>
+					<FontFamilyPicker
+						id={interfaceFontId}
+						fontRole="interface"
+						value={interfaceFontFamily}
+						onChange={(v) => patch({ interfaceFontFamily: v })}
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("appearance.fonts.text")}
+					description={t("appearance.fonts.textHint")}
+					htmlFor={textFontId}
+				>
+					<FontFamilyPicker
+						id={textFontId}
+						fontRole="text"
+						value={textFontFamily}
+						onChange={(v) => patch({ textFontFamily: v })}
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("appearance.fonts.mono")}
+					description={t("appearance.fonts.monoHint")}
+					htmlFor={monoFontId}
+				>
+					<FontFamilyPicker
+						id={monoFontId}
+						fontRole="mono"
+						value={monoFontFamily}
+						onChange={(v) => patch({ monoFontFamily: v })}
+					/>
+				</SettingsRow>
+			</SettingsGroup>
+
+			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
 				{t("appearance.markdownEditor.section")}
 			</p>
 			<SettingsGroup>
@@ -301,32 +348,6 @@ function AppearancePaneInner({
 							{t("appearance.fontSize.value", { size: fontSize })}
 						</span>
 					</div>
-				</SettingsRow>
-				<SettingsRow
-					label={t("appearance.fontFamily.label")}
-					htmlFor={fontFamilyId}
-				>
-					<Select
-						value={editorFontFamily}
-						onValueChange={(v) =>
-							patch({ editorFontFamily: v as EditorFontFamily })
-						}
-					>
-						<SelectTrigger
-							id={fontFamilyId}
-							size="sm"
-							className="min-w-[140px]"
-						>
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{EDITOR_FONT_FAMILIES.map((family) => (
-								<SelectItem key={family} value={family}>
-									{t(`appearance.fontFamily.${family}`)}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
 				</SettingsRow>
 				<SettingsRow
 					label={t("appearance.lineHeight.label")}

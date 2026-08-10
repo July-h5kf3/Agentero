@@ -269,7 +269,9 @@ export function SettingsContent({
 									locale={settings.locale}
 									uiScale={settings.uiScale}
 									editorFontSize={settings.editorFontSize}
-									editorFontFamily={settings.editorFontFamily}
+									interfaceFontFamily={settings.interfaceFontFamily}
+									textFontFamily={settings.textFontFamily}
+									monoFontFamily={settings.monoFontFamily}
 									editorLineHeight={settings.editorLineHeight}
 									showEditorToolbar={settings.showEditorToolbar}
 									patch={patch}

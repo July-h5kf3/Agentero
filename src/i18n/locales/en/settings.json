@@ -128,6 +128,15 @@
 			"label": "Interface scale",
 			"value": "{{percent}}%"
 		},
+		"fonts": {
+			"section": "Fonts",
+			"interface": "Interface font",
+			"interfaceHint": "App chrome: sidebars, toolbars, and settings.",
+			"text": "Text font",
+			"textHint": "Markdown and notes body text.",
+			"mono": "Monospace font",
+			"monoHint": "Code blocks, frontmatter, and mono UI."
+		},
 		"markdownEditor": {
 			"section": "Markdown editor"
 		},
@@ -136,11 +145,15 @@
 			"value": "{{size}} px"
 		},
 		"fontFamily": {
-			"label": "Editor font",
 			"default": "Default",
-			"system": "System",
+			"system": "System UI",
 			"serif": "Serif",
-			"mono": "Monospace"
+			"mono": "Monospace",
+			"search": "Search fonts…",
+			"loading": "Loading system fonts…",
+			"noMatch": "No matching fonts",
+			"suggested": "Suggested",
+			"systemFonts": "System fonts"
 		},
 		"lineHeight": {
 			"label": "Line height",

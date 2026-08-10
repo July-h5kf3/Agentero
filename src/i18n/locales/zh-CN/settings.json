@@ -121,6 +121,15 @@
 			"label": "界面缩放",
 			"value": "{{percent}}%"
 		},
+		"fonts": {
+			"section": "字体",
+			"interface": "界面字体",
+			"interfaceHint": "侧栏、工具栏、设置等应用界面。",
+			"text": "正文字体",
+			"textHint": "Markdown 与笔记正文。",
+			"mono": "等宽字体",
+			"monoHint": "代码块、Frontmatter 与等宽 UI。"
+		},
 		"markdownEditor": {
 			"section": "Markdown编辑器"
 		},
@@ -129,11 +138,15 @@
 			"value": "{{size}} px"
 		},
 		"fontFamily": {
-			"label": "编辑器字体",
 			"default": "默认",
-			"system": "系统字体",
+			"system": "系统 UI",
 			"serif": "衬线",
-			"mono": "等宽"
+			"mono": "等宽",
+			"search": "搜索字体…",
+			"loading": "正在加载系统字体…",
+			"noMatch": "无匹配字体",
+			"suggested": "推荐",
+			"systemFonts": "系统字体"
 		},
 		"lineHeight": {
 			"label": "行距",
