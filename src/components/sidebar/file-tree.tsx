@@ -1554,7 +1554,7 @@ export const FileTree = memo(
 								onClick={handlePasteFromMenu}
 							>
 								<span>
-									{menuCount > 1
+									{menuCount > 1 || isPaperMenu
 										? t("fileTree.paste")
 										: t("fileTree.pasteInto", {
 												name: menuNode?.name ?? t("fileTree.paste"),

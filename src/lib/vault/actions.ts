@@ -577,22 +577,37 @@ function resolvePasteDestination(
 	const node = findTreeNode(tree, norm);
 	const isPaperLeaf =
 		node?.kind === "directory" && isPaperDirectory(node.path, node.children);
-	if (node?.kind === "directory" && !isPaperLeaf) {
+
+	// Paper folders are minimal catalog units: never paste inside them.
+	if (isPaperLeaf) {
+		const parentAbs = dirnameOf(norm);
+		if (!parentAbs || pathKey(parentAbs) === rootKey) {
+			return { abs: vaultPath, rel: "", isPaperLeaf: true };
+		}
+		return {
+			abs: parentAbs,
+			rel: vaultRelativePath(vaultPath, parentAbs) || "",
+			isPaperLeaf: true,
+		};
+	}
+
+	if (node?.kind === "directory") {
 		return {
 			abs: norm,
 			rel: vaultRelativePath(vaultPath, norm) || "",
 			isPaperLeaf: false,
 		};
 	}
-	// File or paper leaf → use parent directory.
+
+	// File → use parent directory.
 	const parentAbs = dirnameOf(norm);
 	if (!parentAbs || pathKey(parentAbs) === rootKey) {
-		return { abs: vaultPath, rel: "", isPaperLeaf };
+		return { abs: vaultPath, rel: "", isPaperLeaf: false };
 	}
 	return {
 		abs: parentAbs,
 		rel: vaultRelativePath(vaultPath, parentAbs) || "",
-		isPaperLeaf,
+		isPaperLeaf: false,
 	};
 }
 
