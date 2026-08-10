@@ -53,7 +53,7 @@ export function HighlightAnnotationMenu({
 					role="toolbar"
 					aria-label={t("selection.highlightMenuLabel")}
 					className={cn(
-						"pointer-events-auto absolute left-1/2 z-10 flex h-7 items-center gap-1 rounded-lg border border-border/80 bg-background px-1 shadow-lg ring-1 ring-black/5 dark:ring-white/10",
+						"pointer-events-auto absolute left-1/2 z-10 flex h-10 items-center gap-0.5 rounded-xl border border-border/80 bg-background px-1 shadow-lg ring-1 ring-black/5 dark:ring-white/10",
 						placement.suggestTop ? "top-full mt-1.5" : "bottom-full mb-1.5",
 					)}
 					style={{ transform: "translateX(-50%)" }}
@@ -66,7 +66,7 @@ export function HighlightAnnotationMenu({
 									aria-label={t(`selection.color.${color}`)}
 									aria-pressed={activeColor === color}
 									className={cn(
-										"size-3 shrink-0 rounded-full ring-1 ring-black/15 transition hover:scale-110 dark:ring-white/25",
+										"mx-0.5 size-4 shrink-0 rounded-full ring-1 ring-black/15 transition hover:scale-110 dark:ring-white/25",
 										swatchColorClass(color),
 										activeColor === color &&
 											"ring-2 ring-offset-1 ring-offset-background ring-foreground/70",
@@ -81,18 +81,18 @@ export function HighlightAnnotationMenu({
 							</TooltipContent>
 						</Tooltip>
 					))}
-					<div className="mx-0.5 h-4 w-px shrink-0 bg-border" />
+					<div className="mx-1 h-5 w-px shrink-0 bg-border" />
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button
 								type="button"
 								variant="ghost"
-								size="icon-xs"
-								className="size-6 text-muted-foreground hover:text-foreground"
+								size="icon-sm"
+								className="text-muted-foreground hover:text-foreground"
 								aria-label={t("selection.editComment")}
 								onClick={() => onEdit(obj.id)}
 							>
-								<Pencil className="size-3.5" />
+								<Pencil className="size-4" />
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent side={placement.suggestTop ? "bottom" : "top"}>
@@ -104,12 +104,12 @@ export function HighlightAnnotationMenu({
 							<Button
 								type="button"
 								variant="ghost"
-								size="icon-xs"
-								className="size-6 text-muted-foreground hover:text-destructive"
+								size="icon-sm"
+								className="text-muted-foreground hover:text-destructive"
 								aria-label={t("selection.removeHighlight")}
 								onClick={() => onDelete(context.pageIndex, obj.id)}
 							>
-								<Trash2 className="size-3.5" />
+								<Trash2 className="size-4" />
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent side={placement.suggestTop ? "bottom" : "top"}>
