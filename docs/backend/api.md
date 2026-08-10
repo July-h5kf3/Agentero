@@ -902,7 +902,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
   其中 `LookupImportResult` 为单条入库结果（含 `paperDir`、`path`、`id`、`title`、`usedTranslator`、`translatorBaseUrl`、`pdf?`、`tex?`、`paperMd?`、`assetMessages?`）。
   `skills` 为魔棒直接安装的 Skill（当前仅当来源含 `--skill` 等明确过滤且候选唯一时可能非空）；`skillCandidates` 为需要前端弹窗确认的候选列表，见下方 `skill_install` / `skill_discard`。
-- **单条行为**：Translator 优先；失败且输入为 arXiv 时回退 export.arxiv.org；**catalog upsert**（权威）+ 写 `NOTES.md` 壳（摘要块优先经免费 MT 译为中文，失败则保留原文；catalog 中 `abstract` 仍为原文）；`metadata.json` 为 catalog 投影同步；**始终下载 PDF**；**arXiv 另下载 e-print 并解压 LaTeX** 到 `source/`；下载后若**无 TeX 且有 PDF 且无 `PAPER.md`**，用 **liteparse** 生成 `PAPER.md` 并更新 `body_source` / `body_quality`。
+- **单条行为**：Translator 优先；失败且输入为 arXiv 时回退 export.arxiv.org；**catalog upsert**（权威）+ 写 `NOTES.md` 壳（摘要块优先经免费 MT 译为中文，失败则保留原文；catalog 中 `abstract` 仍为原文）；`metadata.json` 为 catalog 投影同步；**始终下载 PDF**；**arXiv 另下载 e-print 并解压 LaTeX** 到 `source/`。导入命令本身**不**再内联生成 `PAPER.md`；前端会在导入完成后对无 TeX 且有 PDF 的 paper 独立入队 `paper_parse_body` 后台任务，生成 `PAPER.md` 并更新 `body_source` / `body_quality`。
   当 `texts` 某条被识别为 `IdentifierKind::Skill`（GitHub URL、`npx skills add …`、`github:`、`skills.sh`）时，该条进入 Skill 解析管线，不写入 catalog/papers。
 - **行为**：
   1. 逐条解析 `texts`；未识别则加入 `errors`；Skill 来源进入 `skillCandidates`（或唯一命中时直接入 `skills`）。
@@ -939,7 +939,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 #### `paper_download_assets`
 
-为已有 paper 文件夹补下载缺失的 PDF（及 arXiv LaTeX）。用于文件树单篇 Download，以及 Library 行「下载全部缺失」。下载后若无 TeX，同样尝试生成 `PAPER.md`。
+为已有 paper 文件夹补下载缺失的 PDF（及 arXiv LaTeX）。用于文件树单篇 Download，以及 Library 行「下载全部缺失」。下载完成后前端会独立入队 `paper_parse_body` 后台任务生成 `PAPER.md`（若该 paper 无 TeX 且有 PDF）。
 
 - **参数**（invoke 字段名 `args`）：
 
@@ -988,9 +988,33 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   ```
 
 - **返回**：`{ ok: true; data: { papers: LookupImportResult[]; errors: string[] } }`（`errors` 为 `"<文件>: <原因>"`；仅当**全部**失败才整体 `ok:false`）。
-- **行为**：每个 PDF → 标题/id 优先用 `entries` 覆盖，否则文件名 stem；复制到 `{slug}.pdf`；写 `NOTES.md` 壳 + catalog（type `pdf`，可含 authors/year）；无 TeX → 隔离运行 liteparse 生成 `PAPER.md`。解析最长等待 120 秒，取消任务会终止当前解析子进程；超时只跳过派生正文，PDF、`NOTES.md` 与 catalog 入库结果继续保留。不覆盖已存在文件夹（slug 去重）。
+- **行为**：每个 PDF → 标题/id 优先用 `entries` 覆盖，否则文件名 stem；复制到 `{slug}.pdf`；写 `NOTES.md` 壳 + catalog（type `pdf`，可含 authors/year）。导入任务本身**不**再等待 liteparse；前端会在导入完成后独立入队 `paper_parse_body` 后台任务生成 `PAPER.md`（无 TeX 且有 PDF 时）。不覆盖已存在文件夹（slug 去重）。
 
-> **无 TeX 正文生成**：对无本地 TeX 的 paper，`paper_download_assets` / 魔棒入库在下载后自动用 liteparse 从 PDF 生成 `{paper}/PAPER.md` 并写 catalog `body_source` / `body_quality`；不再有独立的 `paper_parse_body` command（**Zap 图标**现用于 paper-reader 精读）。
+#### `paper_parse_body`
+
+把 paper 文件夹下的本地 PDF 解析为 `PAPER.md`，使用 liteparse 隔离子进程。可作为独立后台任务调用；已有 `PAPER.md` 且无 `force` 时直接跳过。
+
+- **参数**（invoke 字段名 `args`）：
+
+  ```ts
+  {
+    vaultPath: string;   // 本地 vault 根目录，或 remote:<sessionId>
+    path: string;        // vault-relative paper folder
+    force?: boolean;     // 默认 false；true 时覆盖已有 PAPER.md
+    taskId?: string;     // 前端后台任务 id，用于取消
+  }
+  ```
+
+- **返回**：`{ ok: true; data: { paperMd: boolean; bodySource?: string; bodyQuality?: string; messages: string[] } }`
+- **行为**：
+  - 有本地 TeX 时跳过（认为 TeX 更干净）。
+  - 无 PDF 时跳过。
+  - 无 `PAPER.md` 或 `force=true` 时，用 liteparse 生成 `{paper}/PAPER.md`。
+  - 写 catalog `body_source`（`pdf`/`ocr`）与 `body_quality`（`medium`/`low`）。
+  - 远程 vault 在 `session.work_root` 解析后上传 `PAPER.md` 并 push catalog mirror。
+  - 解析最长等待 120 秒；取消任务会 kill 当前 liteparse 子进程。
+
+> **正文生成时机**：魔棒 / 本地 PDF 导入 / 下载资产 / Library 导入 / Zotero 迁移 / 打开论文时，前端检查到该 paper 有 PDF、无 TeX、无 `PAPER.md`，就会入队 `paper_parse_body` 作为独立后台任务。原 `paper_download_assets` / 魔棒入库命令不再内联等待解析完成。
 
 #### `paper_analyze_pdf`（规划中）
 
