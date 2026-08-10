@@ -10,6 +10,7 @@ import { initAutoHideScrollbars } from "@/lib/core/scrollbars";
 import { isMobileApp, isTauri } from "@/lib/core/tauri";
 import { initErrorReporting } from "@/lib/core/telemetry";
 import {
+	applyDocumentChrome,
 	ensureSettingsLoaded,
 	initSettingsSync,
 	loadSettings,
@@ -45,15 +46,28 @@ async function boot() {
 	await ensureSettingsLoaded();
 	bootStage("settings");
 	initSettingsSync();
-	await applyUiTheme(loadSettings().uiTheme).catch((e) => {
+	const initialSettings = loadSettings();
+	// Apply scale + interface/mono fonts before first paint so settings/main
+	// windows do not flash Geist then switch.
+	applyDocumentChrome({
+		uiScale: initialSettings.uiScale,
+		interfaceFontFamily: initialSettings.interfaceFontFamily,
+		monoFontFamily: initialSettings.monoFontFamily,
+	});
+	await applyUiTheme(initialSettings.uiTheme).catch((e) => {
 		console.warn("[theme] failed to apply initial UI theme", e);
 	});
 	bootStage("theme");
 	subscribeSettings((s) => {
 		void applyUiTheme(s.uiTheme);
+		applyDocumentChrome({
+			uiScale: s.uiScale,
+			interfaceFontFamily: s.interfaceFontFamily,
+			monoFontFamily: s.monoFontFamily,
+		});
 	});
 	initAutoHideScrollbars();
-	const locale = resolveLocale(loadSettings().locale);
+	const locale = resolveLocale(initialSettings.locale);
 	await i18n.changeLanguage(locale);
 	bootStage("i18n");
 	if (typeof document !== "undefined") {

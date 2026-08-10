@@ -1,7 +1,28 @@
 export {
+	clampEditorLineHeight,
+	DEFAULT_EDITOR_LINE_HEIGHT,
 	DEFAULT_TRANSLATOR_BASE_URL,
+	EDITOR_LINE_HEIGHT_MAX,
+	EDITOR_LINE_HEIGHT_MIN,
+	EDITOR_LINE_HEIGHT_STEP,
 	UI_SCALE_PRESETS,
 } from "@/lib/settings/defaults";
+export {
+	applyChromeFontCss,
+	applyDocumentChrome,
+	FONT_STACK_PRESETS,
+	type FontRole,
+	type FontStackPreset,
+	fontFamilyDisplayKey,
+	invalidateSystemFontsCache,
+	isFontStackPreset,
+	listSystemFonts,
+	MONO_STACK,
+	normalizeFontFamilyValue,
+	resolveFontFamilyCss,
+	SERIF_STACK,
+	SYSTEM_SANS_STACK,
+} from "@/lib/settings/fonts";
 export {
 	ensureSettingsLoaded,
 	loadSettings,

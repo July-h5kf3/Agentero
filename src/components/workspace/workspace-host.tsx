@@ -30,6 +30,7 @@ import {
 	setTabVisualTraces,
 } from "@/lib/pdf/annotations-store";
 import type { LibraryColumnPref } from "@/lib/settings";
+import { resolveFontFamilyCss } from "@/lib/settings";
 import { patchSettings } from "@/lib/settings/react-store";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { openRightTab } from "@/lib/shell/ui-store";
@@ -97,6 +98,8 @@ export function WorkspaceHost() {
 	const trashReloadSignal = useLibraryStore((s) => s.trashReloadSignal);
 	const libraryColumns = useSettings((s) => s.libraryColumns);
 	const editorFontSize = useSettings((s) => s.editorFontSize);
+	const textFontFamily = useSettings((s) => s.textFontFamily);
+	const editorLineHeight = useSettings((s) => s.editorLineHeight);
 	const showEditorToolbar = useSettings((s) => s.showEditorToolbar);
 	const [visiblePanelIds, setVisiblePanelIds] = useState<string[]>([]);
 
@@ -209,6 +212,8 @@ export function WorkspaceHost() {
 			},
 			editor: {
 				fontSize: editorFontSize,
+				fontFamily: resolveFontFamilyCss(textFontFamily, "text"),
+				lineHeight: editorLineHeight,
 				showToolbar: showEditorToolbar,
 				notesPlaceholder: t("editor.notesPlaceholder"),
 				markdownPlaceholder: t("editor.markdownPlaceholder"),
@@ -241,6 +246,8 @@ export function WorkspaceHost() {
 			libraryScopePath,
 			libraryColumns,
 			editorFontSize,
+			textFontFamily,
+			editorLineHeight,
 			showEditorToolbar,
 			rescanning,
 			trashReloadSignal,

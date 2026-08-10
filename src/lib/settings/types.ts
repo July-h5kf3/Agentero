@@ -140,6 +140,27 @@ export type AppSettings = {
 	locale: LocalePreference;
 	editorFontSize: number;
 	/**
+	 * UI chrome font (sidebars, toolbars, settings). Empty = app default (Geist).
+	 * Also accepts built-in stacks (`system` | `serif` | `mono`) or a system
+	 * family name discovered via `list_system_fonts`.
+	 */
+	interfaceFontFamily: string;
+	/**
+	 * Markdown / notes body font. Empty = inherit interface / app default.
+	 * Same value vocabulary as {@link interfaceFontFamily}.
+	 */
+	textFontFamily: string;
+	/**
+	 * Monospace font for code blocks, frontmatter, and `font-mono` UI.
+	 * Empty = app default mono stack. Same value vocabulary as above.
+	 */
+	monoFontFamily: string;
+	/**
+	 * Markdown editor body line-height (unitless multiplier). Orthogonal to
+	 * {@link uiScale}. Typical range 1.4–2.0; default 1.6.
+	 */
+	editorLineHeight: number;
+	/**
 	 * Global UI scale multiplier. Affects font-size, spacing, and the title bar,
 	 * so toolbar buttons grow together with the rest of the interface.
 	 * Must be one of {@link UI_SCALE_PRESETS}; default 1.0 (100%).

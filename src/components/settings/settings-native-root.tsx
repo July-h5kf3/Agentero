@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SettingsSection } from "@/components/settings/types";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
 import {
+	applyDocumentChrome,
 	ensureSettingsLoaded,
 	loadSettings,
 	saveSettingsAsync,
@@ -54,6 +55,15 @@ export function SettingsNativeRoot() {
 			setSettings(next);
 		});
 	}, []);
+
+	// Mirror main-window chrome (scale + interface/mono fonts) so pickers preview live.
+	useEffect(() => {
+		applyDocumentChrome({
+			uiScale: settings.uiScale,
+			interfaceFontFamily: settings.interfaceFontFamily,
+			monoFontFamily: settings.monoFontFamily,
+		});
+	}, [settings.uiScale, settings.interfaceFontFamily, settings.monoFontFamily]);
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {

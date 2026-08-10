@@ -18,6 +18,22 @@ export const DEFAULT_NETWORK_PROXY_URL = "http://127.0.0.1:7890";
  */
 export const UI_SCALE_PRESETS = [0.8, 0.9, 1, 1.25, 1.5] as const;
 
+/** Markdown editor line-height slider bounds (unitless). */
+export const EDITOR_LINE_HEIGHT_MIN = 1.4;
+export const EDITOR_LINE_HEIGHT_MAX = 2.0;
+export const EDITOR_LINE_HEIGHT_STEP = 0.1;
+export const DEFAULT_EDITOR_LINE_HEIGHT = 1.6;
+
+/** Clamp and snap line-height to the supported slider range (0.1 steps). */
+export function clampEditorLineHeight(value: number): number {
+	if (!Number.isFinite(value)) return DEFAULT_EDITOR_LINE_HEIGHT;
+	const clamped = Math.min(
+		EDITOR_LINE_HEIGHT_MAX,
+		Math.max(EDITOR_LINE_HEIGHT_MIN, value),
+	);
+	return Math.round(clamped * 10) / 10;
+}
+
 export const DEFAULT_SETTINGS: AppSettings = {
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
 	networkProxyEnabled: false,
@@ -36,6 +52,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	uiTheme: DEFAULT_UI_THEME,
 	locale: "system",
 	editorFontSize: 14,
+	interfaceFontFamily: "",
+	textFontFamily: "",
+	monoFontFamily: "",
+	editorLineHeight: DEFAULT_EDITOR_LINE_HEIGHT,
 	uiScale: 1,
 	showEditorToolbar: true,
 	agentPermissionMode: "restricted",

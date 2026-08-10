@@ -17,7 +17,7 @@
 | 分类 | 内容示例 |
 |---|---|
 | 通用 | Translator URL、Connector 开关、文件树标签/排序、打开行为、笔记导出默认水印、诊断上报开关与手动发送 |
-| Appearance | 明暗、`uiTheme`（tweakcn 预设）、`uiScale` |
+| Appearance | 明暗、`uiTheme`、`uiScale`；界面/正文/等宽字体；Markdown 字号 / 行距 / 工具栏 |
 | Agent | 目录两层检测（Agent CLI / ACP）、未装「安装」/ 缺 ACP「安装 ACP」/ 已装「升级」、默认 Agent、权限模式、自动精读、可选 **User-Agent**（Codex 中转亲和）、个人提示词、划词提问 Agent |
 | 翻译 | 默认服务选择、商用 API 配置、语言与 Agent 座 |
 | 知识库诊断 | Vault / Catalog / 双链 / 论文 aliases / 视觉批注格式；本地 Vault 可确认批量修复 |
@@ -51,7 +51,16 @@
 - 外观设置中的配色主题以紧凑预览网格展示背景、卡片、主色和强调色；点击预览项即可应用主题。
 - 36 个 tweakcn 预设：`src/themes/tweakcn.json`；`src/lib/ui/theme.ts` 注入 CSS 变量。
 - 刷新主题数据：`node scripts/fetch-tweakcn-themes.mjs`。
-- `uiScale`：80%–150% 五档，改 `html` font-size。
+- `uiScale`：80%–150% 五档，改 `html` font-size（整 UI，与编辑器字号/行距正交）。
+- 字体（Appearance → Fonts，对齐 Obsidian 三分法）：
+  - `interfaceFontFamily`：界面 chrome（`--font-sans` / `--font-heading`）。
+  - `textFontFamily`：Markdown/笔记正文（仅编辑器根节点）。
+  - `monoFontFamily`：代码块与 `font-mono`（`--font-mono`）。
+  - 取值：空 = 应用默认；`system` / `serif` / `mono` = 内置栈；其余 = 系统字体族名。
+  - 选择器：Popover + 搜索；Host `list_system_fonts`（fontdb）枚举本机字体。
+- Markdown 编辑器（Appearance → Markdown editor）：
+  - `editorFontSize`：12–20 px。
+  - `editorLineHeight`：1.4–2.0（步长 0.1，默认 1.6）。
 - `batchImportConcurrency`：魔棒批量导入及后续资源下载的并发上限，范围 1–10，默认 5。
 
 ## i18n

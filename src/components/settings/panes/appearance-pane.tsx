@@ -2,6 +2,7 @@ import { Check, LoaderCircle } from "lucide-react";
 import { useTheme } from "next-themes";
 import { memo, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FontFamilyPicker } from "@/components/settings/font-family-picker";
 import {
 	PageTitle,
 	SettingsGroup,
@@ -20,7 +21,12 @@ import type {
 	LocalePreference,
 	ThemePreference,
 } from "@/lib/settings";
-import { UI_SCALE_PRESETS } from "@/lib/settings";
+import {
+	EDITOR_LINE_HEIGHT_MAX,
+	EDITOR_LINE_HEIGHT_MIN,
+	EDITOR_LINE_HEIGHT_STEP,
+	UI_SCALE_PRESETS,
+} from "@/lib/settings";
 import {
 	applyUiTheme,
 	DEFAULT_UI_THEME,
@@ -35,6 +41,10 @@ export type AppearancePaneProps = {
 	locale: LocalePreference;
 	uiScale: number;
 	editorFontSize: number;
+	interfaceFontFamily: string;
+	textFontFamily: string;
+	monoFontFamily: string;
+	editorLineHeight: number;
 	showEditorToolbar: boolean;
 	patch: (p: Partial<AppSettings>) => void;
 };
@@ -45,12 +55,20 @@ function AppearancePaneInner({
 	locale,
 	uiScale,
 	editorFontSize,
+	interfaceFontFamily,
+	textFontFamily,
+	monoFontFamily,
+	editorLineHeight,
 	showEditorToolbar,
 	patch,
 }: AppearancePaneProps) {
 	const { t } = useTranslation("settings");
 	const { resolvedTheme, setTheme } = useTheme();
 	const fontId = useId();
+	const interfaceFontId = useId();
+	const textFontId = useId();
+	const monoFontId = useId();
+	const lineHeightId = useId();
 	const uiScaleId = useId();
 	const [themeDefs, setThemeDefs] = useState<UiThemeDef[]>([]);
 
@@ -66,6 +84,19 @@ function AppearancePaneInner({
 		}, 150);
 		return () => clearTimeout(id);
 	}, [fontSize, editorFontSize, patch]);
+
+	const [lineHeight, setLineHeight] = useState(editorLineHeight);
+	useEffect(() => {
+		setLineHeight(editorLineHeight);
+	}, [editorLineHeight]);
+
+	useEffect(() => {
+		if (lineHeight === editorLineHeight) return;
+		const id = setTimeout(() => {
+			patch({ editorLineHeight: lineHeight });
+		}, 150);
+		return () => clearTimeout(id);
+	}, [lineHeight, editorLineHeight, patch]);
 
 	useEffect(() => {
 		let active = true;
@@ -256,6 +287,48 @@ function AppearancePaneInner({
 			</SettingsGroup>
 
 			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+				{t("appearance.fonts.section")}
+			</p>
+			<SettingsGroup>
+				<SettingsRow
+					label={t("appearance.fonts.interface")}
+					description={t("appearance.fonts.interfaceHint")}
+					htmlFor={interfaceFontId}
+				>
+					<FontFamilyPicker
+						id={interfaceFontId}
+						fontRole="interface"
+						value={interfaceFontFamily}
+						onChange={(v) => patch({ interfaceFontFamily: v })}
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("appearance.fonts.text")}
+					description={t("appearance.fonts.textHint")}
+					htmlFor={textFontId}
+				>
+					<FontFamilyPicker
+						id={textFontId}
+						fontRole="text"
+						value={textFontFamily}
+						onChange={(v) => patch({ textFontFamily: v })}
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("appearance.fonts.mono")}
+					description={t("appearance.fonts.monoHint")}
+					htmlFor={monoFontId}
+				>
+					<FontFamilyPicker
+						id={monoFontId}
+						fontRole="mono"
+						value={monoFontFamily}
+						onChange={(v) => patch({ monoFontFamily: v })}
+					/>
+				</SettingsRow>
+			</SettingsGroup>
+
+			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
 				{t("appearance.markdownEditor.section")}
 			</p>
 			<SettingsGroup>
@@ -273,6 +346,28 @@ function AppearancePaneInner({
 						/>
 						<span className="w-12 text-right text-muted-foreground text-xs tabular-nums">
 							{t("appearance.fontSize.value", { size: fontSize })}
+						</span>
+					</div>
+				</SettingsRow>
+				<SettingsRow
+					label={t("appearance.lineHeight.label")}
+					htmlFor={lineHeightId}
+				>
+					<div className="flex items-center gap-2">
+						<input
+							id={lineHeightId}
+							type="range"
+							min={EDITOR_LINE_HEIGHT_MIN}
+							max={EDITOR_LINE_HEIGHT_MAX}
+							step={EDITOR_LINE_HEIGHT_STEP}
+							value={lineHeight}
+							onChange={(e) => setLineHeight(Number(e.target.value))}
+							className="w-28 accent-primary"
+						/>
+						<span className="w-12 text-right text-muted-foreground text-xs tabular-nums">
+							{t("appearance.lineHeight.value", {
+								value: lineHeight.toFixed(1),
+							})}
 						</span>
 					</div>
 				</SettingsRow>

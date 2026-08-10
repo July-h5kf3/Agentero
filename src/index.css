@@ -26,9 +26,26 @@
 	animation: library-shimmer 1.8s ease-in-out infinite;
 }
 
+/*
+ * Runtime-overridable font stacks (Settings → Appearance → Fonts).
+ * @theme inline bakes token values into utilities, so the theme tokens must
+ * point at these variables — never hardcode family names in @theme, or
+ * interfaceFontFamily / monoFontFamily cannot take effect.
+ */
+:root {
+	--agentero-font-sans:
+		"Geist Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+		sans-serif;
+	--agentero-font-heading: var(--agentero-font-sans);
+	--agentero-font-mono:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+		"Courier New", monospace;
+}
+
 @theme inline {
-	--font-heading: var(--font-sans);
-	--font-sans: "Geist Variable", sans-serif;
+	--font-heading: var(--agentero-font-heading);
+	--font-sans: var(--agentero-font-sans);
+	--font-mono: var(--agentero-font-mono);
 	--color-sidebar-ring: var(--sidebar-ring);
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

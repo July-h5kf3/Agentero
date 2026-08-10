@@ -5,6 +5,7 @@ import { ImagePlugin } from "@platejs/media/react";
 import { TocPlugin } from "@platejs/toc/react";
 import { Plate, usePlateEditor } from "platejs/react";
 import {
+	type CSSProperties,
 	type KeyboardEvent,
 	lazy,
 	useCallback,
@@ -85,6 +86,10 @@ export type MarkdownEditorProps = {
 	placeholder?: string;
 	className?: string;
 	fontSize?: number | string;
+	/** CSS font-family stack for body text; omit to keep app theme font. */
+	fontFamily?: string;
+	/** Unitless line-height for body text. */
+	lineHeight?: number;
 	/** Show the WYSIWYG formatting toolbar above the editor. */
 	showToolbar?: boolean;
 	/**
@@ -139,6 +144,8 @@ export function MarkdownEditor({
 	placeholder,
 	className,
 	fontSize,
+	fontFamily,
+	lineHeight,
 	showToolbar,
 	onPersist,
 	onDirtyChange,
@@ -151,6 +158,28 @@ export function MarkdownEditor({
 	const onAssetsChangedRef = useRef(onAssetsChanged);
 	onAssetsChangedRef.current = onAssetsChanged;
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
+
+	/**
+	 * Body typography on the editor root. When a custom font stack is set, also
+	 * rebind --font-sans / --font-heading so headings (font-heading) follow body
+	 * text. Code blocks keep font-mono / --font-mono and are not overridden.
+	 */
+	const editorTypographyStyle = useMemo((): CSSProperties | undefined => {
+		const style: CSSProperties = {};
+		if (fontSize != null && fontSize !== "") {
+			style.fontSize = fontSize;
+		}
+		if (lineHeight != null && Number.isFinite(lineHeight)) {
+			style.lineHeight = lineHeight;
+		}
+		if (fontFamily) {
+			style.fontFamily = fontFamily;
+			// Scope theme font tokens so headings using font-heading follow body.
+			(style as Record<string, string>)["--font-sans"] = fontFamily;
+			(style as Record<string, string>)["--font-heading"] = fontFamily;
+		}
+		return Object.keys(style).length > 0 ? style : undefined;
+	}, [fontSize, fontFamily, lineHeight]);
 	/** Swallow the `beforeinput` insertParagraph that follows slash Enter confirm. */
 	const suppressNextEditorBreakRef = useRef(false);
 	const [findOpen, setFindOpen] = useState(false);
@@ -609,7 +638,7 @@ export function MarkdownEditor({
 												placeholder={placeholder}
 												readOnly={readOnly}
 												className="min-h-full px-6 pt-4 pb-48"
-												style={fontSize ? { fontSize } : undefined}
+												style={editorTypographyStyle}
 											/>
 											{!readOnly ? (
 												<WikiLinkSuggestion
