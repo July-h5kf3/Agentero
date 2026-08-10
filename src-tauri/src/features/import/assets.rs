@@ -3,6 +3,7 @@
 //! Flow: always try PDF → arXiv also tries e-print TeX → caller may liteparse when no TeX.
 
 use crate::core::error::AppError;
+use crate::features::catalog::{has_local_pdf, probe_paper_caps};
 use flate2::read::GzDecoder;
 use serde::Serialize;
 use std::fs::{self, File};
@@ -67,40 +68,6 @@ impl AssetProgressContext<'_> {
             },
         );
     }
-}
-
-/// True if `source/` (or paper dir) already has a PDF.
-pub fn has_local_pdf(paper_dir: &Path) -> bool {
-    walk_has_ext(paper_dir, &["pdf"])
-}
-
-/// True if `source/` (or paper dir) already has a TeX / LaTeX source file.
-pub fn has_local_tex(paper_dir: &Path) -> bool {
-    walk_has_ext(paper_dir, &["tex", "ltx"])
-}
-
-fn walk_has_ext(root: &Path, exts: &[&str]) -> bool {
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                // Skip huge trees; paper folders are shallow.
-                if stack.len() < 32 {
-                    stack.push(path);
-                }
-            } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                let lower = ext.to_ascii_lowercase();
-                if exts.iter().any(|x| *x == lower) {
-                    return true;
-                }
-            }
-        }
-    }
-    false
 }
 
 /// Download missing PDF (always try when URL known) and arXiv LaTeX source.
@@ -188,8 +155,9 @@ async fn ensure_paper_assets_impl(
     let mut out = AssetDownloadResult::default();
     fs::create_dir_all(paper_dir)?;
 
-    let need_pdf = !has_local_pdf(paper_dir);
-    let need_tex = !has_local_tex(paper_dir);
+    let before = probe_paper_caps(paper_dir);
+    let need_pdf = !before.has_pdf();
+    let need_tex = !before.has_tex;
 
     if need_pdf {
         let mut candidates = pdf_url_candidates(id, arxiv_id, pdf_url);
@@ -273,7 +241,7 @@ async fn ensure_paper_assets_impl(
                 Ok(()) => {
                     // A PDF-only e-print also returns Ok (the PDF is written to
                     // the paper root and no TeX is extracted), so success here
-                    // does not guarantee TeX. The has_local_tex refresh below
+                    // does not guarantee TeX. The capability refresh below
                     // sets `tex` from what actually landed on disk.
                     out.messages.push("tex ok".into());
                 }
@@ -286,10 +254,11 @@ async fn ensure_paper_assets_impl(
     }
 
     // Refresh presence after attempts
-    if has_local_pdf(paper_dir) {
+    let after = probe_paper_caps(paper_dir);
+    if after.has_pdf() {
         out.pdf = true;
     }
-    if has_local_tex(paper_dir) {
+    if after.has_tex {
         out.tex = true;
     }
     super::check_task_not_cancelled(progress.task_id)?;

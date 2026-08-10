@@ -6,11 +6,11 @@
 //! @see docs/backend/paper-import-pipeline.md
 
 use crate::core::error::AppError;
-use crate::features::catalog::papers;
+use crate::features::catalog::{papers, probe_paper_caps};
 use crate::features::import::{
-    allocate_paper_path, ensure_paper_assets_with_progress, has_local_pdf, has_local_tex,
-    normalize_parent_dir, paper_record_from_meta, write_paper_shell_opts, AssetDownloadResult,
-    AssetProgressContext, PaperMeta,
+    allocate_paper_path, ensure_paper_assets_with_progress, normalize_parent_dir,
+    paper_record_from_meta, write_paper_shell_opts, AssetDownloadResult, AssetProgressContext,
+    PaperMeta,
 };
 use serde::Serialize;
 use std::fs;
@@ -118,15 +118,16 @@ pub async fn paper_commit(
                 && (dir.join("NOTES.md").is_file()
                     || papers::get_by_path(vault, &candidate)?.is_some())
             {
+                let caps = probe_paper_caps(&dir);
                 return Ok(PaperCommitResult {
                     status: CommitStatus::Skipped,
                     path: candidate,
                     id: meta.id,
                     title: meta.title,
                     paper_dir: dir.to_string_lossy().to_string(),
-                    pdf: has_local_pdf(&dir),
-                    tex: has_local_tex(&dir),
-                    paper_md: dir.join("PAPER.md").is_file(),
+                    pdf: caps.has_pdf(),
+                    tex: caps.has_tex,
+                    paper_md: caps.has_paper_md,
                     asset_messages: Vec::new(),
                     assets_pending: false,
                 });
@@ -208,11 +209,12 @@ fn existing_result(
     existing: papers::PaperRecord,
     dir: PathBuf,
 ) -> PaperCommitResult {
+    let caps = probe_paper_caps(&dir);
     PaperCommitResult {
         status,
-        pdf: has_local_pdf(&dir),
-        tex: has_local_tex(&dir),
-        paper_md: dir.join("PAPER.md").is_file(),
+        pdf: caps.has_pdf(),
+        tex: caps.has_tex,
+        paper_md: caps.has_paper_md,
         paper_dir: dir.to_string_lossy().to_string(),
         path: existing.path,
         id: existing.id,

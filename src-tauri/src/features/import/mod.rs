@@ -16,9 +16,10 @@ mod skill_import;
 pub(crate) mod zotero_db;
 pub(crate) mod zotero_io;
 
+pub use crate::features::catalog::{has_local_pdf, has_local_tex};
 pub use assets::{
     ensure_paper_assets, ensure_paper_assets_with_cookies, ensure_paper_assets_with_progress,
-    has_local_pdf, has_local_tex, AssetDownloadResult, AssetProgressContext,
+    AssetDownloadResult, AssetProgressContext,
 };
 pub use map::{enrich_remote_urls, map_zotero_item, PaperMeta};
 pub use skill_import::{

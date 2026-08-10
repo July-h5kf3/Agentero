@@ -4,8 +4,7 @@
 //! @see docs/backend/api.md `paper_parse_body`
 
 use crate::core::error::AppError;
-use crate::features::catalog::papers;
-use crate::features::import::{has_local_pdf, has_local_tex};
+use crate::features::catalog::{papers, probe_paper_caps};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use liteparse::config::{ImageMode, LiteParseConfig, OutputFormat};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -49,55 +48,6 @@ pub struct PaperParseBodyArgs {
     /// Frontend background-task id; passed to the isolated parser worker for cancellation.
     #[serde(default)]
     pub task_id: Option<String>,
-}
-
-/// True when `{paper}/PAPER.md` exists.
-pub fn has_paper_md(paper_dir: &Path) -> bool {
-    paper_dir.join(PAPER_MD).is_file()
-}
-
-/// Find first local PDF under the paper folder (prefer root `*.pdf`, then nested).
-pub fn find_local_pdf(paper_dir: &Path) -> Option<PathBuf> {
-    // Prefer direct children of the paper folder (canonical location)
-    if let Ok(entries) = fs::read_dir(paper_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file()
-                && path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
-            {
-                return Some(path);
-            }
-        }
-    }
-    // Recursive: PDFs under source/ or nested dirs
-    find_pdf_under(paper_dir)
-}
-
-fn find_pdf_under(root: &Path) -> Option<PathBuf> {
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if stack.len() < 32 {
-                    stack.push(path);
-                }
-            } else if path
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
-            {
-                return Some(path);
-            }
-        }
-    }
-    None
 }
 
 /// After PDF/TeX download: if no TeX and PDF present, generate `PAPER.md` when missing.
@@ -153,25 +103,21 @@ async fn parse_paper_body_inner(
     task_id: Option<&str>,
 ) -> PaperParseResult {
     let mut out = PaperParseResult::default();
+    let caps = probe_paper_caps(paper_dir);
 
-    if has_local_tex(paper_dir) {
+    if caps.has_tex {
         out.messages.push("skip: local TeX present".into());
         return out;
     }
 
-    if has_paper_md(paper_dir) && !force {
+    if caps.has_paper_md && !force {
         out.paper_md = true;
         out.messages.push("PAPER.md already present".into());
         return out;
     }
 
-    if !has_local_pdf(paper_dir) {
+    let Some(pdf_path) = caps.pdf_path else {
         out.messages.push("skip: no local PDF".into());
-        return out;
-    }
-
-    let Some(pdf_path) = find_local_pdf(paper_dir) else {
-        out.messages.push("skip: PDF path not found".into());
         return out;
     };
 

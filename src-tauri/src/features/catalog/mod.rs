@@ -3,9 +3,13 @@
 //! Authoritative store for paper set + structured metadata.
 //! See `docs/backend/catalog.md`.
 
+pub mod caps;
 pub mod papers;
 mod schema;
 
+pub use caps::{
+    find_local_pdf, has_local_pdf, has_local_tex, has_paper_md, probe_paper_caps, PaperCaps,
+};
 pub use schema::{catalog_db_path, ensure_catalog, schema_version, SCHEMA_VERSION};
 
 pub mod commands;
