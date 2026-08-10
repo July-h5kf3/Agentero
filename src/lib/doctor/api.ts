@@ -44,12 +44,41 @@ export type VisualMarkCandidate = {
 	selectedByDefault: boolean;
 };
 
+export type DuplicateKind = "id" | "path";
+
+export type DuplicateRow = {
+	path: string;
+	id: string;
+	title: string;
+	updatedAt: string;
+	pathExists: boolean;
+};
+
+export type DuplicateGroup = {
+	kind: DuplicateKind;
+	key: string;
+	rows: DuplicateRow[];
+};
+
+export type DuplicateReport = {
+	duplicateIds: DuplicateGroup[];
+	duplicatePaths: DuplicateGroup[];
+	totalDuplicateRows: number;
+};
+
+export type DuplicateRepairResult = {
+	removedRows: number;
+	removedPaths: string[];
+	keptPaths: string[];
+};
+
 export type DoctorReport = {
 	ok: boolean;
 	vault: DoctorSection;
 	catalog: DoctorSection & {
 		schemaVersion?: number;
 		expectedSchemaVersion: number;
+		duplicateReport?: DuplicateReport;
 	};
 	wikilinks: {
 		checkedFiles: number;
@@ -216,5 +245,13 @@ export function doctorApplyVisualMarks(
 ): Promise<{ updatedPaths: string[] }> {
 	return invokeApi<{ updatedPaths: string[] }>("doctor_apply_visual_marks", {
 		args: { vaultPath, changes },
+	});
+}
+
+export function doctorFixCatalogDuplicates(
+	vaultPath: string,
+): Promise<DuplicateRepairResult> {
+	return invokeApi<DuplicateRepairResult>("doctor_fix_catalog_duplicates", {
+		args: { vaultPath },
 	});
 }

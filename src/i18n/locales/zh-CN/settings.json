@@ -355,6 +355,10 @@
 			"applying": "升级中…",
 			"success": "已升级 {{count}} 个视觉批注文件。"
 		},
+		"catalogDuplicates": {
+			"fix": "去重",
+			"success": "已删除 {{removed}} 行重复 Catalog 记录，保留 {{kept}} 行。"
+		},
 		"issueCount": "{{count}} 个问题",
 		"repair": {
 			"select": "选择 {{path}}",

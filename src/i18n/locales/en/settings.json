@@ -362,6 +362,10 @@
 			"applying": "Upgrading…",
 			"success": "Upgraded {{count}} visual mark file(s)."
 		},
+		"catalogDuplicates": {
+			"fix": "Remove duplicates",
+			"success": "Removed {{removed}} duplicate catalog row(s), kept {{kept}}."
+		},
 		"issueCount": "{{count}} issue(s)",
 		"repair": {
 			"select": "Select {{path}}",

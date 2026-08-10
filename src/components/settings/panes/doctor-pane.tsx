@@ -47,6 +47,7 @@ import {
 	doctorApplyVisualMarks,
 	doctorApplyWikilinks,
 	doctorCheck,
+	doctorFixCatalogDuplicates,
 	doctorIgnoreAliases,
 	doctorPlanWikilinks,
 	type VisualMarkCandidate,
@@ -435,6 +436,7 @@ export function DoctorPane({
 	const [wikiReviewMode, setWikiReviewMode] = useState(false);
 	const [visualDrafts, setVisualDrafts] = useState<VisualMarkDraft[]>([]);
 	const [visualApplying, setVisualApplying] = useState(false);
+	const [catalogFixing, setCatalogFixing] = useState(false);
 
 	const refresh = useCallback(async () => {
 		if (!vaultPath || hostContext.kind === "remote") return;
@@ -567,6 +569,25 @@ export function DoctorPane({
 		}
 	};
 
+	const fixCatalogDuplicates = async () => {
+		if (!vaultPath) return;
+		setCatalogFixing(true);
+		try {
+			const result = await doctorFixCatalogDuplicates(vaultPath);
+			notifySuccess(
+				t("doctor.catalogDuplicates.success", {
+					removed: result.removedRows,
+					kept: result.keptPaths.length,
+				}),
+			);
+			await refresh();
+		} catch (error) {
+			notifyError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setCatalogFixing(false);
+		}
+	};
+
 	/** Deterministic plan only → review list + optional Agent prompt handoff. */
 	const startWikiProbe = async () => {
 		if (!vaultPath) return;
@@ -692,6 +713,9 @@ export function DoctorPane({
 
 	const vaultIssues = report?.vault.issues ?? [];
 	const catalogIssues = report?.catalog.issues ?? [];
+	const hasCatalogDuplicates =
+		(report?.catalog.duplicateReport?.duplicateIds.length ?? 0) > 0 ||
+		(report?.catalog.duplicateReport?.duplicatePaths.length ?? 0) > 0;
 	const wikiIssues = report?.wikilinks.issues ?? [];
 	const aliasIssues = report?.aliases.issues ?? [];
 	const ignoredAliasPaths = report?.aliases.ignoredPaths ?? [];
@@ -790,6 +814,22 @@ export function DoctorPane({
 				description={t("doctor.sectionHints.catalog")}
 				ok={report?.catalog.ok ?? true}
 				issueCount={catalogIssues.length}
+				action={
+					hasCatalogDuplicates ? (
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							disabled={catalogFixing}
+							onClick={() => void fixCatalogDuplicates()}
+						>
+							{catalogFixing ? (
+								<RefreshCw className="mr-1.5 size-3.5 animate-spin" />
+							) : null}
+							{t("doctor.catalogDuplicates.fix")}
+						</Button>
+					) : undefined
+				}
 			>
 				{catalogIssues.length > 0 ? <IssueRows issues={catalogIssues} /> : null}
 			</DoctorSection>
