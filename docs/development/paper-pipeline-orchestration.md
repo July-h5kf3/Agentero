@@ -517,20 +517,22 @@ AGENTS.md 要求「尽可能复用能力」，因此先调研了现成框架。�
 
 全程零 migration。每步一个独立 Conventional Commit。
 
-| # | 改动 | 风险 | 收益 |
-|---|---|---|---|
-| 1 | **函数清理**：删 `enqueue-paper-pdf-parse.ts:67-68` 内联刷新、给 `resources.ts:120-135` 补 `enqueuePaperPdfParse` 对齐行为、`refreshTreeQuiet` 合并进 `refreshTree`、`refreshAll` 改并发 | 低 | 一次下载少 2–3 次全量树重建；补上 `PAPER.md` 缺口 |
-| 2 | **死代码删除**（§10.4）+ `is_complex()` 去掉 buffer 克隆 | 低 | 减面积；每篇少一次完整 PDF parse |
-| 3 | sidecar 统一写入器（debounce + 原子写 + 自写抑制） | 低 | 治 400+ 次全量写与缓存损坏风险 |
-| 4 | 缓存命中跳过 `mergeCaptionsIntoHosts` + `layout-index.json` 重写 | 低 | 每次打开省一次无意义写 |
-| 5 | watcher 忽略 `catalog.sqlite*` | 低 | 掐死自回声全量 `paper_list` |
-| 6 | `CatalogHandle` 进 State + 重命令改 `spawn_blocking` | 低 | 每个 catalog 命令省 5 次 `schema_version` 探测 |
-| 7 | `CapsCache` 内存能力位 + 删 `collectPapersNeedingAssetDownload` | 中 | 消灭所有目录 walk |
-| 8 | `paper_open_bundle` 聚合命令 | 中 | T0 从 4 IPC → 1 IPC |
-| 9 | `JobCenter` 内存队列 + `job:changed` 事件 + `governor` 限流 | 高 | 轮询消失，队列语义统一，S2 不再 429 |
-| 10 | enqueue 点收敛到 3 入口 + `reconcile` 扫描 + 删 `downloadAllMissingAssets` / `loadPaperRefsAuto` | 高 | 重复触发消失（依赖 9） |
+| # | 改动 | 风险 | 收益 | 状态 |
+|---|---|---|---|---|
+| 1 | **函数清理**：删 `enqueue-paper-pdf-parse.ts:67-68` 内联刷新、给 `resources.ts:120-135` 补 `enqueuePaperPdfParse` 对齐行为、`refreshTreeQuiet` 合并进 `refreshTree`、`refreshAll` 改并发 | 低 | 一次下载少 2–3 次全量树重建；补上 `PAPER.md` 缺口 | 完成（`c794c19e`、`4fd4b1a7`） |
+| 2 | **死代码删除**（§10.4）+ `is_complex()` 去掉 buffer 克隆 | 低 | 减面积；每篇少一次完整 PDF parse | 死代码已删（`8481cfe1`）；`is_complex()` 克隆**无法去除**——liteparse 的 `is_complex` 与 `parse_input` 各自消费 owned `PdfInput::Bytes`，且 `ParseResult` 不暴露 `needs_ocr`，质量标签必须靠独立预检 |
+| 3 | sidecar 统一写入器（debounce + 原子写 + 自写抑制） | 低 | 治 400+ 次全量写与缓存损坏风险 | 部分：layout-translate debounce 完成（`36987514`）；原子写 + 自写抑制未做（与 watcher rename 行为耦合，需联调） |
+| 4 | 缓存命中跳过 `mergeCaptionsIntoHosts` + `layout-index.json` 重写 | 低 | 每次打开省一次无意义写 | 完成（`21863560`，缓存命中零写盘；merge 仍内存执行以保留算法热更新） |
+| 5 | watcher 忽略 `catalog.sqlite*` | 低 | 掐死自回声全量 `paper_list` | 完成（`caed3e6f`） |
+| 6 | `CatalogHandle` 进 State + 重命令改 `spawn_blocking` | 低 | 每个 catalog 命令省 5 次 `schema_version` 探测 | 未开始（需成对做 `spawn_blocking`，涉及 SQLite 连接线程模型，建议实机验证） |
+| 7 | `CapsCache` 内存能力位 + 删 `collectPapersNeedingAssetDownload` | 中 | 消灭所有目录 walk | 部分：`CapsCache` 完成（`ff5756be`）；`collectPapersNeedingAssetDownload` 删除依赖 reconcile 扫描（见 10） |
+| 8 | `paper_open_bundle` 聚合命令 | 中 | T0 从 4 IPC → 1 IPC | 完成（`ac17af96`） |
+| 9 | `JobCenter` 内存队列 + `job:changed` 事件 + `governor` 限流 | 高 | 轮询消失，队列语义统一，S2 不再 429 | 基本完成：调度器（`61938b50`）、ParseBody / ParseRefs / LayoutAnalyze executor（`2952c686`）；在线引用以 `Semaphore(2)` 限流（`online.rs`）替代 `governor` |
+| 10 | enqueue 点收敛到 3 入口 + `reconcile` 扫描 + 删 `downloadAllMissingAssets` / `loadPaperRefsAuto` | 高 | 重复触发消失（依赖 9） | 未开始（跨切面，需实机验证打开论文 / 引用面板 / 批量下载流程） |
 
 1–6 互相独立且全为低风险，可先行兑现收益。9 的投入较大（约 300–400 行，见 §8.5），做完 1–8 后再评估。10 必须跟在 9 之后。
+
+> 剩余未竟项集中在 3（原子写 + 自写抑制）、6（`CatalogHandle` + `spawn_blocking`）、10（enqueue 收敛 + reconcile）。三者都会改变 watcher / SQLite 连接 / 打开论文关键路径的运行时行为，单测难以覆盖，建议在 `pnpm tauri dev` 下逐项验证后提交。
 
 ## 10. 函数审计与清理
 
