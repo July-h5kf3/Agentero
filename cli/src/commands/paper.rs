@@ -647,12 +647,15 @@ async fn parse(globals: &GlobalOpts, ref_: &str, force: bool) -> Result<Value, C
             "no local PDF to parse; run paper download first",
         ));
     }
-    let result = pdf_parse::parse_paper_body(PaperParseBodyArgs {
-        vault_path: vault.to_string_lossy().to_string(),
-        path: paper.path.clone(),
-        force,
-        task_id: None,
-    })
+    let result = pdf_parse::parse_paper_body(
+        PaperParseBodyArgs {
+            vault_path: vault.to_string_lossy().to_string(),
+            path: paper.path.clone(),
+            force,
+            task_id: None,
+        },
+        None,
+    )
     .await?;
     let style = globals.style;
     let mut v = to_value(&result)?;

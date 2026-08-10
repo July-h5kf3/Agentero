@@ -3,6 +3,7 @@
 use crate::core::error::ApiResult;
 use crate::core::fs::WriteOpts;
 use crate::core::log_util::{trunc, OpTimer};
+use crate::features::catalog::CapsCache;
 use crate::features::import::pdf_parse::{PaperParseBodyArgs, PaperParseResult};
 use crate::features::import::{
     AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportBatchArgs,
@@ -20,6 +21,7 @@ use tauri::State;
 pub async fn lookup_import_batch(
     app: tauri::AppHandle,
     registry: State<'_, Arc<RemoteRegistry>>,
+    cache: State<'_, CapsCache>,
     args: LookupImportBatchArgs,
 ) -> Result<ApiResult<LookupImportBatchResult>, String> {
     let n = args.texts.len();
@@ -37,7 +39,7 @@ pub async fn lookup_import_batch(
         );
     }
     let task_id = args.task_id.clone();
-    let result = super::import_by_identifier_batch(args, Some(&app)).await;
+    let result = super::import_by_identifier_batch(args, Some(&app), Some(&cache)).await;
     if let Some(task_id) = task_id.as_deref() {
         crate::features::agent::background_tasks::finish(task_id);
     }
@@ -84,6 +86,7 @@ pub fn skill_discard(discovery_id: String) -> ApiResult<()> {
 pub async fn paper_download_assets(
     app: tauri::AppHandle,
     registry: State<'_, Arc<RemoteRegistry>>,
+    cache: State<'_, CapsCache>,
     args: PaperDownloadAssetsArgs,
 ) -> Result<ApiResult<AssetDownloadResult>, String> {
     let path = trunc(&args.path, 120);
@@ -101,7 +104,7 @@ pub async fn paper_download_assets(
         );
     }
     let task_id = args.task_id.clone();
-    let result = super::download_paper_assets_with_progress(args, Some(&app)).await;
+    let result = super::download_paper_assets_with_progress(args, Some(&app), Some(&cache)).await;
     if let Some(task_id) = task_id.as_deref() {
         crate::features::agent::background_tasks::finish(task_id);
     }
@@ -113,6 +116,7 @@ pub async fn paper_download_assets(
 pub async fn paper_import_local_pdf(
     app: tauri::AppHandle,
     registry: State<'_, Arc<RemoteRegistry>>,
+    cache: State<'_, CapsCache>,
     args: ImportLocalPdfArgs,
 ) -> Result<ApiResult<ImportLocalPdfResult>, String> {
     let n = args.file_paths.len();
@@ -131,7 +135,7 @@ pub async fn paper_import_local_pdf(
         };
         import_bridge::import_local_pdfs_remote(session, args).await
     } else {
-        super::import_local_pdfs(args, Some(&app)).await
+        super::import_local_pdfs(args, Some(&app), Some(&cache)).await
     };
     if let Some(task_id) = task_id.as_deref() {
         crate::features::agent::background_tasks::finish(task_id);
@@ -146,6 +150,7 @@ pub async fn paper_import_local_pdf(
 #[tauri::command]
 pub async fn paper_parse_body(
     registry: State<'_, Arc<RemoteRegistry>>,
+    cache: State<'_, CapsCache>,
     args: PaperParseBodyArgs,
 ) -> Result<ApiResult<PaperParseResult>, String> {
     let path = trunc(&args.path, 120);
@@ -171,7 +176,7 @@ pub async fn paper_parse_body(
     }
 
     let task_id = args.task_id.clone();
-    let result = crate::features::import::pdf_parse::parse_paper_body(args).await;
+    let result = crate::features::import::pdf_parse::parse_paper_body(args, Some(&cache)).await;
     if let Some(task_id) = task_id.as_deref() {
         crate::features::agent::background_tasks::finish(task_id);
     }
@@ -193,7 +198,7 @@ async fn parse_remote_body(
         task_id: args.task_id.clone(),
     };
 
-    let result = crate::features::import::pdf_parse::parse_paper_body(local_args).await?;
+    let result = crate::features::import::pdf_parse::parse_paper_body(local_args, None).await?;
 
     if result.paper_md {
         let paper_md_local = staging.join("PAPER.md");

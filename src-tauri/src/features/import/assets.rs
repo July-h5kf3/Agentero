@@ -3,7 +3,7 @@
 //! Flow: always try PDF → arXiv also tries e-print TeX → caller may liteparse when no TeX.
 
 use crate::core::error::AppError;
-use crate::features::catalog::{has_local_pdf, probe_paper_caps};
+use crate::features::catalog::{has_local_pdf, probe_paper_caps, CapsCache};
 use flate2::read::GzDecoder;
 use serde::Serialize;
 use std::fs::{self, File};
@@ -86,18 +86,24 @@ pub async fn ensure_paper_assets(
     ensure_paper_assets_with_cookies(paper_dir, id, arxiv_id, pdf_url, doi, None).await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn ensure_paper_assets_with_progress(
     paper_dir: &Path,
+    vault: &Path,
+    paper_path: &str,
     id: &str,
     arxiv_id: Option<&str>,
     pdf_url: Option<&str>,
     doi: Option<&str>,
     cookies: Option<&str>,
+    cache: Option<&CapsCache>,
     progress: AssetProgressContext<'_>,
 ) -> Result<AssetDownloadResult, AppError> {
     tokio::time::timeout(
         super::PAPER_ASSET_TIMEOUT,
-        ensure_paper_assets_impl(paper_dir, id, arxiv_id, pdf_url, doi, cookies, progress),
+        ensure_paper_assets_impl(
+            paper_dir, vault, paper_path, id, arxiv_id, pdf_url, doi, cookies, cache, progress,
+        ),
     )
     .await
     .map_err(|_| {
@@ -122,11 +128,14 @@ pub async fn ensure_paper_assets_with_cookies(
         super::PAPER_ASSET_TIMEOUT,
         ensure_paper_assets_impl(
             paper_dir,
+            paper_dir,
+            "",
             id,
             arxiv_id,
             pdf_url,
             doi,
             cookies,
+            None,
             AssetProgressContext {
                 app: None,
                 task_id: None,
@@ -142,20 +151,26 @@ pub async fn ensure_paper_assets_with_cookies(
     })?
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn ensure_paper_assets_impl(
     paper_dir: &Path,
+    vault: &Path,
+    paper_path: &str,
     id: &str,
     arxiv_id: Option<&str>,
     pdf_url: Option<&str>,
     doi: Option<&str>,
     cookies: Option<&str>,
+    cache: Option<&CapsCache>,
     progress: AssetProgressContext<'_>,
 ) -> Result<AssetDownloadResult, AppError> {
     super::check_task_not_cancelled(progress.task_id)?;
     let mut out = AssetDownloadResult::default();
     fs::create_dir_all(paper_dir)?;
 
-    let before = probe_paper_caps(paper_dir);
+    let before = cache
+        .map(|c| c.caps_for(vault, paper_path))
+        .unwrap_or_else(|| probe_paper_caps(paper_dir));
     let need_pdf = !before.has_pdf();
     let need_tex = !before.has_tex;
 
@@ -253,8 +268,14 @@ async fn ensure_paper_assets_impl(
         }
     }
 
-    // Refresh presence after attempts
-    let after = probe_paper_caps(paper_dir);
+    // Refresh presence after attempts. Directory content may have changed, so
+    // invalidate any cached entry first; caps_for then re-probes and caches.
+    if let Some(c) = cache {
+        c.invalidate(vault, paper_path);
+    }
+    let after = cache
+        .map(|c| c.caps_for(vault, paper_path))
+        .unwrap_or_else(|| probe_paper_caps(paper_dir));
     if after.has_pdf() {
         out.pdf = true;
     }

@@ -3,7 +3,7 @@
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::fs::sanitize_vault_rel;
 use crate::features::catalog::papers::{self, PaperRecord};
-use crate::features::catalog::probe_paper_caps;
+use crate::features::catalog::{probe_paper_caps, CapsCache};
 use crate::features::wiki::models::WikiRenameResult;
 use crate::features::wiki::rename::run_local_rename_transaction;
 use crate::features::wiki::WikiIndexState;
@@ -76,15 +76,22 @@ pub struct PaperOpenBundle {
 
 /// Bundle local paper-open data for the renderer's focus path.
 #[tauri::command]
-pub fn paper_open_bundle(args: PaperOpenBundleArgs) -> ApiResult<PaperOpenBundle> {
+pub fn paper_open_bundle(
+    args: PaperOpenBundleArgs,
+    cache: State<'_, CapsCache>,
+) -> ApiResult<PaperOpenBundle> {
     let vault = PathBuf::from(args.vault_path.trim());
-    match paper_open_bundle_inner(&vault, &args.path) {
+    match paper_open_bundle_inner(&vault, &args.path, Some(&cache)) {
         Ok(bundle) => ApiResult::ok(bundle),
         Err(e) => map_err(e),
     }
 }
 
-fn paper_open_bundle_inner(vault: &Path, path_raw: &str) -> Result<PaperOpenBundle, AppError> {
+fn paper_open_bundle_inner(
+    vault: &Path,
+    path_raw: &str,
+    cache: Option<&CapsCache>,
+) -> Result<PaperOpenBundle, AppError> {
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
     }
@@ -98,7 +105,9 @@ fn paper_open_bundle_inner(vault: &Path, path_raw: &str) -> Result<PaperOpenBund
     }
     let paper = papers::get_by_path(vault, &path_rel)?
         .ok_or_else(|| AppError::message("paper not found in catalog"))?;
-    let caps = probe_paper_caps(&paper_dir);
+    let caps = cache
+        .map(|c| c.caps_for(vault, &path_rel))
+        .unwrap_or_else(|| probe_paper_caps(&paper_dir));
     let notes_path = paper_dir.join("NOTES.md");
     let notes_seed = match fs::read_to_string(&notes_path) {
         Ok(text) => Some(text),
@@ -338,7 +347,7 @@ mod open_bundle_tests {
         .expect("write tex");
         papers::upsert_paper(&vault, &sample_record(path, "x")).expect("upsert paper");
 
-        let bundle = paper_open_bundle_inner(&vault, path).expect("open bundle");
+        let bundle = paper_open_bundle_inner(&vault, path, None).expect("open bundle");
 
         assert_eq!(bundle.path_rel, path);
         assert_eq!(bundle.paper.id, "x");
@@ -356,7 +365,7 @@ mod open_bundle_tests {
         fs::create_dir_all(vault.join(path)).expect("create paper dir");
         papers::upsert_paper(&vault, &sample_record(path, "y")).expect("upsert paper");
 
-        let bundle = paper_open_bundle_inner(&vault, path).expect("open bundle");
+        let bundle = paper_open_bundle_inner(&vault, path, None).expect("open bundle");
 
         assert_eq!(bundle.paper.id, "y");
         assert!(bundle.notes_seed.is_none());

@@ -6,7 +6,7 @@
 //! @see docs/backend/paper-import-pipeline.md
 
 use crate::core::error::AppError;
-use crate::features::catalog::{papers, probe_paper_caps};
+use crate::features::catalog::{papers, probe_paper_caps, CapsCache};
 use crate::features::import::{
     allocate_paper_path, ensure_paper_assets_with_progress, normalize_parent_dir,
     paper_record_from_meta, write_paper_shell_opts, AssetDownloadResult, AssetProgressContext,
@@ -14,7 +14,7 @@ use crate::features::import::{
 };
 use serde::Serialize;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -66,6 +66,8 @@ pub struct PaperCommitOptions<'a> {
     pub translate_abstract: bool,
     /// Stamp `added_at` / `updated_at` with now (Connector semantics).
     pub fresh_timestamps: bool,
+    /// Optional in-memory caps cache; avoids repeated directory walks.
+    pub cache: Option<&'a CapsCache>,
 }
 
 /// Uniform result shape for every entry (camelCase matches the frontend).
@@ -108,7 +110,13 @@ pub async fn paper_commit(
         DedupePolicy::ByCatalogId => {
             if let Ok(Some(existing)) = papers::get_by_id(vault, &meta.id) {
                 let dir = vault.join(&existing.path);
-                return Ok(existing_result(CommitStatus::Deduped, existing, dir));
+                return Ok(existing_result(
+                    CommitStatus::Deduped,
+                    existing,
+                    vault,
+                    &dir,
+                    opts.cache,
+                ));
             }
         }
         DedupePolicy::ByPathOrNotes => {
@@ -118,7 +126,10 @@ pub async fn paper_commit(
                 && (dir.join("NOTES.md").is_file()
                     || papers::get_by_path(vault, &candidate)?.is_some())
             {
-                let caps = probe_paper_caps(&dir);
+                let caps = opts
+                    .cache
+                    .map(|c| c.caps_for(vault, &candidate))
+                    .unwrap_or_else(|| probe_paper_caps(&dir));
                 return Ok(PaperCommitResult {
                     status: CommitStatus::Skipped,
                     path: candidate,
@@ -168,11 +179,14 @@ pub async fn paper_commit(
         AssetsPolicy::SyncDownload { cookies, progress } => {
             let assets = ensure_paper_assets_with_progress(
                 &paper_dir,
+                vault,
+                &path_rel,
                 &meta.id,
                 meta.arxiv_id.as_deref(),
                 meta.pdf_url.as_deref(),
                 meta.doi.as_deref(),
                 cookies,
+                opts.cache,
                 progress,
             )
             .await
@@ -201,6 +215,10 @@ pub async fn paper_commit(
     // a sidecar soon after import (fingerprint-cached; safe if callers also spawn).
     crate::features::refs::spawn_parse_after_import(parse_app, vault, &path_rel);
 
+    if let Some(c) = opts.cache {
+        c.invalidate(vault, &path_rel);
+    }
+
     Ok(PaperCommitResult {
         status: CommitStatus::Created,
         path: path_rel,
@@ -218,9 +236,13 @@ pub async fn paper_commit(
 fn existing_result(
     status: CommitStatus,
     existing: papers::PaperRecord,
-    dir: PathBuf,
+    vault: &Path,
+    dir: &Path,
+    cache: Option<&CapsCache>,
 ) -> PaperCommitResult {
-    let caps = probe_paper_caps(&dir);
+    let caps = cache
+        .map(|c| c.caps_for(vault, &existing.path))
+        .unwrap_or_else(|| probe_paper_caps(dir));
     PaperCommitResult {
         status,
         pdf: caps.has_pdf(),

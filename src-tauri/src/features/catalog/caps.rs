@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PaperCaps {
@@ -12,6 +14,81 @@ impl PaperCaps {
     pub fn has_pdf(&self) -> bool {
         self.pdf_path.is_some()
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CapsKey {
+    vault: PathBuf,
+    paper: String,
+}
+
+/// In-memory cache of per-paper derived capabilities.
+///
+/// `caps_for` returns the cached value when available; otherwise it walks the
+/// paper directory once and stores the result. Callers that mutate the paper
+/// folder must `invalidate` the entry so the next read sees fresh disk state.
+#[derive(Clone, Debug)]
+pub struct CapsCache {
+    inner: Arc<Mutex<HashMap<CapsKey, PaperCaps>>>,
+}
+
+impl CapsCache {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Return capabilities for `paper_path` under `vault`, probing and caching
+    /// on miss. If the paper path cannot be normalized, the value is computed
+    /// but not cached.
+    pub fn caps_for(&self, vault: &Path, paper_path: &str) -> PaperCaps {
+        let vault = normalize_vault_path(vault);
+        let Ok(paper) = crate::core::fs::sanitize_vault_rel(paper_path) else {
+            return probe_paper_caps(&vault.join(paper_path));
+        };
+        let key = CapsKey {
+            vault: vault.clone(),
+            paper: paper.clone(),
+        };
+        {
+            let inner = self.inner.lock().expect("caps cache lock poisoned");
+            if let Some(caps) = inner.get(&key) {
+                return caps.clone();
+            }
+        }
+        let caps = probe_paper_caps(&vault.join(&paper));
+        let mut inner = self.inner.lock().expect("caps cache lock poisoned");
+        inner.insert(key, caps.clone());
+        caps
+    }
+
+    /// Drop the cached entry for a single paper so the next `caps_for` re-probes.
+    pub fn invalidate(&self, vault: &Path, paper_path: &str) {
+        let vault = normalize_vault_path(vault);
+        let Ok(paper) = crate::core::fs::sanitize_vault_rel(paper_path) else {
+            return;
+        };
+        let key = CapsKey { vault, paper };
+        let mut inner = self.inner.lock().expect("caps cache lock poisoned");
+        inner.remove(&key);
+    }
+
+    /// Drop all cached entries, e.g. when the active vault changes.
+    pub fn clear(&self) {
+        let mut inner = self.inner.lock().expect("caps cache lock poisoned");
+        inner.clear();
+    }
+}
+
+impl Default for CapsCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn normalize_vault_path(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 pub fn probe_paper_caps(paper_dir: &Path) -> PaperCaps {
@@ -170,6 +247,61 @@ mod tests {
         assert!(!caps.has_pdf());
         assert!(!caps.has_tex);
         assert!(!caps.has_paper_md);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn caps_cache_returns_same_caps_on_second_call() {
+        let root = temp_paper_dir("cache-hit");
+        let paper = root.join("papers/test");
+        fs::create_dir_all(&paper).expect("create paper dir");
+        fs::write(paper.join("PAPER.md"), "body").expect("write paper md");
+        let cache = CapsCache::new();
+        let first = cache.caps_for(&root, "papers/test");
+        let second = cache.caps_for(&root, "papers/test");
+        assert_eq!(first, second);
+        assert!(second.has_paper_md);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn caps_cache_reprobes_after_invalidate() {
+        let root = temp_paper_dir("cache-invalidate");
+        let paper = root.join("papers/test");
+        fs::create_dir_all(&paper).expect("create paper dir");
+        let cache = CapsCache::new();
+        let before = cache.caps_for(&root, "papers/test");
+        assert!(!before.has_paper_md);
+
+        fs::write(paper.join("PAPER.md"), "body").expect("write paper md");
+        cache.invalidate(&root, "papers/test");
+        let after = cache.caps_for(&root, "papers/test");
+        assert!(after.has_paper_md);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn caps_cache_uses_cached_pdf_path() {
+        let root = temp_paper_dir("cache-pdf");
+        let root = std::fs::canonicalize(&root).unwrap_or(root);
+        let paper = root.join("papers/test");
+        fs::create_dir_all(&paper).expect("create paper dir");
+        let pdf = paper.join("paper.pdf");
+        fs::write(&pdf, b"%PDF").expect("write pdf");
+        let cache = CapsCache::new();
+        let first = cache.caps_for(&root, "papers/test");
+        assert_eq!(first.pdf_path.as_deref(), Some(pdf.as_path()));
+
+        // Rename the PDF and remove the old file; cache should still report the old path.
+        let new_pdf = paper.join("moved.pdf");
+        fs::rename(&pdf, &new_pdf).expect("rename pdf");
+        let cached = cache.caps_for(&root, "papers/test");
+        assert_eq!(cached.pdf_path.as_deref(), Some(pdf.as_path()));
+
+        // After invalidation the new path is discovered.
+        cache.invalidate(&root, "papers/test");
+        let fresh = cache.caps_for(&root, "papers/test");
+        assert_eq!(fresh.pdf_path.as_deref(), Some(new_pdf.as_path()));
         fs::remove_dir_all(&root).ok();
     }
 }

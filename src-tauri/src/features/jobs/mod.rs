@@ -543,6 +543,7 @@ impl JobCenter {
             emit_job_changed(&app, snapshot);
 
             let task_id = task_id.unwrap_or_else(|| job_id.clone());
+            let cache = app.state::<crate::features::catalog::CapsCache>();
             let result = crate::features::import::pdf_parse::parse_paper_body(
                 crate::features::import::pdf_parse::PaperParseBodyArgs {
                     vault_path: vault.to_string_lossy().to_string(),
@@ -550,6 +551,7 @@ impl JobCenter {
                     force,
                     task_id: Some(task_id.clone()),
                 },
+                Some(&cache),
             )
             .await;
             crate::features::agent::background_tasks::finish(&task_id);

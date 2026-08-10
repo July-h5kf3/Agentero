@@ -36,7 +36,10 @@ pub use zotero_io::{
 };
 
 use crate::core::error::AppError;
-use crate::features::catalog::papers::{self, PaperRecord};
+use crate::features::catalog::{
+    papers::{self, PaperRecord},
+    CapsCache,
+};
 use crate::features::import::assets::AssetDownloadProgress;
 use futures_util::StreamExt;
 use map::local_pdf_meta;
@@ -224,12 +227,13 @@ pub struct LookupImportBatchResult {
 }
 
 pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImportResult, AppError> {
-    import_by_identifier_with_progress(args, None).await
+    import_by_identifier_with_progress(args, None, None).await
 }
 
 pub async fn import_by_identifier_with_progress(
     args: LookupImportArgs,
     app: Option<&tauri::AppHandle>,
+    cache: Option<&CapsCache>,
 ) -> Result<LookupImportResult, AppError> {
     use crate::features::import::paper_import::{
         paper_commit, AssetsPolicy, DedupePolicy, PaperCommitOptions,
@@ -275,6 +279,7 @@ pub async fn import_by_identifier_with_progress(
             },
             translate_abstract: true,
             fresh_timestamps: false,
+            cache,
         },
     )
     .await?;
@@ -300,6 +305,7 @@ pub async fn import_by_identifier_with_progress(
 pub async fn import_by_identifier_batch(
     args: LookupImportBatchArgs,
     app: Option<&tauri::AppHandle>,
+    cache: Option<&CapsCache>,
 ) -> Result<LookupImportBatchResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
@@ -363,7 +369,7 @@ pub async fn import_by_identifier_batch(
         let counter = counter.clone();
         let task_id = args.task_id.clone();
         async move {
-            let result = import_by_identifier_with_progress(single, app).await;
+            let result = import_by_identifier_with_progress(single, app, cache).await;
             let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
             emit_batch_progress(app, task_id.as_deref(), done, total);
             match result {
@@ -449,12 +455,13 @@ pub(crate) fn identifier_kind_column(kind: IdentifierKind) -> Option<&'static st
 pub async fn download_paper_assets(
     args: PaperDownloadAssetsArgs,
 ) -> Result<AssetDownloadResult, AppError> {
-    download_paper_assets_with_progress(args, None).await
+    download_paper_assets_with_progress(args, None, None).await
 }
 
 pub async fn download_paper_assets_with_progress(
     args: PaperDownloadAssetsArgs,
     app: Option<&tauri::AppHandle>,
+    cache: Option<&CapsCache>,
 ) -> Result<AssetDownloadResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
@@ -486,11 +493,14 @@ pub async fn download_paper_assets_with_progress(
 
     let result = ensure_paper_assets_with_progress(
         &paper_dir,
+        &vault,
+        &path_rel,
         &id,
         arxiv_id.as_deref(),
         pdf_url.as_deref(),
         doi.as_deref(),
         None,
+        cache,
         AssetProgressContext {
             app,
             task_id: args.task_id.as_deref(),
@@ -576,6 +586,7 @@ pub fn stage_import_file(args: StageImportFileArgs) -> Result<StageImportFileRes
 pub async fn import_local_pdfs(
     args: ImportLocalPdfArgs,
     app: Option<&tauri::AppHandle>,
+    cache: Option<&CapsCache>,
 ) -> Result<ImportLocalPdfResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
@@ -607,6 +618,7 @@ pub async fn import_local_pdfs(
             &vault,
             &parent_rel,
             entry,
+            cache,
             AssetProgressContext {
                 app,
                 task_id: task_id.as_deref(),
@@ -654,6 +666,7 @@ async fn import_one_local_pdf(
     vault: &Path,
     parent_rel: &str,
     entry: &LocalPdfImportEntry,
+    cache: Option<&CapsCache>,
     progress: AssetProgressContext<'_>,
 ) -> Result<LookupImportResult, AppError> {
     use crate::features::import::paper_import::{
@@ -714,6 +727,7 @@ async fn import_one_local_pdf(
             },
             translate_abstract: true,
             fresh_timestamps: false,
+            cache,
         },
     )
     .await?;

@@ -4,7 +4,7 @@
 //! @see docs/backend/api.md `paper_parse_body`
 
 use crate::core::error::AppError;
-use crate::features::catalog::{papers, probe_paper_caps};
+use crate::features::catalog::{papers, probe_paper_caps, CapsCache};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use liteparse::config::{ImageMode, LiteParseConfig, OutputFormat};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -149,11 +149,14 @@ pub async fn maybe_generate_paper_md_after_download_with_task(
     paper_dir: &Path,
     task_id: Option<&str>,
 ) -> PaperParseResult {
-    parse_paper_body_inner(vault, path_rel, paper_dir, false, task_id).await
+    parse_paper_body_inner(vault, path_rel, paper_dir, false, task_id, None).await
 }
 
 /// Manual / bulk parse entry (command).
-pub async fn parse_paper_body(args: PaperParseBodyArgs) -> Result<PaperParseResult, AppError> {
+pub async fn parse_paper_body(
+    args: PaperParseBodyArgs,
+    cache: Option<&CapsCache>,
+) -> Result<PaperParseResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
@@ -170,6 +173,7 @@ pub async fn parse_paper_body(args: PaperParseBodyArgs) -> Result<PaperParseResu
         &paper_dir,
         args.force,
         args.task_id.as_deref(),
+        cache,
     )
     .await)
 }
@@ -180,9 +184,12 @@ async fn parse_paper_body_inner(
     paper_dir: &Path,
     force: bool,
     task_id: Option<&str>,
+    cache: Option<&CapsCache>,
 ) -> PaperParseResult {
     let mut out = PaperParseResult::default();
-    let caps = probe_paper_caps(paper_dir);
+    let caps = cache
+        .map(|c| c.caps_for(vault, path_rel))
+        .unwrap_or_else(|| probe_paper_caps(paper_dir));
 
     if caps.has_tex {
         out.messages.push("skip: local TeX present".into());
@@ -237,6 +244,10 @@ async fn parse_paper_body_inner(
             }
         }
         Err(e) => out.messages.push(format!("liteparse failed: {e}")),
+    }
+
+    if let Some(c) = cache {
+        c.invalidate(vault, path_rel);
     }
 
     out

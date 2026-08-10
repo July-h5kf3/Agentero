@@ -80,6 +80,7 @@ pub fn run() {
         .manage(crate::features::bridge::BridgeController::new())
         .manage(crate::features::bridge::BridgeClientController::new())
         .manage(crate::features::jobs::JobCenter::new())
+        .manage(crate::features::catalog::CapsCache::new())
         .manage(WikiIndexState::new())
         .manage(crate::features::doctor::DoctorDirtyPathsState::default())
         .manage(ExternalRenameRepairStore::new())
