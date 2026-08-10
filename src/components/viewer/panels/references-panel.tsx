@@ -323,7 +323,6 @@ export function ReferencesPanel({
 							onOpenPath={openGraphPath}
 							wikiIndexRevision={graphRevision}
 							embedded
-							autoParseCenter={false}
 							className="h-full min-h-0"
 						/>
 					</div>

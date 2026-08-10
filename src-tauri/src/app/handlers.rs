@@ -144,11 +144,11 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::features::connector::commands::connector_set_vault,
             crate::features::connector::commands::connector_set_parent_dir,
             crate::features::connector::commands::connector_set_port,
-            crate::features::open_request::vault_open_take_pending,
-            crate::features::cli_install::cli_install_status,
-            crate::features::cli_install::cli_install_command,
-            crate::features::cli_install::cli_uninstall_command,
-            crate::features::export::export_system_cjk_font,
+            crate::features::open_request::commands::vault_open_take_pending,
+            crate::features::cli_install::commands::cli_install_status,
+            crate::features::cli_install::commands::cli_install_command,
+            crate::features::cli_install::commands::cli_uninstall_command,
+            crate::features::export::commands::export_system_cjk_font,
         ])
     }
     #[cfg(target_os = "ios")]

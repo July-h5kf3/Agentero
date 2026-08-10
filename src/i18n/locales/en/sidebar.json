@@ -224,11 +224,8 @@
 		"skillCandidatesFound": "Found {{count}} Skill candidates. Choose which to install."
 	},
 	"graph": {
-		"near": "Near",
-		"all": "All",
 		"title": "Citation graph",
 		"loading": "Loading citation graph…",
-		"selectPrompt": "Select a paper for its citation neighborhood.",
 		"noEdges": "No citation links yet. Open a paper to parse references, or import more library papers."
 	},
 	"paperInfo": {

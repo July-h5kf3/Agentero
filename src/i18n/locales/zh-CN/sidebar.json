@@ -224,11 +224,8 @@
 		"skillCandidatesFound": "找到 {{count}} 个 Skill 候选，请选择要安装的项目。"
 	},
 	"graph": {
-		"near": "邻近",
-		"all": "全部",
 		"title": "引用图谱",
 		"loading": "正在加载引用图谱…",
-		"selectPrompt": "选择一篇论文以查看引用邻域。",
 		"noEdges": "暂无引用连接。打开论文以解析参考文献，或入库更多相关论文。"
 	},
 	"paperInfo": {

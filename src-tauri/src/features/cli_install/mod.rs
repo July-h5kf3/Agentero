@@ -7,13 +7,15 @@
 //! Dev note: the cargo bin is named `agentero-cli` so it never collides with
 //! the GUI binary `agentero` in `target/{debug,release}/`.
 
-use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::error::AppError;
 use crate::core::install_dirs::{ABS_BIN_DIRS, HOME_BIN_DIRS};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::{AppHandle, Manager, Runtime};
+
+pub mod commands;
 
 const SHIM_NAME: &str = if cfg!(windows) {
     "agentero.cmd"
@@ -183,7 +185,7 @@ fn preferred_bin_dir() -> PathBuf {
         .join("bin")
 }
 
-fn managed_shim_path() -> PathBuf {
+pub(crate) fn managed_shim_path() -> PathBuf {
     preferred_bin_dir().join(SHIM_NAME)
 }
 
@@ -304,7 +306,7 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
     }
 }
 
-fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> {
+pub(crate) fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> {
     if !is_plausible_cli_file(bundled) {
         return Err(AppError::message(format!(
             "bundled CLI is missing or empty: {}",
@@ -371,7 +373,7 @@ fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> {
     }
 }
 
-fn uninstall_shim(shim: &Path, bundled: Option<&Path>) -> Result<bool, AppError> {
+pub(crate) fn uninstall_shim(shim: &Path, bundled: Option<&Path>) -> Result<bool, AppError> {
     if !shim.exists() {
         return Ok(false);
     }
@@ -383,56 +385,6 @@ fn uninstall_shim(shim: &Path, bundled: Option<&Path>) -> Result<bool, AppError>
     }
     fs::remove_file(shim)?;
     Ok(true)
-}
-
-#[tauri::command]
-pub fn cli_install_status<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstallStatus> {
-    ApiResult::ok(collect_status(&app))
-}
-
-#[tauri::command]
-pub fn cli_install_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstallResult> {
-    let bundled = match resolve_bundled_cli(&app) {
-        Some(p) => p,
-        None => {
-            return map_err(AppError::message(
-                "Bundled CLI not found. In dev run `pnpm cli:bundle`, then try Install again. Release builds include the CLI.",
-            ));
-        }
-    };
-    let shim = managed_shim_path();
-    if let Err(e) = install_shim(&bundled, &shim) {
-        return map_err(e);
-    }
-    let mut status = collect_status(&app);
-    if !status.preferred_bin_on_path {
-        status.message = Some(format!(
-            "Installed to {}. Add that directory to PATH if `agentero` is not found in new terminals.",
-            status.preferred_bin_dir
-        ));
-    } else {
-        status.message = Some("Installed. Run `agentero --version` in a new terminal.".to_string());
-    }
-    ApiResult::ok(CliInstallResult {
-        status,
-        action: "install".into(),
-    })
-}
-
-#[tauri::command]
-pub fn cli_uninstall_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstallResult> {
-    let bundled = resolve_bundled_cli(&app);
-    let shim = managed_shim_path();
-    match uninstall_shim(&shim, bundled.as_deref()) {
-        Ok(_) => {}
-        Err(e) => return map_err(e),
-    }
-    let mut status = collect_status(&app);
-    status.message = Some("Removed the Agentero-managed CLI shim.".into());
-    ApiResult::ok(CliInstallResult {
-        status,
-        action: "uninstall".into(),
-    })
 }
 
 /// Optional helper: list user bin candidates (for diagnostics).

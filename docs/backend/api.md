@@ -1104,7 +1104,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 #### `paper_refs_graph`
 
-从已有引用 sidecar + catalog `localMatch` 构建**文献引用关系图**（与双链 `graph_get_graph` 分层，边语义不复用）。不解析缺失 sidecar；前端邻近模式会先 `paper_refs_parse`/`loadPaperRefsAuto` 补当前论文。
+从已有引用 sidecar + catalog `localMatch` 构建**文献引用关系图**（与双链 `graph_get_graph` 分层，边语义不复用）。不解析缺失 sidecar；当前前端只展示全库引用图谱，不再按当前论文构建近邻图。
 
 - **参数**（`args`）：
 
