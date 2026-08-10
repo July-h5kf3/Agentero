@@ -297,6 +297,281 @@ pub fn list_all_conn(conn: &Connection) -> Result<Vec<PaperRecord>, AppError> {
     Ok(rows)
 }
 
+/// One row in a duplicate group (lightweight, for diagnostics / repair).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateRow {
+    pub path: String,
+    pub id: String,
+    pub title: String,
+    pub updated_at: String,
+    pub path_exists: bool,
+}
+
+/// What kind of duplicate was detected.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DuplicateKind {
+    Id,
+    Path,
+}
+
+/// A set of catalog rows sharing the same `id` or `path`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateGroup {
+    pub kind: DuplicateKind,
+    pub key: String,
+    pub rows: Vec<DuplicateRow>,
+}
+
+/// Report of duplicate rows in the catalog.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateReport {
+    pub duplicate_ids: Vec<DuplicateGroup>,
+    pub duplicate_paths: Vec<DuplicateGroup>,
+    pub total_duplicate_rows: usize,
+}
+
+/// Scan the catalog for rows with duplicate `id` or `path`.
+/// `path` duplicates are reported as a sanity check even though the schema
+/// declares it PRIMARY KEY; older or damaged databases may contain them.
+pub fn find_duplicates(vault_root: &Path) -> Result<DuplicateReport, AppError> {
+    let conn = ensure_catalog(vault_root)?;
+    find_duplicates_conn(vault_root, &conn)
+}
+
+pub fn find_duplicates_conn(
+    vault_root: &Path,
+    conn: &Connection,
+) -> Result<DuplicateReport, AppError> {
+    let mut report = DuplicateReport::default();
+
+    let mut stmt = conn
+        .prepare("SELECT path, id, title, updated_at FROM papers ORDER BY id, updated_at DESC")
+        .map_err(AppError::from)?;
+    let raw_rows = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+            ))
+        })
+        .map_err(AppError::from)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::from)?;
+
+    let mut by_id: std::collections::BTreeMap<String, Vec<DuplicateRow>> =
+        std::collections::BTreeMap::new();
+    let mut by_path: std::collections::BTreeMap<String, Vec<DuplicateRow>> =
+        std::collections::BTreeMap::new();
+    for (path, id, title, updated_at) in raw_rows {
+        let row = DuplicateRow {
+            path: path.clone(),
+            id,
+            title,
+            updated_at,
+            path_exists: vault_root.join(&path).is_dir(),
+        };
+        by_id.entry(row.id.clone()).or_default().push(row.clone());
+        by_path.entry(path).or_default().push(row);
+    }
+
+    for (key, group_rows) in by_id {
+        if group_rows.len() > 1 {
+            report.total_duplicate_rows += group_rows.len() - 1;
+            report.duplicate_ids.push(DuplicateGroup {
+                kind: DuplicateKind::Id,
+                key,
+                rows: group_rows,
+            });
+        }
+    }
+    for (key, group_rows) in by_path {
+        if group_rows.len() > 1 {
+            report.total_duplicate_rows += group_rows.len() - 1;
+            report.duplicate_paths.push(DuplicateGroup {
+                kind: DuplicateKind::Path,
+                key,
+                rows: group_rows,
+            });
+        }
+    }
+
+    Ok(report)
+}
+
+/// List papers keeping one row per logical `id`.
+///
+/// Tie-breaking (deterministic, stable):
+/// 1. Path whose folder exists on disk wins.
+/// 2. Newer `updated_at` wins.
+/// 3. Shorter path wins.
+/// 4. Lexicographically smaller path wins.
+///
+/// This is a defensive view for the Library table: it hides duplicate catalog
+/// rows caused by old bugs or manual folder copies without deleting anything.
+pub fn list_all_unique_by_id(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
+    let conn = ensure_catalog(vault_root)?;
+    let rows = list_all_conn(&conn)?;
+    Ok(dedupe_records_by_id(vault_root, rows))
+}
+
+fn dedupe_records_by_id(vault_root: &Path, rows: Vec<PaperRecord>) -> Vec<PaperRecord> {
+    use std::collections::HashMap;
+
+    let mut best_by_id: HashMap<String, PaperRecord> = HashMap::new();
+    for row in rows {
+        let existing_path_exists = vault_root.join(&row.path).is_dir();
+        best_by_id
+            .entry(row.id.clone())
+            .and_modify(|best| {
+                let best_path_exists = vault_root.join(&best.path).is_dir();
+                let replace = match (
+                    existing_path_exists,
+                    best_path_exists,
+                    row.updated_at.cmp(&best.updated_at),
+                ) {
+                    (true, false, _) => true,
+                    (false, true, _) => false,
+                    (_, _, std::cmp::Ordering::Greater) => true,
+                    (_, _, std::cmp::Ordering::Less) => false,
+                    _ => {
+                        let row_len = row.path.len();
+                        let best_len = best.path.len();
+                        if row_len != best_len {
+                            row_len < best_len
+                        } else {
+                            row.path < best.path
+                        }
+                    }
+                };
+                if replace {
+                    *best = row.clone();
+                }
+            })
+            .or_insert(row);
+    }
+
+    let mut out: Vec<PaperRecord> = best_by_id.into_values().collect();
+    out.sort_by(|a, b| {
+        b.updated_at
+            .cmp(&a.updated_at)
+            .then_with(|| a.title.cmp(&b.title))
+    });
+    out
+}
+
+/// Repair duplicate catalog rows.
+///
+/// For each duplicate `id` group, keeps the canonical row using the same rule
+/// as `list_all_unique_by_id` and deletes the rest. `path` duplicates are
+/// repaired by keeping the row with the newest `updated_at`.
+///
+/// Returns the number of rows removed. Deleted rows whose paper folders still
+/// exist on disk are reported in `removed_paths` so the caller can follow up
+/// manually.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateRepairResult {
+    pub removed_rows: usize,
+    pub removed_paths: Vec<String>,
+    pub kept_paths: Vec<String>,
+}
+
+pub fn repair_duplicates(vault_root: &Path) -> Result<DuplicateRepairResult, AppError> {
+    let conn = ensure_catalog(vault_root)?;
+    let tx = conn.unchecked_transaction().map_err(AppError::from)?;
+
+    let mut stmt = tx
+        .prepare("SELECT path, id, title, updated_at FROM papers ORDER BY id, updated_at DESC")
+        .map_err(AppError::from)?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(DuplicateRow {
+                path: r.get(0)?,
+                id: r.get(1)?,
+                title: r.get(2)?,
+                updated_at: r.get(3)?,
+                path_exists: false,
+            })
+        })
+        .map_err(AppError::from)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::from)?;
+    drop(stmt);
+
+    let mut by_id: std::collections::BTreeMap<String, Vec<DuplicateRow>> =
+        std::collections::BTreeMap::new();
+    let mut by_path: std::collections::BTreeMap<String, Vec<DuplicateRow>> =
+        std::collections::BTreeMap::new();
+    for row in rows {
+        by_id.entry(row.id.clone()).or_default().push(row.clone());
+        by_path.entry(row.path.clone()).or_default().push(row);
+    }
+
+    let mut removed_paths: Vec<String> = Vec::new();
+    let mut kept_paths: Vec<String> = Vec::new();
+
+    let choose_canonical = |group: &[DuplicateRow]| -> DuplicateRow {
+        group
+            .iter()
+            .cloned()
+            .max_by(|a, b| {
+                let a_exists = vault_root.join(&a.path).is_dir() as i32;
+                let b_exists = vault_root.join(&b.path).is_dir() as i32;
+                a_exists
+                    .cmp(&b_exists)
+                    .then_with(|| a.updated_at.cmp(&b.updated_at))
+                    .then_with(|| b.path.len().cmp(&a.path.len()))
+                    .then_with(|| b.path.cmp(&a.path))
+            })
+            .unwrap_or_else(|| group[0].clone())
+    };
+
+    for group in by_id.into_values().filter(|g| g.len() > 1) {
+        let canonical = choose_canonical(&group);
+        kept_paths.push(canonical.path.clone());
+        for row in group {
+            if row.path == canonical.path {
+                continue;
+            }
+            tx.execute("DELETE FROM papers WHERE path = ?1", params![row.path])
+                .map_err(AppError::from)?;
+            removed_paths.push(row.path);
+        }
+    }
+
+    for group in by_path.into_values().filter(|g| g.len() > 1) {
+        let canonical = choose_canonical(&group);
+        kept_paths.push(canonical.path.clone());
+        for row in group {
+            if row.path == canonical.path {
+                continue;
+            }
+            tx.execute("DELETE FROM papers WHERE path = ?1", params![row.path])
+                .map_err(AppError::from)?;
+            removed_paths.push(row.path);
+        }
+    }
+
+    tx.commit().map_err(AppError::from)?;
+
+    removed_paths.sort();
+    removed_paths.dedup();
+    kept_paths.sort();
+    kept_paths.dedup();
+
+    Ok(DuplicateRepairResult {
+        removed_rows: removed_paths.len(),
+        removed_paths,
+        kept_paths,
+    })
+}
+
 /// Rebuild missing catalog rows by scanning `papers/` on disk.
 /// Detects paper folders by NOTES.md presence. Idempotent — existing rows
 /// are refreshed and disk-only papers are re-added. Returns the count imported.
@@ -1075,6 +1350,103 @@ mod tests {
         assert_eq!(row.id, "x");
         assert_eq!(row.title, "x");
         assert_eq!(row.year, None);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn insert_with_id(conn: &Connection, path: &str, id: &str, updated_at: &str) {
+        conn.execute(
+            "INSERT INTO papers (path, id, type, title, added_at, updated_at) \
+             VALUES (?1, ?2, 'article', ?2, 't', ?3)",
+            params![path, id, updated_at],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn find_duplicates_reports_duplicate_ids_and_paths() {
+        let dir = env::temp_dir().join(format!("agentero-dup-detect-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        {
+            let conn = ensure_catalog(&dir).unwrap();
+            insert_with_id(&conn, "papers/a", "shared", "2024-01-01T00:00:00Z");
+            insert_with_id(&conn, "papers/b", "shared", "2024-01-02T00:00:00Z");
+            insert_with_id(&conn, "papers/c", "other", "2024-01-03T00:00:00Z");
+        }
+
+        let report = find_duplicates(&dir).unwrap();
+        assert_eq!(report.duplicate_ids.len(), 1);
+        assert_eq!(report.duplicate_ids[0].key, "shared");
+        assert_eq!(report.duplicate_ids[0].rows.len(), 2);
+        assert!(report.duplicate_paths.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_all_unique_by_id_prefers_existing_path_then_newest() {
+        let dir = env::temp_dir().join(format!("agentero-dup-view-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::create_dir_all(dir.join("papers/a")).unwrap();
+        fs::create_dir_all(dir.join("papers/b")).unwrap();
+        {
+            let conn = ensure_catalog(&dir).unwrap();
+            insert_with_id(&conn, "papers/a", "shared", "2024-01-01T00:00:00Z");
+            insert_with_id(&conn, "papers/b", "shared", "2024-01-02T00:00:00Z");
+            insert_with_id(&conn, "papers/c", "other", "2024-01-03T00:00:00Z");
+        }
+
+        let rows = list_all_unique_by_id(&dir).unwrap();
+        let shared = rows.iter().find(|r| r.id == "shared").unwrap();
+        // Both paths exist; newer updated_at wins.
+        assert_eq!(shared.path, "papers/b");
+        assert_eq!(rows.len(), 2);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_all_unique_by_id_prefers_path_that_exists_on_disk() {
+        let dir = env::temp_dir().join(format!("agentero-dup-exists-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::create_dir_all(dir.join("papers/old")).unwrap();
+        {
+            let conn = ensure_catalog(&dir).unwrap();
+            insert_with_id(&conn, "papers/old", "shared", "2024-01-01T00:00:00Z");
+            insert_with_id(&conn, "papers/ghost", "shared", "2024-01-03T00:00:00Z");
+        }
+
+        let rows = list_all_unique_by_id(&dir).unwrap();
+        let shared = rows.iter().find(|r| r.id == "shared").unwrap();
+        // Existing path wins even though it is older.
+        assert_eq!(shared.path, "papers/old");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn repair_duplicates_removes_extra_rows() {
+        let dir = env::temp_dir().join(format!("agentero-dup-repair-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::create_dir_all(dir.join("papers/keep")).unwrap();
+        {
+            let conn = ensure_catalog(&dir).unwrap();
+            insert_with_id(&conn, "papers/keep", "shared", "2024-01-02T00:00:00Z");
+            insert_with_id(&conn, "papers/drop", "shared", "2024-01-01T00:00:00Z");
+        }
+
+        let result = repair_duplicates(&dir).unwrap();
+        assert_eq!(result.removed_rows, 1);
+        assert!(result.removed_paths.contains(&"papers/drop".to_string()));
+        assert!(result.kept_paths.contains(&"papers/keep".to_string()));
+
+        let rows = list_all_conn(&ensure_catalog(&dir).unwrap()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].path, "papers/keep");
 
         let _ = fs::remove_dir_all(&dir);
     }

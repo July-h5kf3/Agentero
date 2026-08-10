@@ -57,13 +57,16 @@ pub struct PaperListArgs {
 }
 
 /// List all papers for the library table (catalog.sqlite).
+///
+/// Returns one row per logical paper `id` so the Library never shows duplicate
+/// entries when the same paper was imported under multiple paths (#248).
 #[tauri::command]
 pub fn paper_list(args: PaperListArgs) -> ApiResult<Vec<PaperRecord>> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return map_err(AppError::message("vault path is not a directory"));
     }
-    match papers::list_all(&vault) {
+    match papers::list_all_unique_by_id(&vault) {
         Ok(rows) => ApiResult::ok(rows),
         Err(e) => map_err(e),
     }

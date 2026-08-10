@@ -211,7 +211,7 @@ fn list(
     include_all: bool,
 ) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
-    let mut rows = papers::list_all(&vault)?;
+    let mut rows = papers::list_all_unique_by_id(&vault)?;
     if unread {
         rows.retain(|r| !r.is_read);
     }
