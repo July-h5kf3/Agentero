@@ -193,6 +193,10 @@ pub async fn paper_commit(
         AssetsPolicy::Deferred => (AssetDownloadResult::default(), true),
     };
 
+    if assets.pdf && !assets.tex && !assets.paper_md {
+        crate::features::jobs::spawn_parse_body_after_assets(parse_app, vault, &path_rel, false);
+    }
+
     // Background reference parse so the citation graph / References panel have
     // a sidecar soon after import (fingerprint-cached; safe if callers also spawn).
     crate::features::refs::spawn_parse_after_import(parse_app, vault, &path_rel);

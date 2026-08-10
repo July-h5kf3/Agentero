@@ -26,7 +26,6 @@ import {
 	rescanPapers,
 	setPaperTags,
 } from "@/lib/paper/api";
-import { enqueuePaperPdfParse } from "@/lib/paper/enqueue-paper-pdf-parse";
 import {
 	libraryStore,
 	refreshLibrary,
@@ -135,16 +134,6 @@ export async function libraryImport(): Promise<void> {
 				`${i18n.t("sidebar:papersLibrary.importDone", { count: result.imported })}; ${result.errors.slice(0, 2).join("; ")}`,
 			);
 		}
-		if (result) {
-			for (const [idx, paperPath] of result.paths.entries()) {
-				const rel = paperPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-				enqueuePaperPdfParse({
-					vaultPath,
-					paperRelPath: rel,
-					paperLabel: result.titles[idx],
-				});
-			}
-		}
 	} catch (e) {
 		notifyError(e instanceof Error ? e.message : String(e));
 	} finally {
@@ -181,10 +170,6 @@ export async function downloadPaperAssetsAction(node: FileNode): Promise<void> {
 				await refreshLibrary();
 				enqueuePaperLayoutAnalysis({
 					paperAbsPath: joinVaultPath(vaultPath, rel),
-				});
-				enqueuePaperPdfParse({
-					vaultPath,
-					paperRelPath: rel,
 				});
 				return r;
 			},
@@ -293,10 +278,6 @@ export async function downloadAllMissingAssets(): Promise<void> {
 						});
 						enqueuePaperLayoutAnalysis({
 							paperAbsPath: joinVaultPath(vaultPath, rel),
-						});
-						enqueuePaperPdfParse({
-							vaultPath,
-							paperRelPath: rel,
 						});
 					} catch (e) {
 						if (signal.aborted) throw e;

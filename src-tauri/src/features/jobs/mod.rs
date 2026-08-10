@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 pub const JOB_CHANGED_EVENT: &str = "job:changed";
@@ -514,6 +514,28 @@ pub fn validate_job_paper(vault_path: &str, path_raw: &str) -> Result<(PathBuf, 
         return Err(AppError::message("paper folder not found"));
     }
     Ok((vault, path))
+}
+
+pub fn spawn_parse_body_after_assets(
+    app: Option<&tauri::AppHandle>,
+    vault: &Path,
+    path_rel: &str,
+    force: bool,
+) {
+    let Some(app) = app else {
+        return;
+    };
+    let app = app.clone();
+    let vault = vault.to_path_buf();
+    let path_rel = path_rel.to_string();
+    tauri::async_runtime::spawn(async move {
+        let center = app.state::<JobCenter>().handle();
+        let snapshot = center
+            .enqueue_parse_body(&vault, &path_rel, JobLane::Normal, force, None)
+            .await;
+        emit_job_changed(&app, snapshot.clone());
+        center.run_parse_body_job(app, snapshot.id).await;
+    });
 }
 
 fn release_active_key(inner: &mut JobCenterInner, job_id: &JobId) {

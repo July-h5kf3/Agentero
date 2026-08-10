@@ -514,6 +514,10 @@ pub async fn download_paper_assets_with_progress(
         }
     }
 
+    if result.pdf && !result.tex && !result.paper_md {
+        crate::features::jobs::spawn_parse_body_after_assets(app, &vault, &path_rel, false);
+    }
+
     crate::features::refs::spawn_parse_after_import(app, &vault, &path_rel);
     Ok(result)
 }
