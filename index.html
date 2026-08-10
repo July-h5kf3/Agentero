@@ -68,6 +68,31 @@
         <div id="boot-spinner"></div>
       </div>
     </div>
+    <script>
+      // Hide the webview's default context menu (including the "Reload" entry)
+      // so right-clicking empty areas does not expose browser chrome. Custom app
+      // menus still work because they attach their own contextmenu handlers.
+      if (
+        typeof window !== "undefined" &&
+        ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
+      ) {
+        window.addEventListener(
+          "contextmenu",
+          (event) => {
+            // Keep native copy/paste menus for plain text inputs.
+            const target = event.target;
+            if (
+              target instanceof HTMLInputElement ||
+              target instanceof HTMLTextAreaElement
+            ) {
+              return;
+            }
+            event.preventDefault();
+          },
+          { capture: true },
+        );
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
