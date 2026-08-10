@@ -23,6 +23,7 @@ import { useSelectionContextPublish } from "@/components/editor/hooks/use-select
 import { useWikilinkEditing } from "@/components/editor/hooks/use-wikilink-editing";
 import { MarkdownExportDialog } from "@/components/editor/markdown-export-dialog";
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
+import { EditorStatusBar } from "@/components/editor/overlays/editor-status-bar";
 import { FindReplaceBar } from "@/components/editor/overlays/find-replace-bar";
 import { FrontmatterPanel } from "@/components/editor/overlays/frontmatter-panel";
 import { HeadingRenameDialog } from "@/components/editor/overlays/heading-rename-dialog";
@@ -736,6 +737,10 @@ export function MarkdownEditor({
 								) : null}
 							</div>
 						</div>
+						<EditorStatusBar
+							filePath={filePath}
+							vaultPath={wikiNav?.vaultPath ?? null}
+						/>
 						<HeadingRenameDialog
 							open={headingRenameOpen}
 							heading={headingContext}

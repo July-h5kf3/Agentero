@@ -200,5 +200,11 @@
 			"mermaid": "Mermaid 图表",
 			"callout": "Callout"
 		}
+	},
+	"statusBar": {
+		"label": "文档统计",
+		"backlinks": "{{count}}条反向链接",
+		"words": "{{count}}个词",
+		"characters": "{{count}}个字符"
 	}
 }

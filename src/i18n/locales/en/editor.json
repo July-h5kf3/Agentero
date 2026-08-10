@@ -200,5 +200,14 @@
 			"mermaid": "Mermaid diagram",
 			"callout": "Callout"
 		}
+	},
+	"statusBar": {
+		"label": "Document statistics",
+		"backlinks_one": "{{count}} backlink",
+		"backlinks_other": "{{count}} backlinks",
+		"words_one": "{{count}} word",
+		"words_other": "{{count}} words",
+		"characters_one": "{{count}} character",
+		"characters_other": "{{count}} characters"
 	}
 }
