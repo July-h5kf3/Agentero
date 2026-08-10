@@ -19,6 +19,8 @@
 
 | 文档 | 主题 |
 |---|---|
+| [paper-pipeline-orchestration.md](paper-pipeline-orchestration.md) | 打开论文的三条时间轴（T0/T1/T2）、`paper_open_bundle` 聚合命令、内存 Job Center 与五条流水线（下载 / liteparse / 引用 / 图谱 / layout）编排；含 Operation/Job 判定、`auto`/`all` 类函数审计、依赖选型。零 schema 变更 |
+| [paper-behavior-dag.md](paper-behavior-dag.md) | 导入（identifier / Connector / 本地 PDF / BibTeX 四条入口）与打开论文的行为 DAG、现状不合理之处（`PAPER.md` 生成责任在前端、refs 重复 spawn、PDF/TeX 串行）与目标 DAG |
 | [plaza.md](plaza.md) | 广场（Cool Papers / 推荐 / 播客） |
 | [usage-analytics.md](usage-analytics.md) | \#239 使用记录总结：`.agentero/usage.sqlite` 事件与画像、Agent 习惯 context 三层接入、继续阅读 / 周回顾 / 库内推荐 |
 | [bundled-cli.md](bundled-cli.md) | 桌面安装包内置 CLI、命令行打开 Vault 与跨平台 PATH 策略 |
