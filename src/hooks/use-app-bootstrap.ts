@@ -11,6 +11,7 @@ import { useVaultOpenRequest } from "@/hooks/use-vault-open-request";
 import i18n, { resolveLocale } from "@/i18n";
 import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
+import { startJobCompletionRefresh } from "@/lib/paper/job-refresh";
 import { refreshLibrary } from "@/lib/paper/library-store";
 import { initJobCenterExecutors } from "@/lib/pdf/layout/enqueue-paper-layout";
 import { applyDocumentChrome } from "@/lib/settings";
@@ -135,5 +136,6 @@ export function useAppBootstrap(): void {
 	useEffect(() => {
 		if (!isTauri()) return;
 		initJobCenterExecutors();
+		startJobCompletionRefresh();
 	}, []);
 }
