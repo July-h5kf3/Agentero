@@ -187,6 +187,10 @@ pub async fn paper_commit(
         AssetsPolicy::Deferred => (AssetDownloadResult::default(), true),
     };
 
+    // Background reference parse so the citation graph / References panel have
+    // a sidecar soon after import (fingerprint-cached; safe if callers also spawn).
+    crate::features::refs::spawn_parse_after_import(None, vault, &path_rel);
+
     Ok(PaperCommitResult {
         status: CommitStatus::Created,
         path: path_rel,

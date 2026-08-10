@@ -73,6 +73,7 @@ macro_rules! common_commands {
             crate::features::import::commands::paper_import,
             crate::features::refs::commands::paper_refs_parse,
             crate::features::refs::commands::paper_refs_list,
+            crate::features::refs::commands::paper_refs_graph,
             crate::features::catalog::commands::paper_get,
             crate::features::catalog::commands::paper_list,
             crate::features::catalog::commands::paper_move,

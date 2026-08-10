@@ -16,7 +16,7 @@ use crate::core::error::AppError;
 use crate::features::catalog::papers::{self, PaperRecord};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -226,6 +226,369 @@ pub fn spawn_parse_after_import(app: Option<&tauri::AppHandle>, vault: &Path, pa
 pub fn read_sidecar(path: &Path) -> Option<CiteSidecar> {
     let text = fs::read_to_string(path).ok()?;
     serde_json::from_str(&text).ok()
+}
+
+// ── Citation relationship graph ─────────────────────────────────────────────
+// Built from existing `{paper}/source/agentero-cite.json` sidecars + catalog
+// localMatch edges. Distinct from the wikilink graph (`graph_get_graph`).
+
+/// Graph node type (JSON-compatible with the wiki Graph panel).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CiteGraphNodeType {
+    Paper,
+    Note,
+    Index,
+    Stub,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CiteGraphNode {
+    /// Vault-relative paper path, or `stub:…` for unresolved citations.
+    pub id: String,
+    pub label: String,
+    #[serde(rename = "type")]
+    pub node_type: CiteGraphNodeType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CiteGraphEdge {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    /// Citation display / raw key when available (e.g. `[12]`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_raw: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CiteGraphResponse {
+    pub nodes: Vec<CiteGraphNode>,
+    pub edges: Vec<CiteGraphEdge>,
+    /// Normalized center paper path in neighborhood mode; null for full graph.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub center: Option<String>,
+    pub depth: u32,
+}
+
+/// Build a citation relationship graph from catalog papers and their sidecars.
+///
+/// - **Full graph** (`center = None`): library-local `cites` edges only
+///   (papers whose references match other catalog papers via `localMatch`).
+/// - **Neighborhood** (`center = Some`): direct outgoing citations (including
+///   unresolved stubs) plus undirected BFS through library-local edges up to
+///   `depth` hops (default 1).
+///
+/// Does not parse missing sidecars — callers that want fresh center data should
+/// run `paper_refs_parse` first. Missing sidecars simply contribute no edges.
+pub fn build_citation_graph(
+    vault: &Path,
+    center: Option<&str>,
+    depth: Option<u32>,
+) -> Result<CiteGraphResponse, AppError> {
+    let depth = depth.unwrap_or(1).max(1);
+    let catalog = papers::list_all(vault).unwrap_or_default();
+    let by_path: HashMap<String, &PaperRecord> =
+        catalog.iter().map(|r| (r.path.clone(), r)).collect();
+
+    // Library-local edges: source paper path → target paper path.
+    let mut lib_edges: Vec<(String, String, Option<String>)> = Vec::new();
+    // Center-only stubs collected when neighborhood is requested.
+    let mut center_out: Vec<(String, Option<String>)> = Vec::new(); // (target_id, label raw)
+    let center_norm = center.and_then(|c| normalize_paper_center(c, &by_path));
+
+    for rec in &catalog {
+        let sidecar_path = vault.join(&rec.path).join("source").join(SIDECAR_FILE);
+        let Some(sidecar) = read_sidecar(&sidecar_path) else {
+            continue;
+        };
+        let is_center = center_norm.as_ref().is_some_and(|c| c == &rec.path);
+        for cite in &sidecar.citations {
+            let raw_hint = cite
+                .display
+                .clone()
+                .or_else(|| cite.raw_key.clone())
+                .or_else(|| cite.metadata.title.clone());
+            if let Some(m) = &cite.local_match {
+                let target = m.paper_path.trim().trim_end_matches('/').replace('\\', "/");
+                if target.is_empty() || target == rec.path {
+                    continue;
+                }
+                if by_path.contains_key(&target) {
+                    lib_edges.push((rec.path.clone(), target, raw_hint));
+                } else if is_center {
+                    // Stale localMatch path — still show as stub so the edge is visible.
+                    let stub_id = stub_id_for_citation(cite);
+                    center_out.push((stub_id, Some(citation_label(cite))));
+                }
+            } else if is_center {
+                let stub_id = stub_id_for_citation(cite);
+                center_out.push((stub_id, Some(citation_label(cite))));
+            }
+        }
+    }
+
+    // Dedupe library edges by (source, target).
+    lib_edges.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+    lib_edges.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+
+    let (keep_nodes, keep_lib_edges, keep_stubs, out_center) = if let Some(ref c) = center_norm {
+        // Undirected adjacency over library edges for BFS.
+        let mut adj: HashMap<String, HashSet<String>> = HashMap::new();
+        for (s, t, _) in &lib_edges {
+            adj.entry(s.clone()).or_default().insert(t.clone());
+            adj.entry(t.clone()).or_default().insert(s.clone());
+        }
+        let mut dist: HashMap<String, u32> = HashMap::new();
+        let mut q = VecDeque::new();
+        dist.insert(c.clone(), 0);
+        q.push_back(c.clone());
+        while let Some(u) = q.pop_front() {
+            let d = dist[&u];
+            if d >= depth {
+                continue;
+            }
+            if let Some(neis) = adj.get(&u) {
+                for v in neis {
+                    if !dist.contains_key(v) {
+                        dist.insert(v.clone(), d + 1);
+                        q.push_back(v.clone());
+                    }
+                }
+            }
+        }
+        let ids: HashSet<String> = dist.keys().cloned().collect();
+        let edges: Vec<(String, String, Option<String>)> = lib_edges
+            .into_iter()
+            .filter(|(s, t, _)| ids.contains(s) && ids.contains(t))
+            .collect();
+        // Stubs only for the center's direct unresolved citations.
+        let stubs = if ids.contains(c) {
+            center_out
+        } else {
+            Vec::new()
+        };
+        (ids, edges, stubs, Some(c.clone()))
+    } else {
+        // Full graph: only library papers that participate in at least one edge.
+        let mut ids: HashSet<String> = HashSet::new();
+        for (s, t, _) in &lib_edges {
+            ids.insert(s.clone());
+            ids.insert(t.clone());
+        }
+        (ids, lib_edges, Vec::new(), None)
+    };
+
+    let mut nodes: Vec<CiteGraphNode> = keep_nodes
+        .iter()
+        .map(|id| {
+            let label = by_path
+                .get(id)
+                .map(|r| {
+                    let t = r.title.trim();
+                    if t.is_empty() {
+                        paper_folder_label(id)
+                    } else {
+                        t.to_string()
+                    }
+                })
+                .unwrap_or_else(|| paper_folder_label(id));
+            CiteGraphNode {
+                id: id.clone(),
+                label,
+                node_type: CiteGraphNodeType::Paper,
+                path: Some(id.clone()),
+            }
+        })
+        .collect();
+
+    // Ensure center node exists even with zero edges.
+    if let Some(ref c) = out_center {
+        if !nodes.iter().any(|n| n.id == *c) {
+            let label = by_path
+                .get(c)
+                .map(|r| {
+                    let t = r.title.trim();
+                    if t.is_empty() {
+                        paper_folder_label(c)
+                    } else {
+                        t.to_string()
+                    }
+                })
+                .unwrap_or_else(|| paper_folder_label(c));
+            nodes.push(CiteGraphNode {
+                id: c.clone(),
+                label,
+                node_type: CiteGraphNodeType::Paper,
+                path: Some(c.clone()),
+            });
+        }
+    }
+
+    for (stub_id, label) in &keep_stubs {
+        if nodes.iter().any(|n| n.id == *stub_id) {
+            continue;
+        }
+        nodes.push(CiteGraphNode {
+            id: stub_id.clone(),
+            label: label.clone().unwrap_or_else(|| stub_id.clone()),
+            node_type: CiteGraphNodeType::Stub,
+            path: None,
+        });
+    }
+
+    nodes.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let mut edges: Vec<CiteGraphEdge> = Vec::new();
+    for (i, (s, t, raw)) in keep_lib_edges.into_iter().enumerate() {
+        edges.push(CiteGraphEdge {
+            id: format!("cites{i}:{s}->{t}"),
+            source: s,
+            target: t,
+            target_raw: raw,
+        });
+    }
+    if let Some(ref c) = out_center {
+        for (i, (stub_id, _)) in keep_stubs.iter().enumerate() {
+            edges.push(CiteGraphEdge {
+                id: format!("stub{i}:{c}->{stub_id}"),
+                source: c.clone(),
+                target: stub_id.clone(),
+                target_raw: None,
+            });
+        }
+    }
+    edges.sort_by(|a, b| a.id.cmp(&b.id));
+
+    Ok(CiteGraphResponse {
+        nodes,
+        edges,
+        center: out_center,
+        depth,
+    })
+}
+
+/// Resolve a selected path (file or folder) to a catalog paper folder path.
+fn normalize_paper_center(raw: &str, by_path: &HashMap<String, &PaperRecord>) -> Option<String> {
+    let mut rel = raw.trim().replace('\\', "/");
+    while rel.starts_with('/') {
+        rel = rel[1..].to_string();
+    }
+    while rel.ends_with('/') {
+        rel.pop();
+    }
+    if rel.is_empty() {
+        return None;
+    }
+    if by_path.contains_key(&rel) {
+        return Some(rel);
+    }
+    // Walk up path segments until a catalog paper folder matches.
+    let mut cur = rel.as_str();
+    while let Some((parent, _)) = cur.rsplit_once('/') {
+        if by_path.contains_key(parent) {
+            return Some(parent.to_string());
+        }
+        cur = parent;
+        if cur.is_empty() {
+            break;
+        }
+    }
+    // Prefix match: selected path is under a paper folder (e.g. NOTES.md).
+    let mut best: Option<String> = None;
+    for path in by_path.keys() {
+        if rel.starts_with(&format!("{path}/")) {
+            match &best {
+                None => best = Some(path.clone()),
+                Some(b) if path.len() > b.len() => best = Some(path.clone()),
+                _ => {}
+            }
+        }
+    }
+    best
+}
+
+fn paper_folder_label(path: &str) -> String {
+    path.rsplit('/').next().unwrap_or(path).to_string()
+}
+
+fn citation_label(cite: &Citation) -> String {
+    if let Some(t) = cite
+        .metadata
+        .title
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        return truncate_label(t, 48);
+    }
+    if let Some(d) = cite
+        .display
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        return d.to_string();
+    }
+    if let Some(k) = cite
+        .raw_key
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        return k.to_string();
+    }
+    if let Some(raw) = cite.raw.as_ref() {
+        let one_line = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !one_line.is_empty() {
+            return truncate_label(&one_line, 48);
+        }
+    }
+    cite.id.clone()
+}
+
+fn truncate_label(s: &str, max: usize) -> String {
+    let mut chars = s.chars();
+    let head: String = chars.by_ref().take(max).collect();
+    if chars.next().is_some() {
+        format!("{head}…")
+    } else {
+        head
+    }
+}
+
+/// Stable stub id: prefer DOI / arXiv / title, else citation id.
+fn stub_id_for_citation(cite: &Citation) -> String {
+    if let Some(doi) = cite
+        .metadata
+        .doi
+        .as_ref()
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+    {
+        return format!("stub:doi:{doi}");
+    }
+    if let Some(a) = cite
+        .metadata
+        .arxiv_id
+        .as_ref()
+        .map(|s| latex::strip_arxiv_version(s).to_lowercase())
+        .filter(|s| !s.is_empty())
+    {
+        return format!("stub:arxiv:{a}");
+    }
+    if let Some(t) = cite.metadata.title.as_ref() {
+        let n = latex::normalize_title(t);
+        if n.len() >= 15 {
+            return format!("stub:title:{n}");
+        }
+    }
+    format!("stub:{}", cite.id)
 }
 
 fn write_sidecar(path: &Path, sidecar: &CiteSidecar) -> Result<(), AppError> {
@@ -753,6 +1116,158 @@ K.~He.
         );
         assert_eq!(first.status, "resolved");
         assert_eq!(sidecar.citations[1].status, "unresolved");
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    fn test_paper(path: &str, id: &str, title: &str, arxiv_id: Option<&str>) -> PaperRecord {
+        PaperRecord {
+            path: path.into(),
+            id: id.into(),
+            paper_type: "article".into(),
+            title: title.into(),
+            authors: vec![],
+            creators: None,
+            year: None,
+            date: None,
+            abstract_text: None,
+            tags: vec![],
+            arxiv_id: arxiv_id.map(|s| s.into()),
+            doi: None,
+            isbn: None,
+            issn: None,
+            pmid: None,
+            publication: None,
+            volume: None,
+            issue: None,
+            pages: None,
+            publisher: None,
+            place: None,
+            series: None,
+            language: None,
+            pdf_url: None,
+            html_url: None,
+            source_url: None,
+            body_source: None,
+            body_quality: None,
+            bibtex_key: None,
+            citation_count: None,
+            zotero_item_type: None,
+            meta_source: None,
+            extra: None,
+            summary: None,
+            status: "completed".into(),
+            is_read: false,
+            zotero_item_id: None,
+            zotero_last_synced: None,
+            added_at: "t".into(),
+            updated_at: "t".into(),
+        }
+    }
+
+    #[test]
+    fn citation_graph_neighborhood_includes_local_and_stubs() {
+        let vault = temp_vault("graph-near");
+        // Two catalog papers: demo cites vaswani which is also in the library.
+        papers::upsert_paper(
+            &vault,
+            &test_paper("papers/demo", "demo", "Demo Paper", None),
+        )
+        .unwrap();
+        fs::create_dir_all(vault.join("papers/vaswani/source")).unwrap();
+        papers::upsert_paper(
+            &vault,
+            &test_paper(
+                "papers/vaswani",
+                "1706.03762",
+                "Attention Is All You Need",
+                Some("1706.03762"),
+            ),
+        )
+        .unwrap();
+
+        // Write a pre-built sidecar with one local match + one unresolved stub.
+        let sidecar = CiteSidecar {
+            schema_version: SCHEMA_VERSION,
+            source: CiteSource {
+                mode: "test".into(),
+                generated_at: "2020-01-01T00:00:00Z".into(),
+                fingerprint: "test".into(),
+            },
+            citations: vec![
+                Citation {
+                    id: "cite-vaswani".into(),
+                    raw_key: Some("vaswani2017".into()),
+                    display: Some("[1]".into()),
+                    raw: None,
+                    metadata: CitationMeta {
+                        title: Some("Attention Is All You Need".into()),
+                        authors: vec![],
+                        year: Some(2017),
+                        venue: None,
+                        doi: None,
+                        arxiv_id: Some("1706.03762".into()),
+                        url: None,
+                    },
+                    local_match: Some(LocalMatch {
+                        paper_path: "papers/vaswani".into(),
+                        match_by: "arxiv".into(),
+                    }),
+                    source: "test".into(),
+                    status: "resolved".into(),
+                },
+                Citation {
+                    id: "cite-he".into(),
+                    raw_key: Some("he2016".into()),
+                    display: Some("[2]".into()),
+                    raw: None,
+                    metadata: CitationMeta {
+                        title: Some("Deep Residual Learning".into()),
+                        authors: vec![],
+                        year: Some(2016),
+                        venue: None,
+                        doi: Some("10.1109/CVPR.2016.90".into()),
+                        arxiv_id: None,
+                        url: None,
+                    },
+                    local_match: None,
+                    source: "test".into(),
+                    status: "resolved".into(),
+                },
+            ],
+            messages: vec![],
+        };
+        write_sidecar(
+            &vault.join("papers/demo/source").join(SIDECAR_FILE),
+            &sidecar,
+        )
+        .unwrap();
+
+        let graph = build_citation_graph(&vault, Some("papers/demo/NOTES.md"), Some(1)).unwrap();
+        assert_eq!(graph.center.as_deref(), Some("papers/demo"));
+        assert!(graph.nodes.iter().any(|n| n.id == "papers/demo"));
+        assert!(graph.nodes.iter().any(|n| n.id == "papers/vaswani"));
+        assert!(graph.nodes.iter().any(|n| n.id.starts_with("stub:doi:")));
+        assert!(graph
+            .edges
+            .iter()
+            .any(|e| { e.source == "papers/demo" && e.target == "papers/vaswani" }));
+        assert!(graph
+            .edges
+            .iter()
+            .any(|e| e.source == "papers/demo" && e.target.starts_with("stub:")));
+
+        let full = build_citation_graph(&vault, None, None).unwrap();
+        assert!(full.center.is_none());
+        // Full graph only includes library-local edges (no stubs).
+        assert!(full
+            .nodes
+            .iter()
+            .all(|n| n.node_type == CiteGraphNodeType::Paper));
+        assert!(full
+            .edges
+            .iter()
+            .any(|e| { e.source == "papers/demo" && e.target == "papers/vaswani" }));
+
         let _ = fs::remove_dir_all(&vault);
     }
 
