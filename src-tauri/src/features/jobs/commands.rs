@@ -25,6 +25,8 @@ pub struct JobParseBodyEnqueueArgs {
     pub lane: Option<JobLane>,
     #[serde(default)]
     pub force: bool,
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,7 +80,13 @@ pub async fn job_parse_body_enqueue(
         Err(e) => return Ok(map_err(e)),
     };
     let snapshot = center
-        .enqueue_parse_body(&vault, &path, parse_lane(args.lane), args.force)
+        .enqueue_parse_body(
+            &vault,
+            &path,
+            parse_lane(args.lane),
+            args.force,
+            args.task_id,
+        )
         .await;
     emit_job_changed(&app, snapshot.clone());
 

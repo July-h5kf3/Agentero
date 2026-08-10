@@ -92,6 +92,7 @@ struct Job {
     phase: Option<String>,
     error: Option<String>,
     force: bool,
+    task_id: Option<String>,
 }
 
 impl Job {
@@ -228,6 +229,7 @@ impl JobCenter {
             phase: Some("queued".into()),
             error: None,
             force,
+            task_id: None,
         };
         let snapshot = job.snapshot();
         inner.active_keys.insert(key, id.clone());
@@ -242,6 +244,7 @@ impl JobCenter {
         path: impl Into<String>,
         lane: JobLane,
         force: bool,
+        task_id: Option<String>,
     ) -> JobSnapshot {
         let vault_path = normalize_vault_path(vault.into());
         let paper_path = path.into();
@@ -276,6 +279,7 @@ impl JobCenter {
             phase: Some("queued".into()),
             error: None,
             force,
+            task_id,
         };
         let snapshot = job.snapshot();
         inner.active_keys.insert(key, id.clone());
@@ -342,7 +346,7 @@ impl JobCenter {
 
     pub async fn run_parse_refs_job(self, app: tauri::AppHandle, job_id: String) {
         let started = self.mark_running(&job_id).await;
-        let Some((snapshot, vault, path, force)) = started else {
+        let Some((snapshot, vault, path, force, _)) = started else {
             return;
         };
         emit_job_changed(&app, snapshot);
@@ -377,23 +381,24 @@ impl JobCenter {
 
     pub async fn run_parse_body_job(self, app: tauri::AppHandle, job_id: String) {
         let started = self.mark_running(&job_id).await;
-        let Some((snapshot, vault, path, force)) = started else {
+        let Some((snapshot, vault, path, force, task_id)) = started else {
             return;
         };
         emit_job_changed(&app, snapshot);
 
+        let task_id = task_id.unwrap_or_else(|| job_id.clone());
         let result = crate::features::import::pdf_parse::parse_paper_body(
             crate::features::import::pdf_parse::PaperParseBodyArgs {
                 vault_path: vault.to_string_lossy().to_string(),
                 path,
                 force,
-                task_id: Some(job_id.clone()),
+                task_id: Some(task_id.clone()),
             },
         )
         .await;
+        crate::features::agent::background_tasks::finish(&task_id);
         let snapshot = match result {
             Ok(_) => {
-                crate::features::agent::background_tasks::finish(&job_id);
                 self.finish(
                     &job_id,
                     JobState::Succeeded,
@@ -404,7 +409,6 @@ impl JobCenter {
                 .await
             }
             Err(e) => {
-                crate::features::agent::background_tasks::finish(&job_id);
                 self.finish(
                     &job_id,
                     JobState::Failed,
@@ -420,7 +424,10 @@ impl JobCenter {
         }
     }
 
-    async fn mark_running(&self, job_id: &str) -> Option<(JobSnapshot, PathBuf, String, bool)> {
+    async fn mark_running(
+        &self,
+        job_id: &str,
+    ) -> Option<(JobSnapshot, PathBuf, String, bool, Option<String>)> {
         let mut inner = self.inner.lock().await;
         let id = JobId(job_id.to_string());
         let job = inner.jobs.get_mut(&id)?;
@@ -435,8 +442,9 @@ impl JobCenter {
         let vault_path = job.vault_path.clone();
         let paper_path = job.paper_path.clone()?;
         let force = job.force;
+        let task_id = job.task_id.clone();
         inner.lanes.remove(&id);
-        Some((snapshot, vault_path, paper_path, force))
+        Some((snapshot, vault_path, paper_path, force, task_id))
     }
 
     async fn finish(
@@ -542,10 +550,22 @@ mod tests {
     async fn enqueue_dedupes_active_parse_body_job() {
         let center = JobCenter::new();
         let first = center
-            .enqueue_parse_body(vault("dedupe-body"), "papers/a", JobLane::Normal, false)
+            .enqueue_parse_body(
+                vault("dedupe-body"),
+                "papers/a",
+                JobLane::Normal,
+                false,
+                None,
+            )
             .await;
         let duplicate = center
-            .enqueue_parse_body(vault("dedupe-body"), "papers/a", JobLane::Normal, false)
+            .enqueue_parse_body(
+                vault("dedupe-body"),
+                "papers/a",
+                JobLane::Normal,
+                false,
+                None,
+            )
             .await;
 
         assert_eq!(first.id, duplicate.id);
