@@ -134,6 +134,11 @@ async function resolvePaperPdfSource(
 					paperAbsPath: joinVaultPath(vaultPath, rel),
 					paperLabel: meta?.title?.trim(),
 				});
+				enqueuePaperPdfParse({
+					vaultPath,
+					paperRelPath: rel,
+					paperLabel: meta?.title?.trim(),
+				});
 				return r;
 			},
 		);

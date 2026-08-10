@@ -9,8 +9,6 @@ import i18n from "@/i18n";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
 import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
-import { refreshLibrary } from "@/lib/paper/library-store";
-import { refreshTree } from "@/lib/vault/store";
 
 const queuedPapers = new Set<string>();
 
@@ -64,8 +62,6 @@ export function enqueuePaperPdfParse(opts: EnqueuePaperPdfParseOptions): void {
 						},
 						{ fallback: "PDF body parse failed" },
 					);
-					await refreshTree(vaultPath);
-					await refreshLibrary();
 				},
 				{ concurrency: 2 },
 			);
