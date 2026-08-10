@@ -350,7 +350,7 @@
 			"visualMarks": "Visual annotations"
 		},
 		"sectionHints": {
-			"vault": "Checks top-level papers/, notes/, plans/, and .agentero/ folders.",
+			"vault": "Checks top-level papers/, notes/, and .agentero/ folders.",
 			"catalog": "Checks that .agentero/catalog.sqlite exists and its schema matches this app.",
 			"wikilinks": "Checks local wiki links for missing, ambiguous, or invalid heading targets.",
 			"aliases": "Checks paper NOTES.md for at least two distinct frontmatter aliases.",

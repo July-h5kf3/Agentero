@@ -116,7 +116,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ```
 
 - **行为**
-  - 确保目录存在；脚手架 `papers/`、`notes/`、`plans/`、`.agentero/`、**`.agents/`**、**`.agents/skills/`**。
+  - 确保目录存在；脚手架 `papers/`、`notes/`、`.agentero/`、**`.agents/`**、**`.agents/skills/`**。
   - 初始化 `.agentero/catalog.sqlite`（schema 当前版本，含 Translator 元数据列）。详见 [`catalog.md`](catalog.md)。
   - 写入默认 `AGENTS.md`（若不存在）。
   - 写入 **`.agents/README.md`**（若不存在；内容来自仓库 `templates/vault/.agents/`）。
@@ -172,7 +172,7 @@ type VaultTreeNode = {
 ```
 
 - **语义**（Rust `features/vault/tree.rs`，与 `src/lib/vault/tree.ts` 的远端路径保持一致）：
-  - eager 根（`papers/` / `notes/` / `plans/` / `.agents/`）全量递归；其它根目录列一层，子目录 `childrenPending`。
+  - eager 根（`papers/` / `notes/` / `.agents/`）全量递归；其它根目录列一层，子目录 `childrenPending`。
   - **论文文件夹内的 `source/`**（含 `metadata.json` / `NOTES.md` / `PAPER.md` 任一 marker 的目录）不再递归 —— arXiv e-print 解压产物动辄上百文件，标记 `childrenPending` 懒加载；这里的 marker 只用于 Host 判断 `source/` 是否懒加载，不单独决定前端是否把目录识别为论文。前端论文识别会优先保留含嵌套论文的组织目录，并在已有论文路径列表时按该列表归属文件。壳上附带 `hasTex`（Host 扫盘），供前端 Download 判定（`paperAssetDownloadReasons`）识别被懒加载藏住的 TeX。
   - 忽略名（`.git` / `.venv` / `node_modules` / `*.egg-info` / 其它 dot 名，白名单 `.agents` / `.env.example`）与深度上限 12 同前端规则。
   - 排序仍在前端（`sortNodes`，locale 感知）。
@@ -397,7 +397,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 ```
 
 - **行为**
-  - 校验 Vault 结构（至少存在 `papers/`、`notes/`、`plans/`；确保 `.agentero/catalog.sqlite` 可打开或可初始化）。
+  - 校验 Vault 结构（至少存在 `papers/`、`notes/`；确保 `.agentero/catalog.sqlite` 可打开或可初始化）。
   - 打开 catalog、执行 schema migration；若存在历史 `papers/*/metadata.json` 且 catalog 为空则导入（见 catalog 迁移）。
   - 文件监听由前端打开 Vault 后调用 `fs_watch_start`（已落地；见上），非本命令内隐式启动。
   - 返回完整文件树。
