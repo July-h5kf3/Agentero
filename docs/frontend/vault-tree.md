@@ -51,7 +51,7 @@
 
 ## 代码
 
-- UI：`src/components/sidebar/file-tree.tsx`、AI Elements `FileTree`
+- UI：`src/components/sidebar/file-tree/`（barrel `index.ts` + 行/菜单/输入子模块）、AI Elements `FileTree`
 - 逻辑：`src/lib/vault/`（store、tree、fs-watch、reveal）
 - 标签/排序：`src/lib/paper/tree-label.ts`、`tree-modes.ts`
 

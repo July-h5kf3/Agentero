@@ -1,18 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import {
-	Check,
-	Download,
-	FileText,
-	FolderIcon,
-	FolderInput,
-	FolderPlus,
-	Library,
-	Loader2,
-	ScrollText,
-	Trash2,
-	X,
-	Zap,
-} from "lucide-react";
+import { FolderIcon, FolderInput, Trash2, X } from "lucide-react";
 import {
 	forwardRef,
 	memo,
@@ -27,47 +14,28 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import {
-	FileTree as AiFileTree,
-	FileTreeActions,
-	FileTreeFile,
-	FileTreeFolderRow,
-	FileTreeIcon,
-	FileTreeName,
-} from "@/components/ai-elements/file-tree";
+import { FileTree as AiFileTree } from "@/components/ai-elements/file-tree";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-	Popover,
-	PopoverAnchor,
-	PopoverContent,
-} from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverAnchor } from "@/components/ui/popover";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ViewportFloating } from "@/components/ui/viewport-floating";
-import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { contextPathIcon } from "@/lib/agent/context-path-icon";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { notifyError } from "@/lib/core/notify";
-import { dirnameOf, normalizePath } from "@/lib/core/path";
+import { dirnameOf } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import {
 	formatPaperTreeLabel,
 	isPaperDirectory,
-	isPapersRoot,
 	type PaperMetadata,
 	type PaperTreeLabelMode,
 	type PaperTreeSortMode,
 	paperAssetDownloadReasons,
-	paperNeedsAssetDownload,
 	paperNeedsRead,
 	sortFileTreeNodes,
 } from "@/lib/paper";
@@ -78,343 +46,34 @@ import {
 	resolveDroppedPdfPaths,
 	snapshotDataTransfer,
 } from "@/lib/shell/external-file-drop";
-import { formatShortcutById } from "@/lib/shell/shortcuts";
-import {
-	type FileNode,
-	isValidVaultEntryName,
-	resolveCreateParent,
-} from "@/lib/vault";
-import {
-	openInTerminal,
-	revealInFileManager,
-	revealInOsLabelKey,
-} from "@/lib/vault/reveal";
+import { type FileNode, resolveCreateParent } from "@/lib/vault";
+import { openInTerminal, revealInFileManager } from "@/lib/vault/reveal";
 import { toVaultRelative } from "@/lib/wiki";
-
-/** Paper folders that need Download (no PDF / no source / no PAPER.md). */
-function collectPapersNeedingAssets(nodes: FileNode[]): FileNode[] {
-	const out: FileNode[] = [];
-	const walk = (list: FileNode[]) => {
-		for (const n of list) {
-			if (n.kind === "directory" && isPaperDirectory(n.path, n.children)) {
-				if (paperNeedsAssetDownload(n)) {
-					out.push(n);
-				}
-			} else if (n.children?.length) {
-				walk(n.children);
-			}
-		}
-	};
-	walk(nodes);
-	return out;
-}
-
-const DOWNLOAD_REASON_KEYS = {
-	noPdf: "fileTree.downloadReason.noPdf",
-	noBody: "fileTree.downloadReason.noBody",
-} as const;
-
-export type TreeCreateKind = "file" | "folder";
-
-export type TreeCreateDraft = {
-	kind: TreeCreateKind;
-	/** Absolute path of the parent directory (vault root or folder). */
-	parentPath: string;
-};
-
-export type TreeRenameDraft = {
-	/** Absolute path of the file/folder being renamed. */
-	path: string;
-	/** Current disk name (basename). */
-	currentName: string;
-};
-
-/** One flattened, windowable tree row in display order. */
-type FlatRow =
-	| { key: string; kind: "library" }
-	| { key: string; kind: "trash" }
-	| { key: string; kind: "create"; depth: number }
-	| {
-			key: string;
-			kind: "node";
-			depth: number;
-			node: FileNode;
-			paperLeaf: boolean;
-	  };
-
-function isVirtualTreePath(path: string): boolean {
-	return path === LIBRARY_VIRTUAL_PATH || path === TRASH_VIRTUAL_PATH;
-}
-
-function pathKey(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
-
-/**
- * Default open folders when a Vault is first opened:
- * expand `papers/` and its first-level children (org folders) so papers one
- * level down are visible. Deeper nesting, `notes/`, etc. stay collapsed.
- * Paper folders are never expanded (they render as leaves).
- */
-function collectDefaultExpanded(nodes: FileNode[], into: Set<string>) {
-	for (const n of nodes) {
-		if (n.kind !== "directory" || !isPapersRoot(n.path)) continue;
-		into.add(n.path);
-		for (const child of n.children ?? []) {
-			if (child.kind !== "directory") continue;
-			// Paper units are leaves — expanding them is a no-op for the UI.
-			if (isPaperDirectory(child.path, child.children)) continue;
-			into.add(child.path);
-		}
-		return;
-	}
-}
-
-/**
- * Collapse-to-default: only expand `papers/` so its direct children are listed;
- * do **not** expand org subfolders. `notes/` etc. stay closed.
- */
-function collectPapersRootOnlyExpanded(nodes: FileNode[], into: Set<string>) {
-	for (const n of nodes) {
-		if (n.kind !== "directory" || !isPapersRoot(n.path)) continue;
-		into.add(n.path);
-		return;
-	}
-}
-
-/** Parent directory paths of `target` (absolute), nearest-first excluded. Root-ward order. */
-function ancestorPaths(target: string, vaultRoot: string | null): string[] {
-	const norm = target.replace(/\\/g, "/").replace(/\/+$/, "");
-	const rootKey = vaultRoot ? pathKey(vaultRoot) : null;
-	const out: string[] = [];
-	let current = norm;
-	while (true) {
-		const idx = current.lastIndexOf("/");
-		if (idx <= 0) break;
-		current = current.slice(0, idx);
-		if (rootKey && pathKey(current) === rootKey) break;
-		if (current) out.push(current);
-	}
-	return out.reverse();
-}
-
-/** Inline name input — VS Code / Cursor style create. */
-function TreeCreateInput({
-	kind,
-	onConfirm,
-	onCancel,
-}: {
-	kind: TreeCreateKind;
-	onConfirm: (name: string) => void;
-	onCancel: () => void;
-}) {
-	const { t } = useTranslation("sidebar");
-	const defaultName = kind === "file" ? "Untitled.md" : "New Folder";
-	const [value, setValue] = useState(defaultName);
-	const [error, setError] = useState<string | null>(null);
-	const inputRef = useRef<HTMLInputElement>(null);
-	const committedRef = useRef(false);
-
-	useEffect(() => {
-		const el = inputRef.current;
-		if (!el) return;
-		el.focus();
-		// Select basename without extension for files (IDE-like).
-		if (kind === "file") {
-			const dot = defaultName.lastIndexOf(".");
-			if (dot > 0) el.setSelectionRange(0, dot);
-			else el.select();
-		} else {
-			el.select();
-		}
-	}, [kind, defaultName]);
-
-	const commit = useCallback(() => {
-		if (committedRef.current) return;
-		const name = value.trim();
-		if (!name) {
-			committedRef.current = true;
-			onCancel();
-			return;
-		}
-		if (!isValidVaultEntryName(name)) {
-			setError(t("fileTree.invalidName"));
-			// Keep editing; re-focus next tick.
-			requestAnimationFrame(() => inputRef.current?.focus());
-			return;
-		}
-		committedRef.current = true;
-		onConfirm(name);
-	}, [value, onCancel, onConfirm, t]);
-
-	const cancel = useCallback(() => {
-		if (committedRef.current) return;
-		committedRef.current = true;
-		onCancel();
-	}, [onCancel]);
-
-	const Icon = kind === "file" ? FileText : FolderPlus;
-
-	// Match virtualized row height (estimateSize ≈ 28px / h-7). Extra outer
-	// padding or an in-flow error line used to measure taller than siblings;
-	// after draft removal the virtualizer kept that size by index and left a gap.
-	return (
-		<div className="relative">
-			<div
-				className={cn(
-					"flex h-7 items-center gap-1 rounded px-2",
-					error ? "bg-destructive/10" : "bg-muted/60",
-				)}
-			>
-				<span className="size-4 shrink-0" aria-hidden />
-				<Icon className="size-4 shrink-0 text-muted-foreground" />
-				<input
-					ref={inputRef}
-					type="text"
-					value={value}
-					title={error ?? undefined}
-					aria-label={
-						kind === "file" ? t("fileTree.newFile") : t("fileTree.newFolder")
-					}
-					aria-invalid={Boolean(error)}
-					className={cn(
-						"h-5 min-w-0 flex-1 rounded-sm border border-ring bg-background px-1 text-sm outline-none",
-						error && "border-destructive",
-					)}
-					onChange={(e) => {
-						setValue(e.target.value);
-						if (error) setError(null);
-					}}
-					onKeyDown={(e) => {
-						e.stopPropagation();
-						if (e.key === "Enter") {
-							e.preventDefault();
-							commit();
-						} else if (e.key === "Escape") {
-							e.preventDefault();
-							cancel();
-						}
-					}}
-					onBlur={() => {
-						// Defer so Enter/click handlers run first.
-						requestAnimationFrame(() => {
-							if (!committedRef.current) commit();
-						});
-					}}
-				/>
-			</div>
-			{error ? (
-				<p className="pointer-events-none absolute top-full right-0 left-8 z-10 mt-0.5 rounded bg-background/95 px-1 text-destructive text-[0.6875rem] leading-tight shadow-sm">
-					{error}
-				</p>
-			) : null}
-		</div>
-	);
-}
-
-/** Inline name input for renaming a file/folder (VS Code / Finder style). */
-function TreeRenameInput({
-	initialName,
-	icon,
-	onConfirm,
-	onCancel,
-}: {
-	initialName: string;
-	icon: ReactNode;
-	onConfirm: (name: string) => void;
-	onCancel: () => void;
-}) {
-	const { t } = useTranslation("sidebar");
-	const [value, setValue] = useState(initialName);
-	const [error, setError] = useState<string | null>(null);
-	const inputRef = useRef<HTMLInputElement>(null);
-	const committedRef = useRef(false);
-
-	useEffect(() => {
-		const el = inputRef.current;
-		if (!el) return;
-		el.focus();
-		el.select();
-	}, []);
-
-	const commit = useCallback(() => {
-		if (committedRef.current) return;
-		const name = value.trim();
-		if (!name) {
-			committedRef.current = true;
-			onCancel();
-			return;
-		}
-		if (!isValidVaultEntryName(name)) {
-			setError(t("fileTree.invalidName"));
-			requestAnimationFrame(() => inputRef.current?.focus());
-			return;
-		}
-		if (name === initialName) {
-			committedRef.current = true;
-			onCancel();
-			return;
-		}
-		committedRef.current = true;
-		onConfirm(name);
-	}, [value, initialName, onCancel, onConfirm, t]);
-
-	const cancel = useCallback(() => {
-		if (committedRef.current) return;
-		committedRef.current = true;
-		onCancel();
-	}, [onCancel]);
-
-	return (
-		<div className="relative">
-			<div
-				className={cn(
-					"flex h-7 items-center gap-1 rounded px-2",
-					error ? "bg-destructive/10" : "bg-muted/60",
-				)}
-			>
-				<span className="size-4 shrink-0" aria-hidden />
-				{icon}
-				<input
-					ref={inputRef}
-					type="text"
-					value={value}
-					title={error ?? undefined}
-					aria-label={t("fileTree.rename")}
-					aria-invalid={Boolean(error)}
-					className={cn(
-						"h-5 min-w-0 flex-1 rounded-sm border border-ring bg-background px-1 text-sm outline-none",
-						error && "border-destructive",
-					)}
-					onChange={(e) => {
-						setValue(e.target.value);
-						if (error) setError(null);
-					}}
-					onKeyDown={(e) => {
-						e.stopPropagation();
-						if (e.key === "Enter") {
-							e.preventDefault();
-							commit();
-						} else if (e.key === "Escape") {
-							e.preventDefault();
-							cancel();
-						}
-					}}
-					onBlur={() => {
-						requestAnimationFrame(() => {
-							if (!committedRef.current) commit();
-						});
-					}}
-				/>
-			</div>
-			{error ? (
-				<p className="pointer-events-none absolute top-full right-0 left-8 z-10 mt-0.5 rounded bg-background/95 px-1 text-destructive text-[0.6875rem] leading-tight shadow-sm">
-					{error}
-				</p>
-			) : null}
-		</div>
-	);
-}
+import { MoveDestinationPicker } from "./move-destination-picker";
+import { TreeContextMenuPortal } from "./tree-context-menu";
+import {
+	ancestorPaths,
+	collectDefaultExpanded,
+	collectPapersNeedingAssets,
+	collectPapersRootOnlyExpanded,
+	isVirtualTreePath,
+	pathKey,
+} from "./tree-helpers";
+import { TreeCreateInput, TreeRenameInput } from "./tree-inputs";
+import {
+	LibraryRow,
+	LoadingRows,
+	NodeTreeRow,
+	PaperTreeRow,
+	TrashRow,
+} from "./tree-rows";
+import type {
+	FlatRow,
+	TreeContextMenu,
+	TreeCreateDraft,
+	TreeCreateKind,
+	TreeRenameDraft,
+} from "./types";
 
 type FileTreeProps = {
 	nodes: FileNode[];
@@ -513,12 +172,6 @@ export type FileTreeHandle = {
 	cutSelected: () => void;
 	/** Paste cut items into the currently selected path. */
 	pasteIntoSelected: () => void;
-};
-
-type TreeContextMenu = {
-	path: string;
-	x: number;
-	y: number;
 };
 
 export const FileTree = memo(
@@ -1469,40 +1122,6 @@ export const FileTree = memo(
 			void onExportLibrary?.();
 		}, [onExportLibrary]);
 
-		useEffect(() => {
-			if (!contextMenu) return;
-			const close = () => setContextMenu(null);
-			const onKey = (e: KeyboardEvent) => {
-				if (e.key === "Escape") close();
-			};
-			const onPointer = (e: PointerEvent) => {
-				const el = contextMenuRef.current;
-				if (el && e.target instanceof Node && el.contains(e.target)) return;
-				close();
-			};
-			// Defer so the opening contextmenu event does not immediately close.
-			const timer = window.setTimeout(() => {
-				window.addEventListener("pointerdown", onPointer, true);
-				window.addEventListener("keydown", onKey, true);
-				window.addEventListener("scroll", close, true);
-				window.addEventListener("resize", close);
-			}, 0);
-			return () => {
-				window.clearTimeout(timer);
-				window.removeEventListener("pointerdown", onPointer, true);
-				window.removeEventListener("keydown", onKey, true);
-				window.removeEventListener("scroll", close, true);
-				window.removeEventListener("resize", close);
-			};
-		}, [contextMenu]);
-
-		const revealLabel = t(revealInOsLabelKey());
-		const revealShortcut = formatShortcutById("revealInFinder");
-		const openInTerminalShortcut = formatShortcutById("openInTerminal");
-		const deleteShortcut = formatShortcutById("deleteTreeItem");
-		const cutShortcut = formatShortcutById("cutTreeItem");
-		const pasteShortcut = formatShortcutById("pasteTreeItem");
-
 		const handleDeleteFromMenu = useCallback(() => {
 			if (!contextMenu) return;
 			const targets = menuTargets(contextMenu.path);
@@ -1586,422 +1205,100 @@ export const FileTree = memo(
 			setContextMenu(null);
 			onOpenPaperNotes(path);
 		}, [contextMenu, onOpenPaperNotes]);
-		const isTrashMenu = contextMenu?.path === TRASH_VIRTUAL_PATH;
-		const isLibraryMenu = contextMenu?.path === LIBRARY_VIRTUAL_PATH;
+		const closeContextMenu = useCallback(() => {
+			setContextMenu(null);
+		}, []);
 		const contextMenuPortal = contextMenu ? (
-			<ViewportFloating
-				floatingRef={contextMenuRef}
-				point={{ x: contextMenu.x, y: contextMenu.y }}
-				role="menu"
-				className="z-50 min-w-44 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
-			>
-				{isLibraryMenu ? (
-					onExportLibrary ? (
-						<button
-							type="button"
-							role="menuitem"
-							disabled={libraryExportBusy}
-							className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-							onClick={handleExportLibraryFromMenu}
-						>
-							{libraryExportBusy ? (
-								<Loader2
-									className="size-3.5 shrink-0 animate-spin"
-									aria-hidden
-								/>
-							) : (
-								<Download className="size-3.5 shrink-0" aria-hidden />
-							)}
-							<span>
-								{libraryExportBusy
-									? t("papersLibrary.exporting")
-									: t("papersLibrary.export")}
-							</span>
-						</button>
-					) : null
-				) : isTrashMenu ? (
-					onEmptyTrash ? (
-						<button
-							type="button"
-							role="menuitem"
-							className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
-							onClick={handleEmptyTrashFromMenu}
-						>
-							<Trash2 className="size-3.5 shrink-0" aria-hidden />
-							<span>{t("recycleBin.emptyTrash")}</span>
-						</button>
-					) : null
-				) : (
-					<>
-						{menuCount === 1 && isPaperMenu && onOpenPaperNotes ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-								onClick={handleOpenNotesFromMenu}
-							>
-								<span>{t("fileTree.openNotes")}</span>
-							</button>
-						) : null}
-						{menuCount === 1 && onStartCreate && !isPaperMenu ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-								onClick={handleNewFileFromMenu}
-							>
-								<span>{t("fileTree.newFile")}</span>
-							</button>
-						) : null}
-						{menuCount === 1 && onStartCreate && !isPaperMenu ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-								onClick={handleNewFolderFromMenu}
-							>
-								<span>{t("fileTree.newFolder")}</span>
-							</button>
-						) : null}
-						{menuCount === 1 ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-								onClick={() => {
-									void handleCopyPathFromMenu();
-								}}
-							>
-								<span>{t("fileTree.copyPath")}</span>
-							</button>
-						) : null}
-						{onCutPaths && !menuTargetIsVirtual ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-								onClick={handleCutFromMenu}
-							>
-								<span>
-									{menuCount > 1
-										? t("fileTree.cutSelected", { count: menuCount })
-										: t("fileTree.cut")}
-								</span>
-								<span className="text-muted-foreground text-xs tracking-wide">
-									{cutShortcut}
-								</span>
-							</button>
-						) : null}
-						{canPasteAtTarget ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-								onClick={handlePasteFromMenu}
-							>
-								<span>
-									{menuCount > 1 || isPaperMenu
-										? t("fileTree.paste")
-										: t("fileTree.pasteInto", {
-												name: menuNode?.name ?? t("fileTree.paste"),
-											})}
-								</span>
-								<span className="text-muted-foreground text-xs tracking-wide">
-									{pasteShortcut}
-								</span>
-							</button>
-						) : null}
-						{menuCount === 1 ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-								onClick={() => {
-									void handleReveal(contextMenu.path);
-								}}
-							>
-								<span>{revealLabel}</span>
-								<span className="text-muted-foreground text-xs tracking-wide">
-									{revealShortcut}
-								</span>
-							</button>
-						) : null}
-						{menuCount === 1 ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-								onClick={() => {
-									void handleOpenInTerminal(contextMenu.path);
-								}}
-							>
-								<span>{t("fileTree.openInTerminal")}</span>
-								<span className="text-muted-foreground text-xs tracking-wide">
-									{openInTerminalShortcut}
-								</span>
-							</button>
-						) : null}
-						{onMoveTo ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-								onClick={handleMoveFromMenu}
-							>
-								<span>
-									{menuCount > 1
-										? t("fileTree.moveSelected", { count: menuCount })
-										: t("fileTree.move")}
-								</span>
-							</button>
-						) : null}
-						{menuCount === 1 && onStartRename && !isPaperMenu ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-								onClick={handleRenameFromMenu}
-							>
-								<span>{t("fileTree.rename")}</span>
-							</button>
-						) : null}
-						{onDeletePath || onDeletePaths ? (
-							<button
-								type="button"
-								role="menuitem"
-								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
-								onClick={handleDeleteFromMenu}
-							>
-								<span>
-									{menuCount > 1
-										? t("fileTree.deleteSelected", { count: menuCount })
-										: t("fileTree.delete")}
-								</span>
-								{menuCount === 1 ? (
-									<span className="text-xs tracking-wide opacity-80">
-										{deleteShortcut}
-									</span>
-								) : null}
-							</button>
-						) : null}
-					</>
-				)}
-			</ViewportFloating>
+			<TreeContextMenuPortal
+				menu={contextMenu}
+				menuRef={contextMenuRef}
+				menuCount={menuCount}
+				menuNodeName={menuNode?.name}
+				isPaperMenu={isPaperMenu}
+				libraryExportBusy={libraryExportBusy}
+				canPasteAtTarget={canPasteAtTarget}
+				onClose={closeContextMenu}
+				onExportLibrary={
+					onExportLibrary ? handleExportLibraryFromMenu : undefined
+				}
+				onEmptyTrash={onEmptyTrash ? handleEmptyTrashFromMenu : undefined}
+				onOpenNotes={onOpenPaperNotes ? handleOpenNotesFromMenu : undefined}
+				onNewFile={onStartCreate ? handleNewFileFromMenu : undefined}
+				onNewFolder={onStartCreate ? handleNewFolderFromMenu : undefined}
+				onCopyPath={() => {
+					void handleCopyPathFromMenu();
+				}}
+				onCut={
+					onCutPaths && !menuTargetIsVirtual ? handleCutFromMenu : undefined
+				}
+				onPaste={handlePasteFromMenu}
+				onReveal={() => {
+					void handleReveal(contextMenu.path);
+				}}
+				onOpenInTerminal={() => {
+					void handleOpenInTerminal(contextMenu.path);
+				}}
+				onMove={onMoveTo ? handleMoveFromMenu : undefined}
+				onRename={onStartRename ? handleRenameFromMenu : undefined}
+				onDelete={
+					onDeletePath || onDeletePaths ? handleDeleteFromMenu : undefined
+				}
+			/>
 		) : null;
 
 		const libraryRow = (
-			<FileTreeFile path={LIBRARY_VIRTUAL_PATH} name={t("papersLibrary.title")}>
-				<span className="size-4 shrink-0" />
-				<FileTreeIcon>
-					<Library className="size-4 text-muted-foreground" />
-				</FileTreeIcon>
-				<FileTreeName className="min-w-0 flex-1 truncate">
-					{t("papersLibrary.title")}
-				</FileTreeName>
-				{showLibraryDownload ? (
-					<FileTreeActions
-						className="shrink-0"
-						onClick={(e) => e.stopPropagation()}
-						onKeyDown={(e) => e.stopPropagation()}
-					>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									className="size-5"
-									aria-label={t("fileTree.downloadAllMissing")}
-									disabled={libraryBusy}
-									onClick={(e) => {
-										e.stopPropagation();
-										void handleDownloadAll();
-									}}
-								>
-									{downloadingAll ? (
-										<Loader2 className="size-3.5 animate-spin" />
-									) : (
-										<Download className="size-3.5" />
-									)}
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="right" className="max-w-xs">
-								{t("fileTree.downloadAllMissing")}
-							</TooltipContent>
-						</Tooltip>
-					</FileTreeActions>
-				) : null}
-			</FileTreeFile>
+			<LibraryRow
+				showDownload={showLibraryDownload}
+				busy={libraryBusy}
+				downloadingAll={downloadingAll}
+				onDownloadAll={() => void handleDownloadAll()}
+			/>
 		);
-
-		const trashRow = (
-			<FileTreeFile path={TRASH_VIRTUAL_PATH} name={t("recycleBin.title")}>
-				<span className="size-4 shrink-0" />
-				<FileTreeIcon>
-					<Trash2 className="size-4 text-muted-foreground" />
-				</FileTreeIcon>
-				<FileTreeName className="min-w-0 flex-1 truncate">
-					{t("recycleBin.title")}
-				</FileTreeName>
-			</FileTreeFile>
-		);
-		const loadingRows = (
-			<div className="space-y-1 px-2 py-1.5" aria-hidden>
-				{["one", "two", "three", "four", "five"].map((key, index) => (
-					<div key={key} className="flex h-7 items-center gap-2 rounded px-2">
-						<Skeleton className="size-4 shrink-0 library-shimmer" />
-						<Skeleton
-							className={cn(
-								"library-shimmer h-3",
-								index === 0 ? "w-32" : index === 1 ? "w-24" : "w-28",
-							)}
-						/>
-					</div>
-				))}
-			</div>
-		);
-
-		const renderPaperRow = (node: FileNode, isCut: boolean): ReactNode => {
-			const rel = relPathForNode(node.path);
-			const meta = paperMetaByRelPath?.get(rel) ?? null;
-			const downloadReasons = paperAssetDownloadReasons(node, meta);
-			const showDownload =
-				Boolean(onDownloadPaperAssets) && downloadReasons.length > 0;
-			const label = formatPaperTreeLabel(paperTreeLabelMode, meta, node.name);
-			const showRead =
-				Boolean(onReadPaper) && !showDownload && paperNeedsRead(node, meta);
-			const isDownloading = downloadingPath === node.path || downloadingAll;
-			const isReading = readingPath === node.path;
-			const rowBusy =
-				isDownloading ||
-				isReading ||
-				Boolean(downloadingPath) ||
-				downloadingAll ||
-				Boolean(readingPath);
-			const reasonTip = downloadReasons.length
-				? downloadReasons.map((r) => t(DOWNLOAD_REASON_KEYS[r])).join(" · ")
-				: t("fileTree.downloadAssets");
-			const showActions = showDownload || showRead;
-			return (
-				<FileTreeFile
-					path={node.path}
-					name={label}
-					className={cn(isCut && "opacity-50")}
-				>
-					<span className="size-4 shrink-0" />
-					<FileTreeIcon>
-						<ScrollText className="size-4 text-muted-foreground" />
-					</FileTreeIcon>
-					<FileTreeName className="min-w-0 flex-1 truncate" title={label}>
-						{label}
-					</FileTreeName>
-					{showActions ? (
-						<FileTreeActions
-							className="shrink-0"
-							onClick={(e) => {
-								e.stopPropagation();
-							}}
-							onKeyDown={(e) => e.stopPropagation()}
-						>
-							{showDownload ? (
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-xs"
-											className="size-5"
-											aria-label={reasonTip}
-											disabled={rowBusy}
-											onClick={(e) => {
-												e.stopPropagation();
-												void handleDownload(node);
-											}}
-										>
-											{isDownloading ? (
-												<Loader2 className="size-3.5 animate-spin" />
-											) : (
-												<Download className="size-3.5" />
-											)}
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent side="right" className="max-w-xs">
-										<p className="font-medium">
-											{t("fileTree.downloadAssets")}
-										</p>
-										<ul className="mt-1 list-disc space-y-0.5 pl-3 text-xs opacity-90">
-											{downloadReasons.map((r) => (
-												<li key={r}>{t(DOWNLOAD_REASON_KEYS[r])}</li>
-											))}
-										</ul>
-									</TooltipContent>
-								</Tooltip>
-							) : null}
-							{showRead ? (
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-xs"
-											className="size-5"
-											aria-label={t("fileTree.readPaper")}
-											disabled={rowBusy}
-											onClick={(e) => {
-												e.stopPropagation();
-												void handleReadPaper(node);
-											}}
-										>
-											{isReading ? (
-												<Loader2 className="size-3.5 animate-spin" />
-											) : (
-												<Zap className="size-3.5" />
-											)}
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent side="right" className="max-w-xs">
-										<p className="font-medium">{t("fileTree.readPaper")}</p>
-									</TooltipContent>
-								</Tooltip>
-							) : null}
-						</FileTreeActions>
-					) : null}
-				</FileTreeFile>
-			);
-		};
+		const trashRow = <TrashRow />;
 
 		const renderNodeRow = (node: FileNode, paperLeaf: boolean): ReactNode => {
 			const isCut = cutPathKeys.has(pathKey(node.path));
-			if (paperLeaf) return renderPaperRow(node, isCut);
-			if (node.kind === "directory") {
-				const pendingLoad =
-					Boolean(node.childrenPending) || loadingDirs.has(node.path);
+			if (paperLeaf) {
+				const rel = relPathForNode(node.path);
+				const meta = paperMetaByRelPath?.get(rel) ?? null;
+				const downloadReasons = paperAssetDownloadReasons(node, meta);
+				const showDownload =
+					Boolean(onDownloadPaperAssets) && downloadReasons.length > 0;
+				const label = formatPaperTreeLabel(paperTreeLabelMode, meta, node.name);
+				const showRead =
+					Boolean(onReadPaper) && !showDownload && paperNeedsRead(node, meta);
+				const isDownloading = downloadingPath === node.path || downloadingAll;
+				const isReading = readingPath === node.path;
+				const rowBusy =
+					isDownloading ||
+					isReading ||
+					Boolean(downloadingPath) ||
+					downloadingAll ||
+					Boolean(readingPath);
 				return (
-					<div
-						className={cn(
-							"relative flex w-full items-center",
-							isCut && "opacity-50",
-						)}
-					>
-						<div className="min-w-0 flex-1">
-							<FileTreeFolderRow path={node.path} name={node.name} />
-						</div>
-						{pendingLoad && expanded.has(node.path) ? (
-							<Loader2
-								className="pointer-events-none absolute right-2 size-3.5 shrink-0 animate-spin text-muted-foreground"
-								aria-hidden
-							/>
-						) : null}
-					</div>
+					<PaperTreeRow
+						node={node}
+						isCut={isCut}
+						label={label}
+						downloadReasons={downloadReasons}
+						isDownloading={isDownloading}
+						isReading={isReading}
+						rowBusy={rowBusy}
+						onDownload={
+							showDownload ? () => void handleDownload(node) : undefined
+						}
+						onRead={showRead ? () => void handleReadPaper(node) : undefined}
+					/>
 				);
 			}
-			const Icon = contextPathIcon(node.name);
+			const pendingLoad =
+				Boolean(node.childrenPending) || loadingDirs.has(node.path);
 			return (
-				<FileTreeFile
-					path={node.path}
-					name={node.name}
-					icon={<Icon className="size-4 text-muted-foreground" />}
-					className={cn(isCut && "opacity-50")}
+				<NodeTreeRow
+					node={node}
+					isCut={isCut}
+					pendingLoad={pendingLoad}
+					expanded={expanded.has(node.path)}
 				/>
 			);
 		};
@@ -2175,7 +1472,7 @@ export const FileTree = memo(
 									{trashRow}
 								</AiFileTree>
 								{vaultPath && loading ? (
-									loadingRows
+									<LoadingRows />
 								) : vaultPath ? (
 									<p className="px-3 py-2 text-muted-foreground text-xs">
 										{t("fileTree.empty")}
@@ -2245,116 +1542,3 @@ export const FileTree = memo(
 		);
 	}),
 );
-
-type MoveDestinationPickerProps = {
-	vaultPath: string | null;
-	nodes: FileNode[];
-	sourcePaths: string[];
-	selectedFolder: string;
-	newFolder: string;
-	busy: boolean;
-	onNewFolderChange: (value: string) => void;
-	onConfirm: (dest: string) => void | Promise<void>;
-};
-
-function MoveDestinationPicker({
-	vaultPath,
-	nodes,
-	sourcePaths,
-	selectedFolder,
-	newFolder,
-	busy,
-	onNewFolderChange,
-	onConfirm,
-}: MoveDestinationPickerProps) {
-	const { t } = useTranslation("sidebar");
-	const folders = usePapersOrgFolders(vaultPath, nodes, sourcePaths);
-	const typed = newFolder.trim();
-	const dest = typed
-		? normalizePath(typed.startsWith("papers") ? typed : `papers/${typed}`)
-		: selectedFolder;
-	const destValid = dest.startsWith("papers");
-
-	const handleSelect = (folder: string) => {
-		onNewFolderChange("");
-		void onConfirm(folder);
-	};
-
-	return (
-		<PopoverContent
-			align="start"
-			side="right"
-			sideOffset={4}
-			avoidCollisions
-			className="w-56 p-2"
-		>
-			<div className="space-y-2">
-				<p className="font-medium text-xs text-foreground">
-					{t("fileTree.moveToFolder", { count: sourcePaths.length })}
-				</p>
-				<ScrollArea className="h-40 rounded-md border">
-					<div className="space-y-0.5 p-1">
-						{folders.map((folder) => {
-							const active = !typed && selectedFolder === folder;
-							return (
-								<button
-									key={folder}
-									type="button"
-									disabled={busy}
-									className={cn(
-										"flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors hover:bg-accent",
-										active && "bg-muted",
-									)}
-									onClick={() => handleSelect(folder)}
-								>
-									<span className="flex-1 truncate font-mono">
-										{folder === "papers"
-											? t("fileTree.movePicker.papersRoot")
-											: folder}
-									</span>
-									{active ? (
-										<Check className="size-3 shrink-0 text-primary" />
-									) : null}
-								</button>
-							);
-						})}
-					</div>
-				</ScrollArea>
-				<div className="space-y-1">
-					<Label
-						htmlFor="move-new-folder"
-						className="text-[10px] text-muted-foreground"
-					>
-						{t("fileTree.movePicker.newFolder")}
-					</Label>
-					<div className="relative">
-						<FolderPlus className="-translate-y-1/2 absolute top-1/2 left-2 size-3 text-muted-foreground" />
-						<Input
-							id="move-new-folder"
-							value={newFolder}
-							onChange={(e) => onNewFolderChange(e.target.value)}
-							placeholder={t("fileTree.movePicker.newFolderHint")}
-							disabled={busy}
-							spellCheck={false}
-							className="h-7 pl-6 text-xs font-mono"
-							onKeyDown={(e) => {
-								if (e.key === "Enter" && destValid) {
-									e.preventDefault();
-									void onConfirm(dest);
-								}
-							}}
-						/>
-					</div>
-					{typed && !destValid ? (
-						<p className="text-[10px] text-destructive">
-							{t("fileTree.movePicker.invalidFolderPath")}
-						</p>
-					) : null}
-				</div>
-			</div>
-		</PopoverContent>
-	);
-}
-
-export type { VaultSidebarHeaderProps } from "@/components/sidebar/vault-sidebar-header";
-export { VaultSidebarHeader } from "@/components/sidebar/vault-sidebar-header";
