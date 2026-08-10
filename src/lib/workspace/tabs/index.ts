@@ -9,6 +9,7 @@ export {
 	remapTabsUnderPath,
 	removeTab,
 	removeTabsUnderPath,
+	splitPaneIdForPath,
 	tabIdForPath,
 } from "@/lib/workspace/tabs/model";
 export {

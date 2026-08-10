@@ -78,6 +78,7 @@ import {
 	removeTab,
 	removeTabsUnderPath,
 	revokeTabMediaSources,
+	splitPaneIdForPath,
 	syncTabSeedsForPath,
 	tabHasNotesSplit,
 	tabIdForPath,
@@ -353,6 +354,48 @@ export function closeTabsUnderPath(path: string): void {
 /** Cycle the active panel by dockview visual order (api.panels). */
 export function cycleActiveTab(delta: number): void {
 	dockHandle()?.cycleActive(delta);
+}
+
+function cloneTabForSplit(tab: DocTab, tabs: DocTab[]): DocTab {
+	return {
+		...tab,
+		id: splitPaneIdForPath(
+			tab.path,
+			tabs.map((candidate) => candidate.id),
+		),
+	};
+}
+
+/** Obsidian-style Split pane: add a right pane and keep columns evenly sized. */
+export function splitActivePane(): void {
+	const id = getActiveTabId();
+	if (!id) return;
+	const tabs = getTabs();
+	const active = tabs.find((t) => t.id === id);
+	if (!active) return;
+
+	const notesId = active.notesPath ? tabIdForPath(active.notesPath) : null;
+	const shouldOpenDefaultNotes =
+		tabNotesEligible(active) &&
+		Boolean(active.notesPath) &&
+		notesId != null &&
+		!tabs.some((t) => t.id === notesId);
+
+	if (shouldOpenDefaultNotes) {
+		const notesPane = createNotesSplitPane(active);
+		if (!notesPane) return;
+		setTabs((prev) =>
+			prev.some((t) => t.id === notesPane.id) ? prev : [...prev, notesPane],
+		);
+		dockHandle()?.splitPanelRight(notesPane, active.id);
+		setActiveTabId(notesPane.id);
+		return;
+	}
+
+	const splitPane = cloneTabForSplit(active, tabs);
+	setTabs((prev) => [...prev, splitPane]);
+	dockHandle()?.splitPanelRight(splitPane, active.id);
+	setActiveTabId(splitPane.id);
 }
 
 export function closeWindow(): void {

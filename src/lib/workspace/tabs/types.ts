@@ -78,6 +78,7 @@ export type TabResources = {
 };
 
 export type PersistedTab = {
+	id?: string;
 	path: string;
 	mode: CenterViewMode;
 };

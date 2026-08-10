@@ -13,6 +13,7 @@ pub struct MenuLabels {
     pub refresh_tree: &'static str,
     pub close: &'static str,
     pub toggle_sidebar: &'static str,
+    pub split_pane: &'static str,
     pub toggle_chat: &'static str,
     pub app: &'static str,
     pub file: &'static str,
@@ -31,6 +32,7 @@ const EN: MenuLabels = MenuLabels {
     // Closes the active document tab first; with no tabs, closes the window.
     close: "Close",
     toggle_sidebar: "Toggle Sidebar",
+    split_pane: "Split Pane Right",
     toggle_chat: "Toggle Chat",
     app: "Agentero",
     file: "File",
@@ -48,6 +50,7 @@ const ZH_CN: MenuLabels = MenuLabels {
     refresh_tree: "刷新文件树",
     close: "关闭",
     toggle_sidebar: "切换侧边栏",
+    split_pane: "向右分栏",
     toggle_chat: "切换对话",
     app: "Agentero",
     file: "文件",
@@ -103,6 +106,10 @@ pub fn build_menu(
         .accelerator("CmdOrCtrl+Alt+S")
         .build(app)?;
 
+    let split_pane = MenuItemBuilder::with_id("split_pane", labels.split_pane)
+        .accelerator("CmdOrCtrl+\\")
+        .build(app)?;
+
     let toggle_chat = MenuItemBuilder::with_id("toggle_chat", labels.toggle_chat)
         .accelerator("CmdOrCtrl+L")
         .build(app)?;
@@ -144,6 +151,7 @@ pub fn build_menu(
 
     let view_submenu = SubmenuBuilder::new(app, labels.view)
         .item(&toggle_sidebar)
+        .item(&split_pane)
         .item(&toggle_chat)
         .build()?;
 

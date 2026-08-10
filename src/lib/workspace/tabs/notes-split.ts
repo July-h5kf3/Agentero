@@ -2,6 +2,7 @@ import i18n from "@/i18n";
 import { notesPathForPaper } from "@/lib/paper";
 import {
 	createPlaceholderTab,
+	isCanonicalTabIdForPath,
 	normalizeTabPath,
 	tabIdForPath,
 } from "@/lib/workspace/tabs/model";
@@ -149,6 +150,7 @@ export function findReadingCompanion(
 	tab: DocTab | null,
 ): DocTab | null {
 	if (!tab || !isPaperContentTab(tab) || !tab.notesPath) return null;
+	if (!isCanonicalTabIdForPath(tab.id, tab.path)) return null;
 	const notesId = tabIdForPath(tab.notesPath);
 	return tabs.find((t) => t.id === notesId) ?? null;
 }
@@ -192,9 +194,9 @@ export function reseedMarkdownTab(
 	absPath: string,
 	content: string,
 ): DocTab[] {
-	const id = tabIdForPath(absPath);
+	const key = normalizeTabPath(absPath);
 	return prev.map((t) => {
-		if (t.id === id) {
+		if (normalizeTabPath(t.path) === key) {
 			return {
 				...t,
 				markdownSeed: content,

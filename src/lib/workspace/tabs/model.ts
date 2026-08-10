@@ -10,10 +10,45 @@ import type { CenterViewMode } from "@/lib/workspace/viewer";
 
 export { basenameOf, normalizePathKey as normalizeTabPath };
 
+const SPLIT_PANE_ID_MARKER = "::pane-";
+
 export function tabIdForPath(path: string): string {
 	if (isLibraryVirtualPath(path)) return LIBRARY_VIRTUAL_PATH;
 	if (isTrashVirtualPath(path)) return TRASH_VIRTUAL_PATH;
 	return normalizePathKey(path);
+}
+
+export function isCanonicalTabIdForPath(id: string, path: string): boolean {
+	return id === tabIdForPath(path);
+}
+
+export function splitPaneIdForPath(
+	path: string,
+	existingIds: Iterable<string>,
+): string {
+	const base = tabIdForPath(path);
+	const taken = new Set(existingIds);
+	let index = 2;
+	let id = `${base}${SPLIT_PANE_ID_MARKER}${index}`;
+	while (taken.has(id)) {
+		index += 1;
+		id = `${base}${SPLIT_PANE_ID_MARKER}${index}`;
+	}
+	return id;
+}
+
+function remapTabIdForPath(
+	id: string,
+	fromPath: string,
+	toPath: string,
+): string {
+	const fromBase = tabIdForPath(fromPath);
+	const toBase = tabIdForPath(toPath);
+	if (id === fromBase) return toBase;
+	if (id.startsWith(`${fromBase}${SPLIT_PANE_ID_MARKER}`)) {
+		return `${toBase}${id.slice(fromBase.length)}`;
+	}
+	return toBase;
 }
 
 /** Rewrite one absolute or Vault-relative path under a moved root. */
@@ -56,7 +91,7 @@ export function remapTabsUnderPath(
 		}
 		return {
 			...tab,
-			id: tabIdForPath(path),
+			id: remapTabIdForPath(tab.id, tab.path, path),
 			path,
 			notesPath,
 			paperMeta:
@@ -70,11 +105,12 @@ export function remapTabsUnderPath(
 export function createPlaceholderTab(
 	path: string,
 	preferMode: CenterViewMode = "markdown",
+	id = tabIdForPath(path),
 ): DocTab {
 	const isLibrary = isLibraryVirtualPath(path);
 	const isTrash = isTrashVirtualPath(path);
 	return {
-		id: tabIdForPath(path),
+		id,
 		path: isLibrary
 			? LIBRARY_VIRTUAL_PATH
 			: isTrash

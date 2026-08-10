@@ -7,6 +7,7 @@ type NativeMenuHandlers = {
 	onCreateVault: () => void;
 	onRefresh: () => void;
 	onToggleSidebar: () => void;
+	onSplitPane: () => void;
 	onToggleChat: () => void;
 	onCloseTabOrWindow: () => void;
 };
@@ -22,6 +23,7 @@ export function useNativeMenuEvents(handlers: NativeMenuHandlers): void {
 		onCreateVault,
 		onRefresh,
 		onToggleSidebar,
+		onSplitPane,
 		onToggleChat,
 		onCloseTabOrWindow,
 	} = handlers;
@@ -41,6 +43,7 @@ export function useNativeMenuEvents(handlers: NativeMenuHandlers): void {
 			unsubs.push(await listen("create_vault", () => onCreateVault()));
 			unsubs.push(await listen("refresh_tree", () => onRefresh()));
 			unsubs.push(await listen("toggle_sidebar", () => onToggleSidebar()));
+			unsubs.push(await listen("split_pane", () => onSplitPane()));
 			unsubs.push(await listen("toggle_chat", () => onToggleChat()));
 			// File → Close / ⌘W (macOS menu accelerator; keydown also handles non-macOS)
 			unsubs.push(
@@ -58,6 +61,7 @@ export function useNativeMenuEvents(handlers: NativeMenuHandlers): void {
 		onCreateVault,
 		onRefresh,
 		onToggleSidebar,
+		onSplitPane,
 		onToggleChat,
 		onCloseTabOrWindow,
 	]);

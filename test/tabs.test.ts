@@ -224,10 +224,67 @@ describe("extractTabsFromLayout", () => {
 		};
 		const extracted = extractTabsFromLayout(layout);
 		expect(extracted.tabs).toEqual([
-			{ path: "/vault/a.md", mode: "markdown" },
-			{ path: "/vault/b.md", mode: "pdf" },
+			{ id: "/vault/a.md", path: "/vault/a.md", mode: "markdown" },
+			{ id: "/vault/b.md", path: "/vault/b.md", mode: "pdf" },
 		]);
 		expect(extracted.activeId).toBe("/vault/b.md");
+	});
+
+	it("preserves duplicate pane ids for the same path", () => {
+		const layout = {
+			grid: {
+				root: {
+					type: "branch",
+					data: [
+						{
+							type: "leaf",
+							data: {
+								id: "g1",
+								views: ["/vault/a.md"],
+								activeView: "/vault/a.md",
+							},
+						},
+						{
+							type: "leaf",
+							data: {
+								id: "g2",
+								views: ["/vault/a.md::pane-2"],
+								activeView: "/vault/a.md::pane-2",
+							},
+						},
+					],
+				},
+			},
+			panels: {
+				"/vault/a.md": {
+					id: "/vault/a.md",
+					params: {
+						panelId: "/vault/a.md",
+						path: "/vault/a.md",
+						mode: "markdown",
+					},
+				},
+				"/vault/a.md::pane-2": {
+					id: "/vault/a.md::pane-2",
+					params: {
+						panelId: "/vault/a.md::pane-2",
+						path: "/vault/a.md",
+						mode: "markdown",
+					},
+				},
+			},
+			activeGroup: "g2",
+		};
+		const extracted = extractTabsFromLayout(layout);
+		expect(extracted.tabs).toEqual([
+			{ id: "/vault/a.md", path: "/vault/a.md", mode: "markdown" },
+			{
+				id: "/vault/a.md::pane-2",
+				path: "/vault/a.md",
+				mode: "markdown",
+			},
+		]);
+		expect(extracted.activeId).toBe("/vault/a.md::pane-2");
 	});
 
 	it("falls back to panel id as path when params are missing", () => {
@@ -237,7 +294,9 @@ describe("extractTabsFromLayout", () => {
 			},
 		};
 		const extracted = extractTabsFromLayout(layout);
-		expect(extracted.tabs).toEqual([{ path: "/vault/x.md", mode: "markdown" }]);
+		expect(extracted.tabs).toEqual([
+			{ id: "/vault/x.md", path: "/vault/x.md", mode: "markdown" },
+		]);
 	});
 });
 
@@ -289,8 +348,8 @@ describe("tab session persistence", () => {
 		const loaded = loadPersistedTabs();
 		expect(loaded?.layout).toEqual(layout);
 		expect(loaded?.tabs).toEqual([
-			{ path: "/vault/a.md", mode: "markdown" },
-			{ path: "/vault/b.md", mode: "pdf" },
+			{ id: "/vault/a.md", path: "/vault/a.md", mode: "markdown" },
+			{ id: "/vault/b.md", path: "/vault/b.md", mode: "pdf" },
 		]);
 		expect(loaded?.activeId).toBe("/vault/b.md");
 	});

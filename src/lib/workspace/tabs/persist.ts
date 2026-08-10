@@ -97,10 +97,13 @@ export function extractTabsFromLayout(layout: unknown): {
 		const mode = isCenterViewMode(panel.params?.mode)
 			? panel.params.mode
 			: "markdown";
-		const tabId = tabIdForPath(path);
-		if (seen.has(tabId)) continue;
-		seen.add(tabId);
-		tabs.push({ path, mode });
+		const panelId =
+			typeof panel.params?.panelId === "string" && panel.params.panelId
+				? panel.params.panelId
+				: id;
+		if (seen.has(panelId)) continue;
+		seen.add(panelId);
+		tabs.push({ id: panelId, path, mode });
 	}
 	const activeId = findActivePanelIdInLayout(l);
 	return {
@@ -109,7 +112,7 @@ export function extractTabsFromLayout(layout: unknown): {
 			activeId && seen.has(activeId)
 				? activeId
 				: tabs[0]
-					? tabIdForPath(tabs[0].path)
+					? (tabs[0].id ?? tabIdForPath(tabs[0].path))
 					: null,
 	};
 }

@@ -30,6 +30,7 @@ export type ShortcutId =
 	| "focusEditor"
 	| "focusNotes"
 	| "closeTab"
+	| "splitPane"
 	| "nextTab"
 	| "prevTab"
 	| "zoomIn"
@@ -257,6 +258,14 @@ export const SHORTCUTS: ShortcutDef[] = [
 		// Intentionally NOT whenSettingsClosed: overlays take priority over tabs.
 		key: "w",
 		meta: true,
+	},
+	{
+		id: "splitPane",
+		group: "Navigation",
+		// ⌘\ — Obsidian-style split pane to the right.
+		key: "\\",
+		meta: true,
+		whenSettingsClosed: true,
 	},
 	{
 		id: "nextTab",

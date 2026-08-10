@@ -77,6 +77,8 @@ export type WorkspaceExternalDrop = {
 export type DockWorkspaceHandle = {
 	/** Add (or activate) a panel with optional split placement. */
 	openPanel: (tab: DocTab, placement?: OpenPlacement) => void;
+	/** Add a panel as a right split and rebalance visible grid columns. */
+	splitPanelRight: (tab: DocTab, referencePanelId: string | null) => void;
 	/** Replace a panel id after a filesystem move while preserving its group. */
 	remapPanel: (previousPanelId: string, tab: DocTab) => void;
 	/** Cycle active panel by dockview `api.panels` order (wraps). */
@@ -307,10 +309,10 @@ function addPanelWithPlacement(
 	api: DockviewApi,
 	tab: DocTab,
 	placement: OpenPlacement,
-): void {
+): IDockviewPanel {
 	const referencePanel = resolveReferencePanel(api, placement);
 	const direction = placement?.direction ?? "within";
-	api.addPanel({
+	return api.addPanel({
 		id: tab.id,
 		component: "pane",
 		// Omit tabComponent so dockview uses its built-in default tab.
@@ -328,6 +330,17 @@ function addPanelWithPlacement(
 				}
 			: {}),
 	});
+}
+
+function rebalanceGridGroupWidths(api: DockviewApi): void {
+	const groups = api.groups.filter(
+		(group) => group.api.location.type === "grid",
+	);
+	if (groups.length < 2 || api.width <= 0) return;
+	const width = Math.max(1, Math.floor(api.width / groups.length));
+	for (const group of groups) {
+		group.api.setSize({ width });
+	}
 }
 
 /** Push React tab title / persist params / renderer onto an existing dockview panel. */
@@ -555,6 +568,26 @@ export const DockWorkspace = memo(
 					syncingRef.current = true;
 					try {
 						addPanelWithPlacement(api, tab, placement);
+					} finally {
+						endSync(api);
+					}
+				},
+				splitPanelRight(tab, referencePanelId) {
+					const api = apiRef.current;
+					if (!api) return;
+					const existing = api.getPanel(tab.id);
+					if (existing) {
+						existing.api.setActive();
+						rebalanceGridGroupWidths(api);
+						return;
+					}
+					syncingRef.current = true;
+					try {
+						addPanelWithPlacement(api, tab, {
+							direction: "right",
+							referencePanelId,
+						});
+						rebalanceGridGroupWidths(api);
 					} finally {
 						endSync(api);
 					}

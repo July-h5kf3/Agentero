@@ -2097,6 +2097,7 @@ UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，
 | `refresh_tree` | Refresh File Tree | `⌘R` | 前端监听 |
 | `close_tab_or_window` | Close | `⌘W` | 前端监听：有文档 tab 时关闭当前 tab；无 tab 时 `getCurrentWindow().close()`。**不要**用 PredefinedMenuItem::CloseWindow（会独占 `⌘W`） |
 | `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` | 前端监听（左栏 collapsible；与右栏隔离） |
+| `split_pane` | Split Pane Right | `⌘\` | 前端监听：向右新增 Dockview pane，论文默认打开 NOTES，否则复制当前 pane |
 | `toggle_chat` | Toggle Chat | `⌘L` | 前端监听（右栏 collapsible 常驻；勿条件卸载 Panel） |
 
 前端快捷键（非菜单 emit，见 `src/lib/shell/shortcuts.ts` / `docs/frontend/shell.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌥⌘T` 在终端中打开、`⌘←` 折叠选中文件夹、`⇧⌘←` 折叠文件树至默认（仅 `papers/` 展开）、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒、`⌥⌘←/→` 切换文档标签。`⌘W` 亦可由渲染层 `shortcuts.ts` 直接匹配（与菜单同源逻辑，防抖避免双触发）。

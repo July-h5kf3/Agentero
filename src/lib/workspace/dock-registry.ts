@@ -11,6 +11,8 @@ import type { DocTab, OpenPlacement } from "@/lib/workspace/tabs";
 export type DockHandle = {
 	/** Add (or activate) a panel with optional split placement. */
 	openPanel: (tab: DocTab, placement?: OpenPlacement) => void;
+	/** Add a panel as a right split and rebalance visible grid columns. */
+	splitPanelRight: (tab: DocTab, referencePanelId: string | null) => void;
 	/** Replace a panel id after a filesystem move while preserving its group. */
 	remapPanel: (previousPanelId: string, tab: DocTab) => void;
 	/** Cycle active panel by dockview `api.panels` order (wraps). */

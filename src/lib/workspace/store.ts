@@ -46,7 +46,9 @@ export function initWorkspaceStore(): void {
 	const persisted = loadPersistedTabs();
 	if (!persisted?.tabs.length) return;
 	workspaceStore.setState({
-		tabs: persisted.tabs.map((pt) => createPlaceholderTab(pt.path, pt.mode)),
+		tabs: persisted.tabs.map((pt) =>
+			createPlaceholderTab(pt.path, pt.mode, pt.id),
+		),
 		activeTabId: persisted.activeId ?? null,
 		dockLayout: persisted.layout ?? null,
 	});

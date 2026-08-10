@@ -92,6 +92,7 @@ import {
 	closeTabOrWindow,
 	cycleActiveTab,
 	dirtyVaultPaths,
+	splitActivePane,
 	toggleNotesSplit,
 } from "@/lib/workspace/actions";
 import { workspaceStore } from "@/lib/workspace/store";
@@ -339,6 +340,7 @@ export default function App() {
 		focusEditor: () => layout()?.focusEditorPane(),
 		focusNotes: () => layout()?.focusNotesEditor(),
 		closeTab: closeTabOrWindow,
+		splitPane: splitActivePane,
 		nextTab: () => cycleActiveTab(1),
 		prevTab: () => cycleActiveTab(-1),
 		zoomIn,
@@ -358,6 +360,7 @@ export default function App() {
 		onCreateVault: () => void createNewVault(),
 		onRefresh: refreshAll,
 		onToggleSidebar: toggleSidebar,
+		onSplitPane: splitActivePane,
 		onToggleChat: toggleChat,
 		onCloseTabOrWindow: closeTabOrWindow,
 	});

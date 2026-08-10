@@ -30,6 +30,7 @@ import {
 	closeTabOrWindow,
 	cycleActiveTab,
 	selectLibrary,
+	splitActivePane,
 } from "@/lib/workspace/actions";
 
 const hasVault = () => Boolean(getVaultPath());
@@ -144,6 +145,12 @@ export const paletteCommands: AppCommand[] = [
 		titleKey: "commands.tabClose",
 		categoryKey: "commands.catTab",
 		run: () => closeTabOrWindow(),
+	},
+	{
+		id: "tab.splitPane",
+		titleKey: "commands.tabSplitPane",
+		categoryKey: "commands.catTab",
+		run: () => splitActivePane(),
 	},
 	{
 		id: "tab.next",

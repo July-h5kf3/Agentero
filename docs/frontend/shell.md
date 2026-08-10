@@ -51,6 +51,7 @@
 | `⌘N` | 新窗口 |
 | `⌘W` / `Esc` | 关弹层 → 关 panel → 关窗 |
 | `⌥⌘←/→` | 循环 Dockview panel |
+| `⌘\` | 向右 Split pane：当前论文未打开 NOTES 时右侧打开 NOTES；否则复制当前 pane，并将横向 pane 等宽 |
 | `⌘P` / `⌘K` | 快速打开 |
 | `⇧⌘P` | 命令面板 |
 | `⇧⌘I` | 魔棒 |
