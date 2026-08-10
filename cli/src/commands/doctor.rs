@@ -5,8 +5,8 @@ use crate::output::{to_value, OutputFormat};
 use crate::prompt;
 use crate::resolve::{resolve_vault, GlobalOpts};
 use agentero_lib::features::doctor::{
-    apply_alias_repairs, apply_visual_mark_repairs, diagnose, AliasRepairCandidate,
-    AliasRepairChange, DoctorReport, VisualMarkRepairChange,
+    apply_alias_repairs, apply_catalog_duplicate_repairs, apply_visual_mark_repairs, diagnose,
+    AliasRepairCandidate, AliasRepairChange, DoctorReport, VisualMarkRepairChange,
 };
 use clap::Subcommand;
 use serde_json::{json, Value};
@@ -27,6 +27,9 @@ pub enum DoctorFixCmd {
     /// Rewrite legacy visual marks (`agent-trace` v1) to nested `visual` v2.
     #[command(name = "visual-marks")]
     VisualMarks,
+    /// Remove duplicate catalog rows, keeping one canonical row per paper id.
+    #[command(name = "catalog-duplicates")]
+    CatalogDuplicates,
 }
 
 pub fn run(cmd: Option<DoctorCmd>, globals: &GlobalOpts) -> Result<Value, CliError> {
@@ -38,6 +41,9 @@ pub fn run(cmd: Option<DoctorCmd>, globals: &GlobalOpts) -> Result<Value, CliErr
         Some(DoctorCmd::Fix {
             cmd: DoctorFixCmd::VisualMarks,
         }) => fix_visual_marks(globals),
+        Some(DoctorCmd::Fix {
+            cmd: DoctorFixCmd::CatalogDuplicates,
+        }) => fix_catalog_duplicates(globals),
     }
 }
 
@@ -206,6 +212,59 @@ fn fix_visual_marks(globals: &GlobalOpts) -> Result<Value, CliError> {
             json!([format!(
                 "migrated {} visual mark file(s)",
                 result.updated_paths.len()
+            )]),
+        );
+    }
+    Ok(value)
+}
+
+fn fix_catalog_duplicates(globals: &GlobalOpts) -> Result<Value, CliError> {
+    let vault = resolve_vault(globals)?;
+    let report = diagnose(&vault).map_err(CliError::from)?;
+    let dup_report = report.catalog.duplicate_report.as_ref();
+    let has_duplicates =
+        dup_report.is_some_and(|d| !d.duplicate_ids.is_empty() || !d.duplicate_paths.is_empty());
+
+    if !has_duplicates {
+        let mut value = report_value(&report)?;
+        if let Some(object) = value.as_object_mut() {
+            object.insert("removedRows".into(), json!(0));
+            object.insert("lines".into(), json!(["no duplicate catalog rows found"]));
+        }
+        return Ok(value);
+    }
+
+    if matches!(globals.format, OutputFormat::Json) && !globals.yes {
+        return Err(CliError::with_details(
+            "needs_confirmation",
+            "catalog duplicate repair requires confirmation (pass --yes / -y)",
+            json!({ "duplicateReport": dup_report }),
+            ExitCode::NeedsConfirmation,
+        ));
+    }
+
+    let extra_rows = dup_report.map(|d| d.total_duplicate_rows).unwrap_or(0);
+    if !prompt::confirm(
+        globals,
+        &format!(
+            "Remove {extra_rows} duplicate catalog row(s), keeping one canonical row per paper?"
+        ),
+        false,
+    )? {
+        return Err(CliError::needs_confirmation(
+            "catalog duplicate repair cancelled",
+        ));
+    }
+
+    let result = apply_catalog_duplicate_repairs(&vault).map_err(CliError::from)?;
+    let mut value = to_value(&result)?;
+    if let Some(object) = value.as_object_mut() {
+        object.insert(
+            "lines".into(),
+            json!([format!(
+                "removed {} duplicate catalog row(s), kept {} canonical row(s)",
+                result.removed_rows,
+                result.kept_paths.len()
             )]),
         );
     }

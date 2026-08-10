@@ -14,6 +14,7 @@ pub use wikilink_repair::{
 };
 
 use crate::core::error::AppError;
+use crate::features::catalog::papers::{self, DuplicateRepairResult, DuplicateReport};
 use crate::features::catalog::{self, papers::PaperRecord};
 use crate::features::wiki::frontmatter::{inspect_aliases, patch_aliases, AliasEdit};
 use crate::features::wiki::index::WikiIndex;
@@ -59,6 +60,8 @@ pub struct CatalogDoctorSection {
     pub schema_version: Option<i32>,
     pub expected_schema_version: i32,
     pub issues: Vec<DoctorIssue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duplicate_report: Option<DuplicateReport>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -593,6 +596,7 @@ pub fn diagnose(vault: &Path) -> Result<DoctorReport, AppError> {
                     DoctorSeverity::Error,
                     None,
                 )],
+                duplicate_report: None,
             },
             wikilinks: empty_wikilinks(),
             aliases: AliasDoctorSection::default(),
@@ -621,6 +625,7 @@ pub fn diagnose_with_index(vault: &Path, index: &WikiIndex) -> Result<DoctorRepo
         schema_version: None,
         expected_schema_version: catalog::SCHEMA_VERSION,
         issues: Vec::new(),
+        duplicate_report: None,
     };
     let papers = match read_only_catalog(vault) {
         Ok((connection, version)) => {
@@ -639,7 +644,55 @@ pub fn diagnose_with_index(vault: &Path, index: &WikiIndex) -> Result<DoctorRepo
                 Vec::new()
             } else {
                 match catalog::papers::list_all_conn(&connection) {
-                    Ok(papers) => papers,
+                    Ok(papers) => {
+                        match catalog::papers::find_duplicates_conn(vault, &connection) {
+                            Ok(dup_report) => {
+                                if !dup_report.duplicate_ids.is_empty()
+                                    || !dup_report.duplicate_paths.is_empty()
+                                {
+                                    catalog_report.ok = false;
+                                    catalog_report.duplicate_report = Some(dup_report.clone());
+                                    for group in &dup_report.duplicate_ids {
+                                        let paths: Vec<String> =
+                                            group.rows.iter().map(|r| r.path.clone()).collect();
+                                        catalog_report.issues.push(issue(
+                                            "catalog_duplicate_id",
+                                            format!(
+                                                "paper id '{}' appears {} times",
+                                                group.key,
+                                                group.rows.len()
+                                            ),
+                                            DoctorSeverity::Warning,
+                                            Some(paths.join(", ")),
+                                        ));
+                                    }
+                                    for group in &dup_report.duplicate_paths {
+                                        let ids: Vec<String> =
+                                            group.rows.iter().map(|r| r.id.clone()).collect();
+                                        catalog_report.issues.push(issue(
+                                            "catalog_duplicate_path",
+                                            format!(
+                                                "paper path '{}' appears {} times",
+                                                group.key,
+                                                group.rows.len()
+                                            ),
+                                            DoctorSeverity::Warning,
+                                            Some(ids.join(", ")),
+                                        ));
+                                    }
+                                }
+                            }
+                            Err(error) => {
+                                catalog_report.issues.push(issue(
+                                    "catalog_duplicate_check_failed",
+                                    error.to_string(),
+                                    DoctorSeverity::Error,
+                                    Some(".agentero/catalog.sqlite".into()),
+                                ));
+                            }
+                        }
+                        papers
+                    }
                     Err(error) => {
                         catalog_report.ok = false;
                         catalog_report.issues.push(issue(
@@ -883,6 +936,20 @@ pub fn apply_alias_repairs(
     })
 }
 
+/// Remove duplicate catalog rows, keeping one canonical row per paper `id`.
+///
+/// This is the write-side counterpart to the duplicate detection in
+/// `diagnose_with_index`. It delegates the canonical-row selection and
+/// deletion to `catalog::papers::repair_duplicates`, which keeps the row
+/// whose path exists on disk (preferred), has the newest `updated_at`, and
+/// is shortest/lexicographically smallest as a final tie-breaker.
+pub fn apply_catalog_duplicate_repairs(vault: &Path) -> Result<DuplicateRepairResult, AppError> {
+    if !vault.is_dir() {
+        return Err(AppError::message("vault path is not a directory"));
+    }
+    papers::repair_duplicates(vault)
+}
+
 /// In-place content write for alias repair (path/name never change).
 ///
 /// Do **not** use tmp+rename here: Host `atomic_write` is reported by FSEvents
@@ -950,6 +1017,70 @@ mod tests {
         let again = diagnose(&vault).unwrap();
         assert!(!again.aliases.ok);
         assert_eq!(again.aliases.candidates.len(), 1);
+
+        let _ = fs::remove_dir_all(vault);
+    }
+
+    #[test]
+    fn diagnose_reports_catalog_duplicate_ids() {
+        let vault = temp_vault("dup-id");
+        let conn = catalog::ensure_catalog(&vault).unwrap();
+        conn.execute(
+            "INSERT INTO papers(path, id, type, title, added_at, updated_at)
+             VALUES('papers/demo', 'demo', 'paper', 'Demo', 'now', 'now')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO papers(path, id, type, title, added_at, updated_at)
+             VALUES('papers/clone', 'demo', 'paper', 'Clone', 'now', 'now')",
+            [],
+        )
+        .unwrap();
+
+        let report = diagnose(&vault).unwrap();
+        assert!(!report.catalog.ok);
+        assert!(report.catalog.duplicate_report.is_some());
+        let dup = report.catalog.duplicate_report.unwrap();
+        assert_eq!(dup.duplicate_ids.len(), 1);
+        assert_eq!(dup.duplicate_ids[0].key, "demo");
+        assert_eq!(dup.duplicate_ids[0].rows.len(), 2);
+        assert!(report
+            .catalog
+            .issues
+            .iter()
+            .any(|i| i.code == "catalog_duplicate_id"));
+
+        let _ = fs::remove_dir_all(vault);
+    }
+
+    #[test]
+    fn apply_catalog_duplicate_repairs_keeps_existing_path() {
+        let vault = temp_vault("dup-repair");
+        // temp_vault creates papers/demo on disk; papers/ghost does not exist.
+        let conn = catalog::ensure_catalog(&vault).unwrap();
+        conn.execute(
+            "INSERT INTO papers(path, id, type, title, added_at, updated_at)
+             VALUES('papers/demo', 'demo', 'paper', 'Demo', 'now', '2024-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO papers(path, id, type, title, added_at, updated_at)
+             VALUES('papers/ghost', 'demo', 'paper', 'Ghost', 'now', '2024-01-02T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+        let result = apply_catalog_duplicate_repairs(&vault).unwrap();
+        assert_eq!(result.removed_rows, 1);
+        assert!(result.removed_paths.contains(&"papers/ghost".to_string()));
+        assert!(result.kept_paths.contains(&"papers/demo".to_string()));
+
+        let rows =
+            catalog::papers::list_all_conn(&catalog::ensure_catalog(&vault).unwrap()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].path, "papers/demo");
 
         let _ = fs::remove_dir_all(vault);
     }

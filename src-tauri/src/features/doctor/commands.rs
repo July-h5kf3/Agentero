@@ -1,8 +1,9 @@
 use super::{
-    apply_alias_repairs, apply_visual_mark_repairs, apply_wikilink_repairs, diagnose,
-    plan_wikilink_repairs, set_ignored_alias_paths, AliasRepairChange, AliasRepairResult,
-    DoctorDirtyPathsState, DoctorReport, DoctorVaultState, VisualMarkRepairChange,
-    VisualMarkRepairResult, WikilinkRepairChange, WikilinkRepairPlan, WikilinkRepairResult,
+    apply_alias_repairs, apply_catalog_duplicate_repairs, apply_visual_mark_repairs,
+    apply_wikilink_repairs, diagnose, plan_wikilink_repairs, set_ignored_alias_paths,
+    AliasRepairChange, AliasRepairResult, DoctorDirtyPathsState, DoctorReport, DoctorVaultState,
+    DuplicateRepairResult, VisualMarkRepairChange, VisualMarkRepairResult, WikilinkRepairChange,
+    WikilinkRepairPlan, WikilinkRepairResult,
 };
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::wiki::WikiIndexState;
@@ -79,6 +80,26 @@ pub fn doctor_check(args: DoctorCheckArgs) -> ApiResult<DoctorReport> {
     }
     match diagnose(&vault) {
         Ok(report) => ApiResult::ok(report),
+        Err(error) => map_err(error),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoctorFixCatalogDuplicatesArgs {
+    pub vault_path: String,
+}
+
+#[tauri::command]
+pub fn doctor_fix_catalog_duplicates(
+    args: DoctorFixCatalogDuplicatesArgs,
+) -> ApiResult<DuplicateRepairResult> {
+    let vault = PathBuf::from(&args.vault_path);
+    if !vault.is_dir() {
+        return map_err(AppError::message("vault path is not a directory"));
+    }
+    match apply_catalog_duplicate_repairs(&vault) {
+        Ok(result) => ApiResult::ok(result),
         Err(error) => map_err(error),
     }
 }

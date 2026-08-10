@@ -48,6 +48,7 @@ macro_rules! common_commands {
             crate::features::doctor::commands::doctor_plan_wikilinks,
             crate::features::doctor::commands::doctor_apply_wikilinks,
             crate::features::doctor::commands::doctor_apply_visual_marks,
+            crate::features::doctor::commands::doctor_fix_catalog_duplicates,
             crate::features::vault::commands::vault_create,
             crate::features::vault::commands::vault_ensure,
             crate::features::vault::commands::vault_allow_fs_scope,
