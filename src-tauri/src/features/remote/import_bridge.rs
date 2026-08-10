@@ -138,7 +138,7 @@ pub async fn download_paper_assets_remote(
             (name, arxiv, pdf, None)
         };
 
-    let mut result = ensure_paper_assets(
+    let result = ensure_paper_assets(
         &staging,
         &id,
         arxiv_id.as_deref(),
@@ -147,18 +147,7 @@ pub async fn download_paper_assets_remote(
     )
     .await?;
 
-    let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
-        &session.work_root,
-        &path_rel,
-        &staging,
-    )
-    .await;
-    result.paper_md = parse.paper_md;
-    for m in parse.messages {
-        result.messages.push(m);
-    }
-
-    // Upload new assets (and PAPER.md) — don't re-upload whole tree if huge; upload all staged
+    // Upload new assets — don't re-upload whole tree if huge; upload all staged
     upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
 
     // Touch catalog updated_at if row exists

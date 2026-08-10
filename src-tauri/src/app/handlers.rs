@@ -68,6 +68,7 @@ macro_rules! common_commands {
             crate::features::import::commands::skill_discard,
             crate::features::import::commands::paper_download_assets,
             crate::features::import::commands::paper_import_local_pdf,
+            crate::features::import::commands::paper_parse_body,
             crate::features::import::commands::paper_stage_import_file,
             crate::features::import::commands::paper_export,
             crate::features::import::commands::paper_import,

@@ -158,7 +158,7 @@ pub async fn paper_commit(
 
     let (assets, assets_pending) = match opts.assets {
         AssetsPolicy::SyncDownload { cookies, progress } => {
-            let mut assets = ensure_paper_assets_with_progress(
+            let assets = ensure_paper_assets_with_progress(
                 &paper_dir,
                 &meta.id,
                 meta.arxiv_id.as_deref(),
@@ -173,15 +173,13 @@ pub async fn paper_commit(
                 r.messages.push(format!("asset download error: {e}"));
                 r
             });
-            merge_liteparse(vault, &path_rel, &paper_dir, &mut assets, progress).await;
             (assets, false)
         }
-        AssetsPolicy::CopyPdf { progress, .. } => {
-            let mut assets = AssetDownloadResult {
+        AssetsPolicy::CopyPdf { .. } => {
+            let assets = AssetDownloadResult {
                 pdf: true,
                 ..Default::default()
             };
-            merge_liteparse(vault, &path_rel, &paper_dir, &mut assets, progress).await;
             (assets, false)
         }
         AssetsPolicy::Deferred => (AssetDownloadResult::default(), true),
@@ -203,29 +201,6 @@ pub async fn paper_commit(
         asset_messages: assets.messages,
         assets_pending,
     })
-}
-
-/// No TeX + has PDF → liteparse `PAPER.md`; fold flags/messages into `assets`.
-async fn merge_liteparse(
-    vault: &Path,
-    path_rel: &str,
-    paper_dir: &Path,
-    assets: &mut AssetDownloadResult,
-    progress: AssetProgressContext<'_>,
-) {
-    progress.emit_phase("parse");
-    let parse =
-        crate::features::import::pdf_parse::maybe_generate_paper_md_after_download_with_task(
-            vault,
-            path_rel,
-            paper_dir,
-            progress.task_id,
-        )
-        .await;
-    assets.paper_md = parse.paper_md;
-    for m in parse.messages {
-        assets.messages.push(m);
-    }
 }
 
 fn existing_result(

@@ -57,7 +57,7 @@ pub(crate) async fn remote_paper_commit(
 
     write_paper_shell(&staging, &meta).await?;
 
-    let mut assets = match opts.assets {
+    let assets = match opts.assets {
         RemoteAssetsPolicy::SyncDownload => ensure_paper_assets(
             &staging,
             &id,
@@ -77,18 +77,6 @@ pub(crate) async fn remote_paper_commit(
         },
     };
     crate::features::import::check_task_not_cancelled(opts.task_id)?;
-
-    let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
-        &session.work_root,
-        &path_rel,
-        &staging,
-    )
-    .await;
-    crate::features::import::check_task_not_cancelled(opts.task_id)?;
-    assets.paper_md = parse.paper_md;
-    for m in parse.messages {
-        assets.messages.push(m);
-    }
 
     upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
 

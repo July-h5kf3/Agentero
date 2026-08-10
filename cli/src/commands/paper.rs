@@ -651,6 +651,7 @@ async fn parse(globals: &GlobalOpts, ref_: &str, force: bool) -> Result<Value, C
         vault_path: vault.to_string_lossy().to_string(),
         path: paper.path.clone(),
         force,
+        task_id: None,
     })
     .await?;
     let style = globals.style;

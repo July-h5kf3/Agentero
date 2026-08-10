@@ -46,6 +46,9 @@ pub struct PaperParseBodyArgs {
     /// When true, overwrite existing `PAPER.md`. Default false.
     #[serde(default)]
     pub force: bool,
+    /// Frontend background-task id; passed to the isolated parser worker for cancellation.
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 /// True when `{paper}/PAPER.md` exists.
@@ -132,7 +135,14 @@ pub async fn parse_paper_body(args: PaperParseBodyArgs) -> Result<PaperParseResu
     if !paper_dir.is_dir() {
         return Err(AppError::message("paper folder not found"));
     }
-    Ok(parse_paper_body_inner(&vault, &path_rel, &paper_dir, args.force, None).await)
+    Ok(parse_paper_body_inner(
+        &vault,
+        &path_rel,
+        &paper_dir,
+        args.force,
+        args.task_id.as_deref(),
+    )
+    .await)
 }
 
 async fn parse_paper_body_inner(

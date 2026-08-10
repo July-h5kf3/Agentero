@@ -1,7 +1,9 @@
 //! Magic-wand / identifier import commands + catalog export/import via Translator.
 
 use crate::core::error::ApiResult;
+use crate::core::fs::WriteOpts;
 use crate::core::log_util::{trunc, OpTimer};
+use crate::features::import::pdf_parse::{PaperParseBodyArgs, PaperParseResult};
 use crate::features::import::{
     AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportBatchArgs,
     LookupImportBatchResult, PaperDownloadAssetsArgs, PaperExportArgs, PaperExportResult,
@@ -137,6 +139,84 @@ pub async fn paper_import_local_pdf(
     Ok(op.finish_result_ok_extra(result, |r| {
         format!("imported={} errors={}", r.papers.len(), r.errors.len())
     }))
+}
+
+/// Parse a paper's local PDF into `PAPER.md` using liteparse.
+/// Runs as a standalone background task; `task_id` is used for cancellation.
+#[tauri::command]
+pub async fn paper_parse_body(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: PaperParseBodyArgs,
+) -> Result<ApiResult<PaperParseResult>, String> {
+    let path = trunc(&args.path, 120);
+    let op = OpTimer::start_with("paper_parse_body", format!("path={path}"));
+
+    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
+        let session = match registry.get(session_id).await {
+            Ok(s) => s,
+            Err(e) => {
+                if let Some(task_id) = args.task_id.as_deref() {
+                    crate::features::agent::background_tasks::finish(task_id);
+                }
+                op.finish_err(&e);
+                return Ok(crate::core::error::map_err(e));
+            }
+        };
+        let task_id = args.task_id.clone();
+        let result = parse_remote_body(session, args).await;
+        if let Some(task_id) = task_id.as_deref() {
+            crate::features::agent::background_tasks::finish(task_id);
+        }
+        return Ok(op.finish_result(result));
+    }
+
+    let task_id = args.task_id.clone();
+    let result = crate::features::import::pdf_parse::parse_paper_body(args).await;
+    if let Some(task_id) = task_id.as_deref() {
+        crate::features::agent::background_tasks::finish(task_id);
+    }
+    Ok(op.finish_result(result))
+}
+
+async fn parse_remote_body(
+    session: Arc<crate::features::remote::session::RemoteSession>,
+    args: PaperParseBodyArgs,
+) -> Result<PaperParseResult, crate::core::error::AppError> {
+    let path_rel = crate::core::fs::sanitize_vault_rel(&args.path)
+        .map_err(|_| crate::core::error::AppError::message("invalid paper path"))?;
+    let staging = session.work_root.join(&path_rel);
+
+    let local_args = PaperParseBodyArgs {
+        vault_path: session.work_root.to_string_lossy().to_string(),
+        path: path_rel.clone(),
+        force: args.force,
+        task_id: args.task_id.clone(),
+    };
+
+    let result = crate::features::import::pdf_parse::parse_paper_body(local_args).await?;
+
+    if result.paper_md {
+        let paper_md_local = staging.join("PAPER.md");
+        if paper_md_local.is_file() {
+            let bytes = std::fs::read(&paper_md_local).map_err(|e| {
+                crate::core::error::AppError::message(format!("read staged PAPER.md: {e}"))
+            })?;
+            session
+                .fs
+                .write(
+                    &format!("{path_rel}/PAPER.md"),
+                    &bytes,
+                    WriteOpts {
+                        create_parents: true,
+                    },
+                )
+                .await?;
+        }
+        let mut cat = session.catalog.lock().await;
+        cat.push(session.fs.clone()).await?;
+    }
+
+    Ok(result)
 }
 
 /// Stage a path-less OS drop (File bytes as base64) into `~/.agentero/import-tmp/`.

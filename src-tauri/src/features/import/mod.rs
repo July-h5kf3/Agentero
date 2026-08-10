@@ -487,7 +487,7 @@ pub async fn download_paper_assets_with_progress(
         (name, arxiv, pdf, None)
     };
 
-    let mut result = ensure_paper_assets_with_progress(
+    let result = ensure_paper_assets_with_progress(
         &paper_dir,
         &id,
         arxiv_id.as_deref(),
@@ -517,26 +517,6 @@ pub async fn download_paper_assets_with_progress(
         }
     }
 
-    // After download: no TeX + has PDF → liteparse PAPER.md
-    let parse_progress = AssetProgressContext {
-        app,
-        task_id: args.task_id.as_deref(),
-    };
-    check_task_not_cancelled(args.task_id.as_deref())?;
-    parse_progress.emit_phase("parse");
-    let parse =
-        crate::features::import::pdf_parse::maybe_generate_paper_md_after_download_with_task(
-            &vault,
-            &path_rel,
-            &paper_dir,
-            args.task_id.as_deref(),
-        )
-        .await;
-    check_task_not_cancelled(args.task_id.as_deref())?;
-    result.paper_md = parse.paper_md;
-    for m in parse.messages {
-        result.messages.push(m);
-    }
     crate::features::refs::spawn_parse_after_import(app, &vault, &path_rel);
     Ok(result)
 }
