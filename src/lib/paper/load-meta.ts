@@ -54,6 +54,11 @@ export async function loadPaperOpenBundle(
 			"@/lib/vault/remote/remote-vault"
 		);
 		if (isRemoteVaultHandle(vaultRoot)) return null;
+		void invokeApi(
+			"job_focus_paper",
+			{ args: { vaultPath: vaultRoot, path } },
+			{ allowVoid: true },
+		).catch(() => undefined);
 		const data = await invokeApi<PaperOpenBundle>(
 			"paper_open_bundle",
 			{ args: { vaultPath: vaultRoot, path } },

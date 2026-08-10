@@ -101,6 +101,7 @@ pub async fn job_parse_body_enqueue(
 
 #[tauri::command]
 pub async fn job_focus_paper(
+    app: tauri::AppHandle,
     center: State<'_, JobCenter>,
     args: JobFocusPaperArgs,
 ) -> Result<ApiResult<Vec<JobSnapshot>>, String> {
@@ -108,7 +109,11 @@ pub async fn job_focus_paper(
         Ok(valid) => valid,
         Err(e) => return Ok(map_err(e)),
     };
-    Ok(ApiResult::ok(center.promote_paper(&vault, &path).await))
+    let promoted = center.promote_paper(&vault, &path).await;
+    for snapshot in &promoted {
+        emit_job_changed(&app, snapshot.clone());
+    }
+    Ok(ApiResult::ok(promoted))
 }
 
 #[tauri::command]
