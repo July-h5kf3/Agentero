@@ -21,6 +21,17 @@ impl PaperCaps {
     pub fn needs_paper_md(&self) -> bool {
         self.has_pdf() && !self.has_tex && !self.has_paper_md
     }
+
+    /// True when this paper still needs an asset download: no local PDF, or
+    /// the body is unknown (no catalog `body_source`) and there is neither TeX
+    /// nor `PAPER.md`. Mirrors the frontend `paperAssetDownloadReasons`.
+    pub fn needs_asset_download(&self, body_source: Option<&str>) -> bool {
+        if !self.has_pdf() {
+            return true;
+        }
+        let body_unknown = body_source.map(str::is_empty).unwrap_or(true);
+        body_unknown && !self.has_tex && !self.has_paper_md
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -340,5 +351,41 @@ mod tests {
         let fresh = cache.caps_for(&root, "papers/test");
         assert_eq!(fresh.pdf_path.as_deref(), Some(new_pdf.as_path()));
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn needs_asset_download_matches_body_source_rules() {
+        let pdf = Some(PathBuf::from("a.pdf"));
+        let no_pdf = PaperCaps {
+            pdf_path: None,
+            has_tex: false,
+            has_paper_md: false,
+        };
+        // No PDF always needs a download, regardless of body.
+        assert!(no_pdf.needs_asset_download(Some("pdf")));
+        assert!(no_pdf.needs_asset_download(None));
+
+        let pdf_only = PaperCaps {
+            pdf_path: pdf.clone(),
+            has_tex: false,
+            has_paper_md: false,
+        };
+        assert!(pdf_only.needs_asset_download(None)); // body unknown, no TeX/PAPER.md
+        assert!(pdf_only.needs_asset_download(Some(""))); // empty body_source = unknown
+        assert!(!pdf_only.needs_asset_download(Some("pdf"))); // body known
+
+        let with_tex = PaperCaps {
+            pdf_path: pdf.clone(),
+            has_tex: true,
+            has_paper_md: false,
+        };
+        assert!(!with_tex.needs_asset_download(None)); // TeX present
+
+        let with_md = PaperCaps {
+            pdf_path: pdf,
+            has_tex: false,
+            has_paper_md: true,
+        };
+        assert!(!with_md.needs_asset_download(None)); // PAPER.md present
     }
 }

@@ -272,15 +272,7 @@ pub async fn job_papers_needing_assets(
             .into_iter()
             .filter(|paper| {
                 let caps = caps_handle.caps_for(&scan_vault, &paper.path);
-                if !caps.has_pdf() {
-                    return true;
-                }
-                let body_unknown = paper
-                    .body_source
-                    .as_deref()
-                    .map(str::is_empty)
-                    .unwrap_or(true);
-                body_unknown && !caps.has_tex && !caps.has_paper_md
+                caps.needs_asset_download(paper.body_source.as_deref())
             })
             .map(|paper| paper.path)
             .collect::<Vec<_>>()

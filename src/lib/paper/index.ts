@@ -8,7 +8,6 @@ export {
 } from "@/lib/paper/assets";
 export {
 	collectPaperFoldersFromTree,
-	collectPapersNeedingAssetDownload,
 	detectPaperDirectory,
 	directoryHasPaperMarkers,
 	isPaperDirectory,
