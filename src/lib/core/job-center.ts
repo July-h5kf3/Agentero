@@ -7,6 +7,16 @@
  */
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import i18n from "@/i18n";
+import {
+	type BackgroundTaskKind,
+	completeBackgroundTask,
+	failBackgroundTask,
+	registerBackgroundTaskCancellation,
+	releaseBackgroundTaskCancellation,
+	startBackgroundTask,
+	updateBackgroundTask,
+} from "@/lib/core/background-tasks";
 import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
 
@@ -94,4 +104,127 @@ export async function jobReport(args: {
 		},
 		{ allowVoid: true },
 	);
+}
+
+/** Snapshot shape of the `job:changed` event payload's `job` field. */
+export type JobChangedSnapshot = {
+	id: string;
+	kind: JobKind;
+	state: JobState;
+	paperPath?: string | null;
+	progress?: number | null;
+	phase?: string | null;
+	error?: string | null;
+};
+
+/**
+ * Job kinds projected into the background-tasks panel (§7.6). Kinds absent
+ * here (pageCount / wikiReindex) stay silent to avoid idle-lane noise.
+ */
+const PROJECTED_JOB_KINDS: Partial<Record<JobKind, BackgroundTaskKind>> = {
+	layoutAnalyze: "layout",
+};
+
+function projectedTaskKind(kind: JobKind): BackgroundTaskKind | null {
+	return PROJECTED_JOB_KINDS[kind] ?? null;
+}
+
+function jobPanelTitle(kind: JobKind): string {
+	if (kind === "layoutAnalyze") return i18n.t("app:tasks.layoutAnalysis");
+	return i18n.t("app:tasks.layoutAnalysis");
+}
+
+let projectionUnlisten: UnlistenFn | null = null;
+let projectionStarting = false;
+const wiredJobCancels = new Set<string>();
+
+/**
+ * Single global `job:changed` → background-tasks-panel projection (§7.6).
+ * Mirrors projected JobCenter jobs into the task store keyed by job id, and
+ * routes panel cancellation to `job_cancel`.
+ */
+export function startJobTaskProjection(): void {
+	if (projectionUnlisten || projectionStarting) return;
+	projectionStarting = true;
+	void listen<{ job: JobChangedSnapshot }>("job:changed", (event) => {
+		projectJobToBackgroundTask(event.payload.job);
+	})
+		.then((unlisten) => {
+			projectionUnlisten = unlisten;
+		})
+		.finally(() => {
+			projectionStarting = false;
+		});
+}
+
+function projectJobToBackgroundTask(job: JobChangedSnapshot): void {
+	const taskKind = projectedTaskKind(job.kind);
+	if (!taskKind) return;
+	const title = jobPanelTitle(job.kind);
+	const detail = job.paperPath ?? undefined;
+	switch (job.state) {
+		case "queued":
+		case "running": {
+			startBackgroundTask({
+				id: job.id,
+				kind: taskKind,
+				title,
+				detail,
+				running: job.state === "running",
+				progress: typeof job.progress === "number" ? job.progress : null,
+			});
+			wireJobCancellation(job.id);
+			updateBackgroundTask(
+				job.id,
+				{
+					status: job.state === "running" ? "running" : "queued",
+					progress: typeof job.progress === "number" ? job.progress : null,
+					...(job.phase ? { detail: job.phase } : {}),
+				},
+				{ absoluteProgress: true },
+			);
+			return;
+		}
+		case "succeeded":
+		case "skipped":
+			completeBackgroundTask(job.id, detail);
+			releaseJobCancellation(job.id);
+			return;
+		case "failed":
+			failBackgroundTask(job.id, job.error?.trim() || title);
+			releaseJobCancellation(job.id);
+			return;
+		case "cancelled":
+			updateBackgroundTask(job.id, { status: "cancelled" });
+			releaseJobCancellation(job.id);
+			return;
+	}
+}
+
+function wireJobCancellation(jobId: string): void {
+	if (wiredJobCancels.has(jobId)) return;
+	wiredJobCancels.add(jobId);
+	const signal = registerBackgroundTaskCancellation(jobId);
+	signal.addEventListener(
+		"abort",
+		() => {
+			void invokeApi<boolean>(
+				"job_cancel",
+				{ jobId },
+				{ fallback: "job cancellation failed" },
+			).catch((error) =>
+				logger.warn("job cancellation failed", {
+					jobId,
+					error: error instanceof Error ? error.message : String(error),
+				}),
+			);
+		},
+		{ once: true },
+	);
+}
+
+function releaseJobCancellation(jobId: string): void {
+	if (!wiredJobCancels.has(jobId)) return;
+	wiredJobCancels.delete(jobId);
+	releaseBackgroundTaskCancellation(jobId);
 }
