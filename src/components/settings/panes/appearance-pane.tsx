@@ -17,10 +17,17 @@ import {
 import { Switch } from "@/components/ui/switch";
 import type {
 	AppSettings,
+	EditorFontFamily,
 	LocalePreference,
 	ThemePreference,
 } from "@/lib/settings";
-import { UI_SCALE_PRESETS } from "@/lib/settings";
+import {
+	EDITOR_FONT_FAMILIES,
+	EDITOR_LINE_HEIGHT_MAX,
+	EDITOR_LINE_HEIGHT_MIN,
+	EDITOR_LINE_HEIGHT_STEP,
+	UI_SCALE_PRESETS,
+} from "@/lib/settings";
 import {
 	applyUiTheme,
 	DEFAULT_UI_THEME,
@@ -35,6 +42,8 @@ export type AppearancePaneProps = {
 	locale: LocalePreference;
 	uiScale: number;
 	editorFontSize: number;
+	editorFontFamily: EditorFontFamily;
+	editorLineHeight: number;
 	showEditorToolbar: boolean;
 	patch: (p: Partial<AppSettings>) => void;
 };
@@ -45,12 +54,16 @@ function AppearancePaneInner({
 	locale,
 	uiScale,
 	editorFontSize,
+	editorFontFamily,
+	editorLineHeight,
 	showEditorToolbar,
 	patch,
 }: AppearancePaneProps) {
 	const { t } = useTranslation("settings");
 	const { resolvedTheme, setTheme } = useTheme();
 	const fontId = useId();
+	const fontFamilyId = useId();
+	const lineHeightId = useId();
 	const uiScaleId = useId();
 	const [themeDefs, setThemeDefs] = useState<UiThemeDef[]>([]);
 
@@ -66,6 +79,19 @@ function AppearancePaneInner({
 		}, 150);
 		return () => clearTimeout(id);
 	}, [fontSize, editorFontSize, patch]);
+
+	const [lineHeight, setLineHeight] = useState(editorLineHeight);
+	useEffect(() => {
+		setLineHeight(editorLineHeight);
+	}, [editorLineHeight]);
+
+	useEffect(() => {
+		if (lineHeight === editorLineHeight) return;
+		const id = setTimeout(() => {
+			patch({ editorLineHeight: lineHeight });
+		}, 150);
+		return () => clearTimeout(id);
+	}, [lineHeight, editorLineHeight, patch]);
 
 	useEffect(() => {
 		let active = true;
@@ -273,6 +299,54 @@ function AppearancePaneInner({
 						/>
 						<span className="w-12 text-right text-muted-foreground text-xs tabular-nums">
 							{t("appearance.fontSize.value", { size: fontSize })}
+						</span>
+					</div>
+				</SettingsRow>
+				<SettingsRow
+					label={t("appearance.fontFamily.label")}
+					htmlFor={fontFamilyId}
+				>
+					<Select
+						value={editorFontFamily}
+						onValueChange={(v) =>
+							patch({ editorFontFamily: v as EditorFontFamily })
+						}
+					>
+						<SelectTrigger
+							id={fontFamilyId}
+							size="sm"
+							className="min-w-[140px]"
+						>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{EDITOR_FONT_FAMILIES.map((family) => (
+								<SelectItem key={family} value={family}>
+									{t(`appearance.fontFamily.${family}`)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				<SettingsRow
+					label={t("appearance.lineHeight.label")}
+					htmlFor={lineHeightId}
+				>
+					<div className="flex items-center gap-2">
+						<input
+							id={lineHeightId}
+							type="range"
+							min={EDITOR_LINE_HEIGHT_MIN}
+							max={EDITOR_LINE_HEIGHT_MAX}
+							step={EDITOR_LINE_HEIGHT_STEP}
+							value={lineHeight}
+							onChange={(e) => setLineHeight(Number(e.target.value))}
+							className="w-28 accent-primary"
+						/>
+						<span className="w-12 text-right text-muted-foreground text-xs tabular-nums">
+							{t("appearance.lineHeight.value", {
+								value: lineHeight.toFixed(1),
+							})}
 						</span>
 					</div>
 				</SettingsRow>

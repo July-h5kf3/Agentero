@@ -128,6 +128,17 @@
 			"label": "编辑器字号",
 			"value": "{{size}} px"
 		},
+		"fontFamily": {
+			"label": "编辑器字体",
+			"default": "默认",
+			"system": "系统字体",
+			"serif": "衬线",
+			"mono": "等宽"
+		},
+		"lineHeight": {
+			"label": "行距",
+			"value": "{{value}}"
+		},
 		"editorToolbar": {
 			"label": "格式工具栏"
 		}

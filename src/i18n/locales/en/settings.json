@@ -135,6 +135,17 @@
 			"label": "Editor font size",
 			"value": "{{size}} px"
 		},
+		"fontFamily": {
+			"label": "Editor font",
+			"default": "Default",
+			"system": "System",
+			"serif": "Serif",
+			"mono": "Monospace"
+		},
+		"lineHeight": {
+			"label": "Line height",
+			"value": "{{value}}"
+		},
 		"editorToolbar": {
 			"label": "Formatting toolbar"
 		}
