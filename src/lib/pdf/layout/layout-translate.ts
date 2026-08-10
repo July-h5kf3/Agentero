@@ -44,6 +44,20 @@ export const LAYOUT_TRANSLATE_CONCURRENCY = 2;
 export const LAYOUT_TRANSLATE_SIDECAR_SCHEMA_VERSION = 1;
 export const LAYOUT_TRANSLATE_SIDECAR_FILE = "layout-translate.json";
 
+/**
+ * Trailing debounce for the whole-file `layout-translate.json` write. Each
+ * translated block used to rewrite the entire sidecar immediately (400+ writes
+ * for a long paper); coalescing keeps crash-recovery progress while bounding
+ * disk churn. See paper-pipeline-orchestration.md §8.1.
+ */
+export const LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS = 500;
+
+/** Pending debounced sidecar writes, keyed by paper folder. */
+const translateSidecarWriteTimers = new Map<
+	string,
+	ReturnType<typeof setTimeout>
+>();
+
 export type LayoutTranslateRegion = {
 	id: string;
 	pageIndex: number;
@@ -444,11 +458,19 @@ export function persistLayoutTranslateSidecarBestEffort(
 	items: readonly LayoutTranslateItem[],
 ): void {
 	if (!paperAbsPath) return;
-	void writeLayoutTranslateSidecar(paperAbsPath, key, items).catch((error) => {
-		logger.warn("layout translate cache write failed", {
-			error: error instanceof Error ? error.message : String(error),
-		});
-	});
+	const pending = translateSidecarWriteTimers.get(paperAbsPath);
+	if (pending) clearTimeout(pending);
+	const timer = setTimeout(() => {
+		translateSidecarWriteTimers.delete(paperAbsPath);
+		void writeLayoutTranslateSidecar(paperAbsPath, key, items).catch(
+			(error) => {
+				logger.warn("layout translate cache write failed", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			},
+		);
+	}, LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS);
+	translateSidecarWriteTimers.set(paperAbsPath, timer);
 }
 
 /** Paint-relevant identity of one bucket slot (id, progress, partial text). */

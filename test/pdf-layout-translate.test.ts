@@ -1,19 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fontSizeForLayoutTranslateBox } from "@/components/viewer/pdf/layers/layout-translate-overlay";
 import {
 	applyLayoutTranslateSidecar,
 	groupLayoutTranslateItemsByPage,
 	hasPendingLayoutTranslateItems,
+	LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS,
 	type LayoutTranslateCacheKey,
 	type LayoutTranslateItem,
 	type LayoutTranslateItemStatus,
 	layoutRegionSourceText,
 	listTranslatableLayoutRegions,
 	parseLayoutTranslateSidecar,
+	persistLayoutTranslateSidecarBestEffort,
 	toLayoutTranslateItems,
 } from "@/lib/pdf/layout/layout-translate";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
+
+vi.mock("@/lib/vault", () => ({
+	joinVaultPath: (parent: string, name: string) => `${parent}/${name}`,
+	readVaultFile: vi.fn(),
+	writeVaultFile: vi.fn(),
+}));
 
 function region(
 	partial: Partial<PdfLayoutRegion> &
@@ -405,5 +413,54 @@ describe("layout translate sidecar cache", () => {
 				{ ...item("a"), translated: "甲", status: "done" },
 			]),
 		).toBe(false);
+	});
+});
+
+describe("persistLayoutTranslateSidecarBestEffort debounce", () => {
+	const key: LayoutTranslateCacheKey = {
+		providerId: "googleapi",
+		sourceLang: "auto",
+		targetLang: "zh-CN",
+		serviceKey: "googleapi",
+	};
+	const doneItem: LayoutTranslateItem = {
+		id: "a",
+		pageIndex: 0,
+		bbox: { x: 0.1, y: 0.1, w: 0.5, h: 0.05 },
+		kind: "text",
+		readingOrder: 0,
+		source: "source a",
+		status: "done",
+		translated: "甲",
+	};
+
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("coalesces rapid per-block writes into a single write", async () => {
+		const vault = await import("@/lib/vault");
+		vi.mocked(vault.writeVaultFile).mockReset();
+
+		persistLayoutTranslateSidecarBestEffort("/vault/paper", key, [doneItem]);
+		persistLayoutTranslateSidecarBestEffort("/vault/paper", key, [doneItem]);
+		persistLayoutTranslateSidecarBestEffort("/vault/paper", key, [doneItem]);
+		expect(vault.writeVaultFile).not.toHaveBeenCalled();
+
+		vi.advanceTimersByTime(LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS + 1);
+		expect(vault.writeVaultFile).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps a separate debounce timer per paper", async () => {
+		const vault = await import("@/lib/vault");
+		vi.mocked(vault.writeVaultFile).mockReset();
+
+		persistLayoutTranslateSidecarBestEffort("/vault/paper-a", key, [doneItem]);
+		persistLayoutTranslateSidecarBestEffort("/vault/paper-b", key, [doneItem]);
+		vi.advanceTimersByTime(LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS + 1);
+		expect(vault.writeVaultFile).toHaveBeenCalledTimes(2);
 	});
 });
