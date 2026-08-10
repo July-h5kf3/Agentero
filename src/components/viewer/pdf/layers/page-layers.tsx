@@ -23,11 +23,6 @@ import { EyeOff, Languages, Loader2 } from "lucide-react";
 import { memo, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
 	EMPTY_CITATION_LINKS,
 	EMPTY_PINS,
 	PAGE_LAYER_STYLE,
@@ -154,6 +149,15 @@ type PageTranslateTabProps = {
 	onToggle: (pageIndex: number) => void;
 };
 
+function labelCharacters(label: string): { key: string; char: string }[] {
+	const seen = new Map<string, number>();
+	return Array.from(label, (char) => {
+		const count = (seen.get(char) ?? 0) + 1;
+		seen.set(char, count);
+		return { key: `${char}-${count}`, char };
+	});
+}
+
 const PageTranslateTab = memo(function PageTranslateTab({
 	pageIndex,
 	active,
@@ -171,34 +175,33 @@ const PageTranslateTab = memo(function PageTranslateTab({
 		: t("pdf.layoutTranslate.translatePageShort");
 	const Icon = running ? Loader2 : active ? EyeOff : Languages;
 	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<button
-					type="button"
-					className={cn(
-						"absolute top-2 right-2 z-[6] flex min-h-20 w-10 flex-col items-center justify-center gap-1 rounded-md border border-border/80 bg-background/95 px-1.5 py-2 font-medium text-[11px] text-foreground shadow-sm ring-1 ring-black/5 backdrop-blur-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 dark:ring-white/10",
-						active && "border-primary/30 bg-primary/10 text-primary",
-					)}
-					aria-label={label}
-					aria-pressed={active}
-					onClick={(event) => {
-						event.preventDefault();
-						event.stopPropagation();
-						onToggle(pageIndex);
-					}}
-					onPointerDown={(event) => event.stopPropagation()}
-				>
-					<Icon
-						className={cn("size-3.5 shrink-0", running && "animate-spin")}
-						aria-hidden="true"
-					/>
-					<span className="leading-none" style={{ writingMode: "vertical-rl" }}>
-						{shortLabel}
+		<button
+			type="button"
+			className={cn(
+				"absolute top-3 right-0 z-[6] flex min-h-[72px] w-8 translate-x-full flex-col items-center justify-center gap-1 rounded-r-md border border-l-0 border-border/80 bg-background/95 px-1 py-2 font-medium text-[11px] text-foreground shadow-sm ring-1 ring-black/5 backdrop-blur-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 dark:ring-white/10",
+				active && "border-primary/30 bg-primary/10 text-primary",
+			)}
+			aria-label={label}
+			aria-pressed={active}
+			onClick={(event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				onToggle(pageIndex);
+			}}
+			onPointerDown={(event) => event.stopPropagation()}
+		>
+			<Icon
+				className={cn("size-3.5 shrink-0", running && "animate-spin")}
+				aria-hidden="true"
+			/>
+			<span className="flex flex-col items-center gap-0.5 leading-none">
+				{labelCharacters(shortLabel).map((part) => (
+					<span key={part.key} className="block text-center">
+						{part.char}
 					</span>
-				</button>
-			</TooltipTrigger>
-			<TooltipContent side="left">{label}</TooltipContent>
-		</Tooltip>
+				))}
+			</span>
+		</button>
 	);
 });
 
@@ -249,7 +252,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	return (
 		<div
 			className={cn(
-				"relative overflow-hidden rounded-sm shadow-sm ring-1",
+				"relative overflow-visible rounded-sm shadow-sm ring-1",
 				pdfDark ? "bg-zinc-900 ring-white/10" : "bg-white ring-black/5",
 			)}
 			style={{ width, height }}
