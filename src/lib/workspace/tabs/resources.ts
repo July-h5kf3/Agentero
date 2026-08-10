@@ -8,10 +8,12 @@ import {
 	findLocalPdfPath,
 	isPaperDirectory,
 	loadPaperMetadata,
+	loadPaperOpenBundle,
 	localFileToArrayBuffer,
 	localImageToViewerSource,
 	notesPathForPaper,
 	type PaperMetadata,
+	type PaperOpenBundle,
 	paperDirFromPath,
 	paperHasLocalPaperMd,
 	paperHasLocalPdf,
@@ -66,6 +68,34 @@ function maybeTriggerDeferredParse(
 		!paperHasLocalPdf(treeNode) ||
 		paperHasLocalTex(treeNode) ||
 		paperHasLocalPaperMd(treeNode)
+	) {
+		return;
+	}
+	const rel = toVaultRelative(vaultPath, paperDir)
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "");
+	if (!rel || paperParseTried.has(rel)) return;
+	paperParseTried.add(rel);
+
+	enqueuePaperPdfParse({
+		vaultPath,
+		paperRelPath: rel,
+		paperLabel: paperMeta?.title?.trim(),
+	});
+}
+
+function maybeTriggerDeferredParseFromBundle(
+	paperDir: string,
+	vaultPath: string | null,
+	bundle: PaperOpenBundle,
+	paperMeta?: PaperMetadata | null,
+): void {
+	if (
+		!isTauri() ||
+		!vaultPath ||
+		!bundle.pdfPath ||
+		bundle.hasTex ||
+		bundle.hasPaperMd
 	) {
 		return;
 	}
@@ -254,23 +284,41 @@ export async function loadTabResources(
 
 	if (paperDir) {
 		const notesPath = notesPathForPaper(paperDir);
-		const notesSeedPromise = readVaultFile(notesPath).catch(
-			() => NOTES_PLACEHOLDER,
-		);
-		const meta = await loadPaperMetadata(paperDir, vaultPath);
+		const bundle = await loadPaperOpenBundle(paperDir, vaultPath);
+		const notesSeedPromise = bundle
+			? Promise.resolve(bundle.notesSeed ?? NOTES_PLACEHOLDER)
+			: readVaultFile(notesPath).catch(() => NOTES_PLACEHOLDER);
+		const meta =
+			bundle?.paper ?? (await loadPaperMetadata(paperDir, vaultPath));
 		const { pdfUrl: remotePdf, htmlUrl } = paperRemoteAssetsFromMetadata(meta);
-		const {
-			pdfUrl: paperPdf,
-			pdfBytes: paperBytes,
-			didDownload,
-		} = await resolvePaperPdfSource(paperDir, vaultPath, meta, remotePdf);
-		if (!didDownload) {
-			maybeTriggerDeferredParse(
+		let paperPdf: string | null = null;
+		let paperBytes: ArrayBuffer | null = null;
+		let didDownload = false;
+		if (bundle?.pdfPath) {
+			paperBytes = await localFileToArrayBuffer(bundle.pdfPath);
+		}
+		if (!paperBytes) {
+			const resolved = await resolvePaperPdfSource(
 				paperDir,
 				vaultPath,
-				treeFindNode(tree, paperDir),
 				meta,
+				remotePdf,
 			);
+			paperPdf = resolved.pdfUrl;
+			paperBytes = resolved.pdfBytes;
+			didDownload = resolved.didDownload;
+		}
+		if (!didDownload) {
+			if (bundle) {
+				maybeTriggerDeferredParseFromBundle(paperDir, vaultPath, bundle, meta);
+			} else {
+				maybeTriggerDeferredParse(
+					paperDir,
+					vaultPath,
+					treeFindNode(tree, paperDir),
+					meta,
+				);
+			}
 		}
 		if (isTauri() && vaultPath) {
 			const rel = toVaultRelative(vaultPath, paperDir)

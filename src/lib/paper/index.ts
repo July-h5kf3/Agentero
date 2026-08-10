@@ -15,7 +15,12 @@ export {
 	paperDirFromPath,
 	resolvePapersParentDir,
 } from "@/lib/paper/detect";
-export { loadPaperMetadata, paperCatalogPath } from "@/lib/paper/load-meta";
+export {
+	loadPaperMetadata,
+	loadPaperOpenBundle,
+	type PaperOpenBundle,
+	paperCatalogPath,
+} from "@/lib/paper/load-meta";
 export {
 	canAttemptPdfDownload,
 	findLocalPdfPath,
