@@ -20,6 +20,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
+use tauri::Manager;
 use tokio::sync::{Mutex, Notify};
 
 pub const SIDECAR_FILE: &str = "agentero-cite.json";
@@ -333,12 +334,30 @@ async fn parse_paper_refs_prepared(
     Ok(sidecar)
 }
 
-/// Fire-and-forget refs parse after an import/download finished (GUI only).
+/// Fire-and-forget refs parse after an import/download finished.
 /// Online reference lookup is always on; all failures are logged, never surfaced.
 pub fn spawn_parse_after_import(app: Option<&tauri::AppHandle>, vault: &Path, path_rel: &str) {
-    let _ = app; // kept for symmetry; previously used to read the online toggle
     let vault = vault.to_path_buf();
     let path_rel = path_rel.to_string();
+
+    if let Some(app) = app {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let center = app.state::<crate::features::jobs::JobCenter>().handle();
+            let snapshot = center
+                .enqueue_parse_refs(
+                    &vault,
+                    &path_rel,
+                    crate::features::jobs::JobLane::Normal,
+                    false,
+                )
+                .await;
+            crate::features::jobs::emit_job_changed(&app, snapshot.clone());
+            center.run_parse_refs_job(app, snapshot.id).await;
+        });
+        return;
+    }
+
     tauri::async_runtime::spawn(async move {
         match parse_paper_refs(&vault, &path_rel, true, false).await {
             Ok(s) => log::info!(

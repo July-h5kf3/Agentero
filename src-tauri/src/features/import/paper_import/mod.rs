@@ -157,6 +157,13 @@ pub async fn paper_commit(
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(vault, &record)?;
 
+    let parse_app = match &opts.assets {
+        AssetsPolicy::SyncDownload { progress, .. } | AssetsPolicy::CopyPdf { progress, .. } => {
+            progress.app
+        }
+        AssetsPolicy::Deferred => None,
+    };
+
     let (assets, assets_pending) = match opts.assets {
         AssetsPolicy::SyncDownload { cookies, progress } => {
             let assets = ensure_paper_assets_with_progress(
@@ -188,7 +195,7 @@ pub async fn paper_commit(
 
     // Background reference parse so the citation graph / References panel have
     // a sidecar soon after import (fingerprint-cached; safe if callers also spawn).
-    crate::features::refs::spawn_parse_after_import(None, vault, &path_rel);
+    crate::features::refs::spawn_parse_after_import(parse_app, vault, &path_rel);
 
     Ok(PaperCommitResult {
         status: CommitStatus::Created,
