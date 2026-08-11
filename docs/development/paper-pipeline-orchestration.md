@@ -1,7 +1,7 @@
 # 打开论文与后台流水线编排
 
 > 状态：设计草案。零 schema 变更（不新增表 / 列 / migration）。
-> 关联：[architecture](../architecture.md) · [catalog](../backend/catalog.md) · [import](../backend/import.md) · [pdf](../frontend/pdf.md)
+> 关联：[architecture](../architecture.md) · [catalog](../backend/catalog.md) · [import](../backend/paper-import.md) · [pdf](../frontend/pdf.md)
 
 ## 1. 一句话
 
