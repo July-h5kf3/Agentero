@@ -1,12 +1,13 @@
 /**
  * Public surface of the vault sidebar file tree.
  *
- * Everything else under `file-tree/` is internal: `tree-rows.tsx` (row
- * renderers), `tree-context-menu.tsx` (right-click menu portal),
- * `tree-inputs.tsx` (inline create/rename), `move-destination-picker.tsx`,
- * `tree-helpers.ts`, and `types.ts`. Import those paths only from within
- * `file-tree/` — never import this barrel from inside the folder
- * (import cycle).
+ * Everything else under `file-tree/` is internal: `hooks/` (tree state),
+ * `tree-rows.tsx` (row renderers), `tree-rows-viewport.tsx` (windowed list),
+ * `tree-context-menu.tsx` (right-click menu portal), `tree-inputs.tsx` (inline
+ * create/rename), `tree-selection-bar.tsx`, `move-picker-popover.tsx`,
+ * `move-destination-picker.tsx`, `tree-helpers.ts`, and `types.ts`. Import
+ * those paths only from within `file-tree/` — never import this barrel from
+ * inside the folder (import cycle).
  */
 
 export {

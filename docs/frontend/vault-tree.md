@@ -51,7 +51,8 @@
 
 ## 代码
 
-- UI：`src/components/sidebar/file-tree/`（barrel `index.ts` + 行/菜单/输入子模块）、AI Elements `FileTree`
+- UI：`src/components/sidebar/file-tree/`（barrel `index.ts`；`file-tree.tsx` 仅装配，行/菜单/输入/选中条/虚拟列表为独立子模块）、AI Elements `FileTree`
+- 树内状态：`src/components/sidebar/file-tree/hooks/`（`use-tree-model` 路径索引与扁平行、`use-tree-expansion` 展开与懒加载、`use-tree-selection` 多选、`use-tree-reveal` 虚拟化与定位、`use-tree-drag-drop`、`use-paper-row-actions`、`use-tree-context-menu`、`use-move-picker`）
 - 逻辑：`src/lib/vault/`（store、tree、fs-watch、reveal）
 - 标签/排序：`src/lib/paper/tree-label.ts`、`tree-modes.ts`
 
