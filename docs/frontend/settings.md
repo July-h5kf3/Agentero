@@ -34,7 +34,7 @@
 
 主窗口把未保存的 Markdown 路径同步到 Host，因此独立设置 Webview 发起修复时仍能在任何写入前拒绝脏文件。远程 Vault 首版只显示不可用。
 
-相关代码：`src/lib/doctor/`、`src/lib/agent/composer-seed.ts`、`src/components/settings/panes/doctor-pane.tsx`。
+相关代码：`src/lib/doctor/`、`src/lib/agent/composer-seed.ts`。诊断页外壳 `src/components/settings/panes/doctor-pane.tsx` 只做报告拉取与分区编排，各检查项在同目录拆分：`doctor-vault-catalog-sections.tsx`、`doctor-wikilink-section.tsx`、`doctor-alias-section.tsx`、`doctor-visual-marks-section.tsx`；共用展示件（小标题、问题行、git 风格 diff）在 `doctor-sections.tsx`，整行 diff 的文本测量与窗口化在 `doctor-line-fit.ts`（单测 `test/doctor-line-fit.test.ts`）。
 
 ## 应用更新
 
