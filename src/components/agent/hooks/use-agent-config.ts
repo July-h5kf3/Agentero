@@ -54,6 +54,14 @@ import { isTauri } from "@/lib/core/tauri";
  */
 const WARM_SPAWN_DEBOUNCE_MS = 300;
 
+/** Model picker grouping produced by `groupedModels` below. */
+export type GroupedModel = {
+	id: string;
+	heading: string;
+	isFavorites: boolean;
+	items: AgentModelChoice[];
+};
+
 export type UseAgentConfigOptions = {
 	vaultPath: string | null;
 	selectedAgentId: string | null;
@@ -425,12 +433,7 @@ export function useAgentConfig({
 			items.push(model);
 		}
 
-		const result: {
-			id: string;
-			heading: string;
-			isFavorites: boolean;
-			items: AgentModelChoice[];
-		}[] = [];
+		const result: GroupedModel[] = [];
 		if (favItems.length > 0) {
 			result.push({
 				id: "__favorites__",
